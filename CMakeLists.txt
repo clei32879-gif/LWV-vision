@@ -149,6 +149,15 @@ add_subdirectory(src/hal)
 add_subdirectory(src/utils)
 add_subdirectory(src/ui)
 add_subdirectory(src/app)
+add_subdirectory(tools)
+
+# 测试图片生成: 编译后自动在bin目录生成虚拟相机回放图
+add_custom_target(generate_testdata
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/testdata/virtual_camera
+    COMMAND $<TARGET_FILE:testdata_gen> ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/testdata/virtual_camera 24 6
+    DEPENDS testdata_gen
+    COMMENT "生成虚拟相机测试图片..."
+)
 
 if(VI_BUILD_PLUGINS)
     add_subdirectory(plugins)

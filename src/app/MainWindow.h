@@ -76,6 +76,7 @@ private:
     void createStatusBar();
     void loadSettings();
     void saveSettings();
+    void applyUserRole(UserRole role);
 
     // Core components
     ProjectManager* m_projectMgr = nullptr;

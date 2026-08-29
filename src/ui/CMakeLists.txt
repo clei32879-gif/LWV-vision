@@ -39,6 +39,12 @@ target_sources(VIUI PRIVATE
     PlcSimulatorDialog.h
     PlcSimulatorDialog.cpp
 
+    # 设置类对话框 (系统/项目/全局变量) 与登录
+    SettingsDialogs.h
+    SettingsDialogs.cpp
+    LoginDialog.h
+    LoginDialog.cpp
+
     # 界面编辑器 (DIY)
     UIEditor.h
     UIEditor.cpp

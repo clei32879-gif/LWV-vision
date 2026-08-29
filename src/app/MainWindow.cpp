@@ -8,6 +8,8 @@
 #include "../ui/LogPanel.h"
 #include "../ui/PropertyDialog.h"
 #include "../ui/PlcSimulatorDialog.h"
+#include "../ui/SettingsDialogs.h"
+#include "../ui/LoginDialog.h"
 #include "../ui/IconHelper.h"
 #include "../hal/ModbusTcpMaster.h"
 #include "AppSettings.h"
@@ -21,6 +23,7 @@
 #include <QAction>
 #include <QMessageBox>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QCloseEvent>
 #include <QSettings>
 #include <QApplication>
@@ -41,6 +44,7 @@ MainWindow::MainWindow(QWidget* parent)
     m_flowEngine = new FlowEngine(this);
     m_stats = new GlobalStats(this);
     m_hardware = new HardwareManager(this);
+    m_projectMgr->setServices(m_flowEngine, m_globalVars);
 
     // 相机驱动: 装了度申SDK用真相机, 否则用虚拟相机(回放/合成图案)
 #ifdef VI_HAS_DVP2
@@ -78,6 +82,9 @@ MainWindow::MainWindow(QWidget* parent)
         [this](bool running) {
             m_statusLabel->setText(running ? "运行中..." : "已停止");
         });
+
+    // 用户权限: 角色变化时启用/禁用编辑功能
+    connect(m_userMgr, &UserManager::roleChanged, this, &MainWindow::applyUserRole);
 
     setWindowTitle("LW Vision v1.0.0 - 立维视觉");
     resize(1400, 900);
@@ -331,6 +338,11 @@ void MainWindow::onZoom1x1() {
 
 void MainWindow::onNewProject() {
     m_projectMgr->newProject();
+    if (m_flowEditor) {
+        m_flowEditor->setFlow(nullptr);
+        m_flowEditor->refresh();
+    }
+    m_fileLabel->setText("无项目");
     m_statusLabel->setText("新项目已创建");
 }
 
@@ -338,7 +350,14 @@ void MainWindow::onOpenProject() {
     QString path = QFileDialog::getOpenFileName(this, "打开项目", QString(), "*.vipj");
     if (path.isEmpty()) return;
     if (m_projectMgr->loadProject(path)) {
-        m_statusLabel->setText("已加载: " + path);
+        // 编辑器定位到第一个流程
+        if (m_flowEditor && m_flowEngine->flowCount() > 0) {
+            m_flowEditor->setFlow(m_flowEngine->flows().first());
+            m_flowEditor->refresh();
+        }
+        m_fileLabel->setText(QFileInfo(path).fileName());
+        m_statusLabel->setText("已加载: " + QFileInfo(path).fileName());
+        m_logPanel->appendLog("项目已加载: " + path);
     } else {
         QMessageBox::warning(this, "错误", "无法打开项目:\n" + path);
     }
@@ -346,16 +365,26 @@ void MainWindow::onOpenProject() {
 
 void MainWindow::onSaveProject() {
     if (m_projectMgr->currentPath().isEmpty()) { onSaveAsProject(); return; }
-    m_projectMgr->saveProject(m_projectMgr->currentPath());
-    m_statusLabel->setText("已保存");
+    if (m_projectMgr->saveProject(m_projectMgr->currentPath())) {
+        m_fileLabel->setText(QFileInfo(m_projectMgr->currentPath()).fileName());
+        m_statusLabel->setText("已保存");
+        m_logPanel->appendLog("项目已保存: " + m_projectMgr->currentPath());
+    } else {
+        QMessageBox::warning(this, "错误", "保存失败");
+    }
 }
 
 void MainWindow::onSaveAsProject() {
     QString path = QFileDialog::getSaveFileName(this, "另存为", QString(), "*.vipj");
     if (path.isEmpty()) return;
     if (!path.endsWith(".vipj")) path += ".vipj";
-    m_projectMgr->saveProject(path);
-    m_statusLabel->setText("已保存: " + path);
+    if (m_projectMgr->saveProject(path)) {
+        m_fileLabel->setText(QFileInfo(path).fileName());
+        m_statusLabel->setText("已保存: " + QFileInfo(path).fileName());
+        m_logPanel->appendLog("项目已保存: " + path);
+    } else {
+        QMessageBox::warning(this, "错误", "保存失败");
+    }
 }
 
 void MainWindow::onExecuteOnce() {
@@ -379,11 +408,18 @@ void MainWindow::onStopRunning() {
 }
 
 void MainWindow::onSystemSettings() {
-    QMessageBox::information(this, "系统设置", "待实现");
+    SystemSettingsDialog dlg(this);
+    dlg.exec();
 }
 
 void MainWindow::onProjectSettings() {
-    QMessageBox::information(this, "项目设置", "待实现");
+    ProjectSettingsDialog dlg(m_projectMgr->projectName(), m_projectMgr->projectNote(), this);
+    if (dlg.exec() == QDialog::Accepted) {
+        m_projectMgr->setProjectName(dlg.projectName());
+        m_projectMgr->setProjectNote(dlg.projectNote());
+        m_projectMgr->markModified();
+        m_statusLabel->setText("项目设置已更新(保存项目后生效)");
+    }
 }
 
 void MainWindow::onUISettings() {
@@ -391,7 +427,8 @@ void MainWindow::onUISettings() {
 }
 
 void MainWindow::onGlobalVariables() {
-    QMessageBox::information(this, "全局变量", "待实现");
+    GlobalVariablesDialog dlg(m_globalVars, this);
+    dlg.exec();
 }
 
 void MainWindow::onPlcSimulator() {
@@ -402,7 +439,19 @@ void MainWindow::onPlcSimulator() {
 }
 
 void MainWindow::onSwitchUser() {
-    QMessageBox::information(this, "切换用户", "待实现");
+    LoginDialog dlg(m_userMgr, this);
+    if (dlg.exec() == QDialog::Accepted) {
+        applyUserRole(m_userMgr->currentRole());
+        m_statusLabel->setText("已切换用户: " + roleToString(m_userMgr->currentRole()));
+    }
+}
+
+void MainWindow::applyUserRole(UserRole role) {
+    // 操作员: 只运行; 技术员: 调参数; 管理员: 全部
+    const bool admin = (role >= UserRole::Admin);
+    if (m_toolbox) m_toolbox->setEnabled(admin);
+    if (m_flowEditor) m_flowEditor->setEnabled(admin);
+    m_userLabel->setText("用户: " + roleToString(role));
 }
 
 // ============================================================
