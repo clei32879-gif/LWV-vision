@@ -278,6 +278,14 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
                         .arg(tool->instanceName()));
             success = false;
         }
+
+        // 工具内建上下限判定 (对齐CKVision: 执行成功后检查启用判定的结果键)
+        if (success && tool->hasJudgments() && !tool->evaluateJudgments()) {
+            VI_LOG_INFO(QString("工具[%1] 数据判定NG: %2")
+                        .arg(tool->instanceName())
+                        .arg(tool->resultData().value("judgeFailedKeys").toString()));
+            success = false;
+        }
         const qint64 elapsedMs = timer.elapsed();
 
         // 更新状态
@@ -351,6 +359,7 @@ void FlowEngine::startRunning(Flow* flow) {
         return;
     }
     m_abort = false;
+    m_stopPending = false;
     emit runStateChanged(true);
     VI_LOG_INFO("开始连续运行: " + (flow ? flow->name() : QString("默认流程")));
 
@@ -358,31 +367,38 @@ void FlowEngine::startRunning(Flow* flow) {
 }
 
 void FlowEngine::runLoop(Flow* flow) {
-    while (m_running && !m_abort) {
+    while (m_running && !m_stopPending && !m_abort) {
         m_executing = true;
         ToolContext context;
         doExecute(flow, context);
         m_executing = false;
 
-        if (m_abort || !m_running) break;
+        if (m_abort || m_stopPending || !m_running) break;
 
         // 轮次间隔 (期间可快速响应停止)
         int delay = flow ? flow->delayMs() : 0;
         if (delay <= 0) delay = 10;
-        for (int slept = 0; m_running && !m_abort && slept < delay; slept += 20)
+        for (int slept = 0; m_running && !m_abort && m_stopPending == false && slept < delay; slept += 20)
             QThread::msleep(20);
     }
     m_running = false;
     m_abort = false;
+    m_stopPending = false;
     emit runStateChanged(false);
     VI_LOG_INFO("连续运行已停止");
 }
 
-void FlowEngine::stopRunning() {
+void FlowEngine::stopRunning(bool force) {
     if (!m_running) return;
-    m_abort = true;
-    m_running = false;
-    VI_LOG_INFO("请求停止连续运行");
+    if (force) {
+        m_abort = true;
+        m_running = false;
+        VI_LOG_INFO("请求强制停止 (当前工具执行完立即返回)");
+    } else {
+        m_stopPending = true;
+        m_running = false;
+        VI_LOG_INFO("请求普通停止 (执行完本轮流程后停止)");
+    }
 }
 
 } // namespace VisionInspector

@@ -1,5 +1,0 @@
-﻿set(OpenCV_VERSION "5.0.0")
-set(OpenCV_INCLUDE_DIRS "${CMAKE_CURRENT_LIST_DIR}/include")
-set(OpenCV_LIBRARY_DIRS "${CMAKE_CURRENT_LIST_DIR}/lib")
-set(OpenCV_LIBS "opencv_core500;opencv_imgproc500;opencv_imgcodecs500;opencv_objdetect500;opencv_features500;opencv_flann500;opencv_geometry500")
-set(OpenCV_FOUND TRUE)

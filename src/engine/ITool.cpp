@@ -35,6 +35,15 @@ QJsonObject ITool::toJson() const {
         propsJson[it.key()] = QJsonValue::fromVariant(it.value());
     }
     json["properties"] = propsJson;
+
+    // 结果判定
+    QJsonArray judgeArray;
+    for (const auto& j : m_judgments) {
+        judgeArray.append(QJsonObject{
+            {"key", j.resultKey}, {"enabled", j.enabled},
+            {"lower", j.lower}, {"upper", j.upper}});
+    }
+    json["judgments"] = judgeArray;
     return json;
 }
 
@@ -46,6 +55,36 @@ void ITool::fromJson(const QJsonObject& json) {
     for (auto it = propsJson.begin(); it != propsJson.end(); ++it) {
         m_properties[it.key()] = it.value().toVariant();
     }
+    m_judgments.clear();
+    const QJsonArray judgeArray = json.value("judgments").toArray();
+    for (const auto& v : judgeArray) {
+        const QJsonObject o = v.toObject();
+        ResultJudgment j;
+        j.resultKey = o.value("key").toString();
+        j.enabled = o.value("enabled").toBool(false);
+        j.lower = o.value("lower").toDouble(-1e18);
+        j.upper = o.value("upper").toDouble(1e18);
+        if (!j.resultKey.isEmpty())
+            m_judgments.append(j);
+    }
+}
+
+bool ITool::evaluateJudgments() {
+    QStringList failed;
+    for (const auto& j : m_judgments) {
+        if (!j.enabled) continue;
+        if (!m_resultData.contains(j.resultKey)) {
+            failed << j.resultKey;
+            continue;
+        }
+        bool ok = false;
+        const double v = m_resultData.value(j.resultKey).toDouble(&ok);
+        if (!ok || v < j.lower || v > j.upper)
+            failed << j.resultKey;
+    }
+    if (failed.isEmpty()) return true;
+    m_resultData["judgeFailedKeys"] = failed.join(",");
+    return false;
 }
 
 CvImagePtr ITool::getInputImage(const ToolContext& context) const {

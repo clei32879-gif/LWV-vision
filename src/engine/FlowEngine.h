@@ -129,8 +129,12 @@ public:
      */
     void startRunning(Flow* flow);
 
-    /** 停止连续运行 (当前工具执行完即停) */
-    void stopRunning();
+    /**
+     * 停止连续运行 (对齐CKVision双停止模式)
+     * @param force true=强制停止: 当前工具执行完立即返回(可打断死循环)
+     *              false=普通停止: 执行完本轮整个流程后再停止
+     */
+    void stopRunning(bool force = true);
 
     /** 是否连续运行中 */
     bool isRunning() const { return m_running; }
@@ -176,7 +180,8 @@ private:
 
     std::atomic_bool m_running{false};    // 连续运行中
     std::atomic_bool m_executing{false};  // 某轮执行中
-    std::atomic_bool m_abort{false};      // 中止请求
+    std::atomic_bool m_abort{false};      // 强制中止请求 (工具间隙检查)
+    std::atomic_bool m_stopPending{false}; // 普通停止请求 (本轮流程结束后生效)
     std::atomic_int m_runIndex{0};
 
     // 最近一次执行的最终图像

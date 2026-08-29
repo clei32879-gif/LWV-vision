@@ -148,6 +148,7 @@ void MainWindow::setupUI() {
     createViewMenu();
     
     connect(m_toolbox, &Toolbox::toolDoubleClicked, this, &MainWindow::onToolAdded);
+    connect(m_flowEditor, &FlowEditor::toolEditProperties, this, &MainWindow::onEditToolProperties);
     
     setWindowTitle("LW Vision v1.0.0 - 立维视觉");
     resize(1400, 900);
@@ -161,6 +162,7 @@ void MainWindow::setupUI() {
 void MainWindow::createMenus() {
     QMenu* fileMenu = menuBar()->addMenu(QString::fromUtf8("\u6587\u4ef6(&F)"));
     fileMenu->addAction(QString::fromUtf8("\u65b0\u5efa\u9879\u76ee"), this, &MainWindow::onNewProject);
+    fileMenu->addAction(QString::fromUtf8("\u4ece\u6a21\u677f\u65b0\u5efa(\u7b5b\u9009\u673a)"), this, &MainWindow::onNewFromTemplate);
     fileMenu->addAction(QString::fromUtf8("\u6253\u5f00\u9879\u76ee"), this, &MainWindow::onOpenProject);
     fileMenu->addAction(QString::fromUtf8("\u4fdd\u5b58\u9879\u76ee"), this, &MainWindow::onSaveProject);
     fileMenu->addAction(QString::fromUtf8("\u53e6\u5b58\u4e3a..."), this, &MainWindow::onSaveAsProject);
@@ -308,6 +310,32 @@ void MainWindow::onToolAdded(const QString& typeName) {
     m_statusLabel->setText(QString("已添加: %1").arg(tool->displayName()));
 }
 
+void MainWindow::onEditToolProperties(int index) {
+    if (m_flowEngine->flowCount() == 0) return;
+    Flow* flow = m_flowEngine->flows().first();
+    ITool* tool = flow->toolAt(index);
+    if (!tool) return;
+
+    // 可用作输入图像的前序工具 + 可链接数据(工具实例名 -> 上次运行的结果键)
+    QStringList availableImages;
+    QMap<QString, QStringList> linkableData;
+    for (int i = 0; i < index && i < flow->toolCount(); ++i) {
+        ITool* t = flow->toolAt(i);
+        if (!t || !t->isActive()) continue;
+        availableImages << t->instanceName();
+        const QStringList keys = t->resultData().keys();
+        if (!keys.isEmpty())
+            linkableData[t->instanceName()] = keys;
+    }
+
+    PropertyDialog dlg(tool, availableImages, linkableData, this);
+    if (dlg.exec() == QDialog::Accepted) {
+        if (m_flowEditor) m_flowEditor->refresh();
+        m_projectMgr->markModified();
+        m_statusLabel->setText(QString("已修改工具: %1").arg(tool->instanceName()));
+    }
+}
+
 void MainWindow::toggleFullscreen() {
     if (isFullScreen()) showNormal(); else showFullScreen();
 }
@@ -344,6 +372,50 @@ void MainWindow::onNewProject() {
     }
     m_fileLabel->setText("无项目");
     m_statusLabel->setText("新项目已创建");
+}
+
+void MainWindow::onNewFromTemplate() {
+    // 按真实筛选机的标准工序建流程(蓝本见 docs/CKVision资料分析.md):
+    // 采集→预处理→定位→补正→检测组→结束补正→变量→判断→显示
+    m_projectMgr->newProject();
+
+    static const QStringList seq = {
+        "CaptureImage",        "ImageFilter",   "ShapeMatch",
+        "PositionCorrection",  "BlobAnalysis",  "VertexDetection",
+        "EdgeDetection",       "DistanceMeasure","LineDetection",
+        "CircleDetection",     "Caliper",
+        // "ThreadInspection"  // 螺纹检测: 阶段3实现后加入
+        "EndCorrection",       "CalculateVariable", "SetVariable",
+        "DataJudge",           "DataDisplay",   "UpdateView",
+    };
+
+    Flow* flow = new Flow(this);
+    flow->setName("主流程");
+    m_flowEngine->addFlow(flow);
+
+    QMap<QString, int> counts;
+    int created = 0;
+    for (const QString& typeName : seq) {
+        ITool* tool = ToolRegistry::instance().createTool(typeName);
+        if (!tool) {
+            m_logPanel->appendLog(QString("模板工具缺失, 已跳过: %1").arg(typeName));
+            continue;
+        }
+        const QString disp = tool->displayName();
+        const int n = counts[disp]++;
+        tool->setInstanceName(n == 0 ? disp : QString("%1_%2").arg(disp).arg(n + 1));
+        flow->addTool(tool);
+        ++created;
+    }
+
+    if (m_flowEditor) {
+        m_flowEditor->setFlow(flow);
+        m_flowEditor->refresh();
+    }
+    m_fileLabel->setText("筛选机模板(未保存)");
+    m_statusLabel->setText(QString("已按筛选机模板创建流程 (%1 步)").arg(created));
+    m_logPanel->appendLog("已按筛选机模板创建流程: 采集→预处理→定位→补正→检测组→结束补正→变量→判断→显示");
+    m_projectMgr->markModified();
 }
 
 void MainWindow::onOpenProject() {

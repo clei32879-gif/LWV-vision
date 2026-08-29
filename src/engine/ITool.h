@@ -105,6 +105,16 @@ struct PropertyDef {
 using PropertyDefList = std::vector<PropertyDef>;
 
 // ============================================================
+// 结果判定 (对齐CKVision: 工具内直接配上下限, NG不依赖外部工具)
+// ============================================================
+struct ResultJudgment {
+    QString resultKey;          // 判定的结果键 (如 "blobCount")
+    bool enabled = false;       // 是否启用
+    double lower = -1e18;       // 下限
+    double upper = 1e18;        // 上限
+};
+
+// ============================================================
 // ITool - base class for all tools
 // ============================================================
 
@@ -157,6 +167,24 @@ public:
     const DataMap& resultData() const { return m_resultData; }
     virtual std::vector<QVariant> overlays() const { return {}; }
 
+    // --- 结果判定 (上下限, 执行后由流程引擎调用) ---
+
+    const QList<ResultJudgment>& judgments() const { return m_judgments; }
+    void setJudgments(const QList<ResultJudgment>& j) { m_judgments = j; }
+
+    /** 是否有启用的判定 */
+    bool hasJudgments() const {
+        for (const auto& j : m_judgments)
+            if (j.enabled) return true;
+        return false;
+    }
+
+    /**
+     * 执行后判定: 所有启用的判定都在限内返回true。
+     * 结果键不存在或非数值视为NG; 失败键写入 resultData["judgeFailedKeys"]。
+     */
+    bool evaluateJudgments();
+
     // --- Serialization ---
 
     virtual QJsonObject toJson() const;
@@ -182,6 +210,7 @@ private:
     bool m_active = true;
     ToolStatus m_status = ToolStatus::Idle;
     DataMap m_resultData;
+    QList<ResultJudgment> m_judgments;   // 工具内建上下限判定
 };
 
 // ============================================================

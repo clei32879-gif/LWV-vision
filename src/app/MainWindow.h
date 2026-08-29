@@ -45,6 +45,7 @@ protected:
 
 private slots:
     void onNewProject();
+    void onNewFromTemplate();
     void onOpenProject();
     void onSaveProject();
     void onSaveAsProject();
@@ -62,6 +63,7 @@ private slots:
     void onUseVirtualCamera();
     void onCameraImageReceived(const CvImage& image);
     void onToolAdded(const QString& typeName);
+    void onEditToolProperties(int index);
     void toggleFullscreen();
     void onZoomIn();
     void onZoomOut();
