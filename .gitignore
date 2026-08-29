@@ -14,6 +14,7 @@ ui_*.h
 references/
 thirdparty/opencv/*
 thirdparty/dvp2_sdk/
+thirdparty/dvp2_sdk.zip
 # 但OpenCV的cmake配置文件必须入库（已改为相对路径，可移植）
 !thirdparty/opencv/build/
 thirdparty/opencv/build/*
