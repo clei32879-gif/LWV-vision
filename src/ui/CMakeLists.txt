@@ -62,6 +62,8 @@ target_sources(VIUI PRIVATE
     widgets/StatusPanel.cpp
     widgets/MultiViewWidget.h
     widgets/MultiViewWidget.cpp
+    widgets/ImageViewWidget.h
+    widgets/ImageViewWidget.cpp
 )
 
 target_link_libraries(VIUI PUBLIC

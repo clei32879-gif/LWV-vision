@@ -145,6 +145,9 @@ public:
     /** 最近一次执行的最终图像 (线程安全, 用于结果显示) */
     CvImagePtr lastImage() const;
 
+    /** 最近一次执行的全部结果叠加图形 (线程安全, 用于结果显示) */
+    QVariantList lastOverlays() const;
+
     // --------------------------------------------------------
     // 硬件接口设置 (注入到ToolContext)
     // --------------------------------------------------------
@@ -187,6 +190,7 @@ private:
     // 最近一次执行的最终图像
     mutable QMutex m_lastImageMutex;
     CvImagePtr m_lastImage;
+    QVariantList m_lastOverlays;
 
     // 硬件接口 (注入到ToolContext, 只读指针)
     ICameraDriver* m_camera = nullptr;

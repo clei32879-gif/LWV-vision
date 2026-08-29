@@ -29,3 +29,21 @@ target_link_libraries(test_edgedrawing PRIVATE
     Qt6::Core
 )
 add_test(NAME edge_drawing COMMAND test_edgedrawing)
+
+# 工具回归测试: 链全部插件(静态注册) + 引擎
+add_executable(test_tools_regression test_tools_regression.cpp)
+target_link_libraries(test_tools_regression PRIVATE
+    VICore
+    VIEngine
+    VIHAL
+    VIUtils
+    ${OpenCV_LIBS}
+    Qt6::Core
+    Qt6::Gui
+)
+foreach(_plugin ${VI_ALL_PLUGINS})
+    if(TARGET ${_plugin})
+        target_link_libraries(test_tools_regression PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${_plugin}>)
+    endif()
+endforeach()
+add_test(NAME tools_regression COMMAND test_tools_regression)

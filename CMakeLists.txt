@@ -34,6 +34,23 @@ endif()
 option(VI_BUILD_TESTS "Build tests" OFF)
 option(VI_BUILD_PLUGINS "Build plugins" ON)
 
+# 全部插件目标清单 (app与tests共用; 插件静态注册必须WHOLE_ARCHIVE链接)
+set(VI_ALL_PLUGINS
+    BlobAnalysis EdgeCircleFind BrightnessCheck CircleDetection EdgeDetection
+    ImageProcess LineDetection TemplateMatch
+    GrayscaleMatch ShapeMatch ContourMatch
+    BarcodeReader QRCodeReader OCR
+    DistanceMeasure AngleMeasure Caliper
+    ImageFilter Threshold Morphology ColorConvert
+    ConditionBranch DataJudge Loop Delay
+    CaptureImage DataDisplay UpdateView
+    Calculator ImageCompare Calibration PositionCorrection
+    VertexDetection WidthDetection MultiContourMatch ContourCompare ColorDetection
+    CoordSystem ImageCorrection CalculateVariable SetVariable
+    SerialPortTool EthernetTool ModbusRead ModbusWrite
+    EndCorrection
+)
+
 # ============================================================
 # Third-party: nlohmann_json (header-only)
 # ============================================================

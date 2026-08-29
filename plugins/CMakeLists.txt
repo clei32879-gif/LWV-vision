@@ -2,6 +2,7 @@
 
 # 检测识别工具
 add_subdirectory(tools/BlobAnalysis)
+add_subdirectory(tools/EdgeCircleFind)
 add_subdirectory(tools/BrightnessCheck)
 add_subdirectory(tools/CircleDetection)
 add_subdirectory(tools/EdgeDetection)

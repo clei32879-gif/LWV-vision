@@ -34,6 +34,10 @@ target_sources(VIEngine PRIVATE
     # 数据判断系统
     DataJudgment.h
     DataJudgment.cpp
+
+    # 亚像素边缘测量库 (阶段2: 测量类工具共享)
+    SubpixEdge.h
+    SubpixEdge.cpp
 )
 
 target_link_libraries(VIEngine PUBLIC

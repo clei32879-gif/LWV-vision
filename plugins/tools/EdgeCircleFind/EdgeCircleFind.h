@@ -1,28 +1,23 @@
-/** @file CircleDetection.h - 检测圆形工具（亚像素版：卡尺扫描+抛物线内插+鲁棒拟合） */
+/** @file EdgeCircleFind.h - 快速找圆工具 (EdgeDrawing整图搜索, 用于定位/引导) */
 #pragma once
 #include "../../../src/engine/ITool.h"
-#include "../../../src/engine/ROI.h"
 #ifdef VI_HAS_OPENCV
 #include <opencv2/core.hpp>
 #endif
-#include <vector>
 namespace VisionInspector {
-class CircleDetection : public ITool {
+class EdgeCircleFind : public ITool {
     Q_OBJECT
 public:
-    QString typeName() const override { return QStringLiteral("CircleDetection"); }
-    QString displayName() const override { return QStringLiteral("检测圆形"); }
+    QString typeName() const override { return QStringLiteral("EdgeCircleFind"); }
+    QString displayName() const override { return QStringLiteral("快速找圆"); }
     ToolCategory category() const override { return ToolCategory::Detection; }
     PropertyDefList propertyDefs() const override;
     bool execute(ToolContext& context) override;
     std::vector<QVariant> overlays() const override;
 private:
-    ROIRegion m_roi;
 #ifdef VI_HAS_OPENCV
-    // 结果缓存(供叠加层绘制)
     cv::Point2d m_lastCenter{0, 0};
     double m_lastRadius = 0;
-    std::vector<cv::Point2d> m_lastEdges;
     bool m_lastOk = false;
 #endif
 };

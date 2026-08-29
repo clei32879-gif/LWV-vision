@@ -193,6 +193,11 @@ CvImagePtr FlowEngine::lastImage() const {
     return m_lastImage;
 }
 
+QVariantList FlowEngine::lastOverlays() const {
+    QMutexLocker locker(&m_lastImageMutex);
+    return m_lastOverlays;
+}
+
 bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
     if (!flow) {
         // 找第一个自动执行的流程
@@ -307,16 +312,20 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
             context.setData(tool->instanceName() + QLatin1Char('.') + it.key(), it.value());
         }
 
+        // 叠加图形收集 (工具在图像坐标系下描述的检测结果)
+        context.addOverlays(tool->overlays());
+
         if (!success) {
             allOk = false;
             // 与CKVision默认一致: NG不中断, 继续执行后续工具
         }
     }
 
-    // 记录末帧图
+    // 记录末帧图与叠加层
     {
         QMutexLocker locker(&m_lastImageMutex);
         m_lastImage = context.currentImage();
+        m_lastOverlays = context.overlays();
     }
 
     emit flowExecuted(flow, allOk);

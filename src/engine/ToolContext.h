@@ -13,6 +13,7 @@
 
 #include "../utils/Common.h"
 #include <QVariant>
+#include <vector>
 #include <QMap>
 #include <QString>
 #include <memory>
@@ -114,6 +115,18 @@ public:
     QStringList toolNames() const { return m_toolResults.keys(); }
 
     // --------------------------------------------------------
+    // 结果叠加层 (工具绘制的图形描述, 图像坐标系)
+    // --------------------------------------------------------
+
+    /** 追加某工具的叠加图形 (overlays()输出) */
+    void addOverlays(const std::vector<QVariant>& shapes) {
+        for (const QVariant& v : shapes) m_overlays.append(v);
+    }
+
+    /** 全部叠加图形 */
+    const QVariantList& overlays() const { return m_overlays; }
+
+    // --------------------------------------------------------
     // 消息值 (流程控制用, 对应CKVision的消息机制)
     // --------------------------------------------------------
 
@@ -153,6 +166,7 @@ public:
         m_images.clear();
         m_data.clear();
         m_toolResults.clear();
+        m_overlays.clear();
         m_message = 0;
         // 不清空硬件接口和全局变量
     }
@@ -161,6 +175,7 @@ private:
     QMap<QString, CvImagePtr> m_images;      // 命名图像
     DataMap m_data;                          // 通用数据 (含 "工具名.键" 聚合)
     QMap<QString, DataMap> m_toolResults;    // 各工具的结果归档
+    QVariantList m_overlays;                 // 结果叠加图形
     int m_message = 0;                   // 消息值
 
     // 硬件接口 (非拥有, 由外部设置)

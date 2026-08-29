@@ -74,6 +74,8 @@ MainWindow::MainWindow(QWidget* parent)
                 m_multiView->setImage(0, cvMatToQImage(*img));
             }
 #endif
+            // 检测结果叠加层
+            m_multiView->setOverlays(0, m_flowEngine->lastOverlays());
             m_statusLabel->setText(allOk ? "执行完成 (全部OK)" : "执行完成 (有NG)");
         });
 

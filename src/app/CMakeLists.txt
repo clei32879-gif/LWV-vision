@@ -20,22 +20,7 @@ target_link_libraries(LWVision PRIVATE
 )
 
 # Force whole-archive for plugin libs so static initializers (VI_REGISTER_TOOL) run
-set(ALL_PLUGINS
-    BlobAnalysis BrightnessCheck CircleDetection EdgeDetection
-    ImageProcess LineDetection TemplateMatch
-    GrayscaleMatch ShapeMatch ContourMatch
-    BarcodeReader QRCodeReader OCR
-    DistanceMeasure AngleMeasure Caliper
-    ImageFilter Threshold Morphology ColorConvert
-    ConditionBranch DataJudge Loop Delay
-    CaptureImage DataDisplay UpdateView
-    Calculator ImageCompare Calibration PositionCorrection
-    VertexDetection WidthDetection MultiContourMatch ContourCompare ColorDetection
-    CoordSystem ImageCorrection CalculateVariable SetVariable
-    SerialPortTool EthernetTool ModbusRead ModbusWrite
-    EndCorrection
-)
-foreach(_plugin ${ALL_PLUGINS})
+foreach(_plugin ${VI_ALL_PLUGINS})
     target_link_libraries(LWVision PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${_plugin}>)
 endforeach()
 

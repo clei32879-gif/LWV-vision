@@ -1,4 +1,5 @@
 #include "MultiViewWidget.h"
+#include "ImageViewWidget.h"
 #include <QVBoxLayout>
 #include <QGridLayout>
 #include <QPainter>
@@ -28,7 +29,7 @@ void MultiViewWidget::rebuildLayout() {
         if (item->widget()) item->widget()->deleteLater();
         delete item;
     }
-    m_imageLabels.clear();
+    m_imageViews.clear();
     m_titleLabels.clear();
     m_statusLabels.clear();
 
@@ -53,30 +54,28 @@ void MultiViewWidget::rebuildLayout() {
         titleLayout->addWidget(statusLabel);
         layout->addWidget(titleBar);
 
-        // 图像
-        auto* imageLabel = new QLabel();
-        imageLabel->setAlignment(Qt::AlignCenter);
-        imageLabel->setStyleSheet("background-color: #1a1a1a; color: #666; font-size: 14px;");
-        imageLabel->setText("无图像");
-        imageLabel->setMinimumSize(160, 120);
-        layout->addWidget(imageLabel, 1);
+        // 图像查看器(缩放/平移/叠加)
+        auto* viewer = new ImageViewWidget();
+        layout->addWidget(viewer, 1);
 
         m_gridLayout->addWidget(container, i / m_cols, i % m_cols);
-        m_imageLabels.append(imageLabel);
+        m_imageViews.append(viewer);
         m_titleLabels.append(titleLabel);
         m_statusLabels.append(statusLabel);
     }
 }
 
 void MultiViewWidget::setImage(int index, const QImage& image) {
-    if (index < 0 || index >= m_imageLabels.size()) return;
-    if (image.isNull()) {
-        m_imageLabels[index]->clear();
-        m_imageLabels[index]->setText("无图像");
-    } else {
-        m_imageLabels[index]->setPixmap(QPixmap::fromImage(image).scaled(
-            m_imageLabels[index]->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    }
+    if (index < 0 || index >= m_imageViews.size()) return;
+    if (image.isNull())
+        m_imageViews[index]->clearImage();
+    else
+        m_imageViews[index]->setImage(image);
+}
+
+void MultiViewWidget::setOverlays(int index, const QVariantList& overlays) {
+    if (index < 0 || index >= m_imageViews.size()) return;
+    m_imageViews[index]->setOverlays(overlays);
 }
 
 void MultiViewWidget::setTitle(int index, const QString& title) {
@@ -94,13 +93,10 @@ void MultiViewWidget::setStatus(int index, const QString& status) {
 }
 
 void MultiViewWidget::clearAll() {
-    for (auto* label : m_imageLabels) {
-        label->clear();
-        label->setText("无图像");
-    }
-    for (auto* label : m_statusLabels) {
+    for (auto* v : m_imageViews)
+        v->clearImage();
+    for (auto* label : m_statusLabels)
         label->setText("");
-    }
 }
 
 } // namespace VisionInspector
