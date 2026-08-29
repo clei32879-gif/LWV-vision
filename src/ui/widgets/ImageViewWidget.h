@@ -6,6 +6,7 @@
  * 叠加层使用与工具无关的通用图形描述(QVariantMap):
  *   {"type":"circle", "cx":.., "cy":.., "r":.., "color":"#rrggbb"}
  *   {"type":"line",   "x1":.., "y1":.., "x2":.., "y2":.., "color":..}
+ *   {"type":"lines",  "lines":[[x1,y1,x2,y2],...], "color":..}
  *   {"type":"points", "pts":[[x,y],...], "color":..}
  *   {"type":"cross",  "cx":.., "cy":.., "size":.., "color":..}
  *   {"type":"rect",   "x":.., "y":.., "w":.., "h":.., "color":..}

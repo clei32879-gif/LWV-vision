@@ -436,7 +436,7 @@ void MainWindow::onNewFromTemplate() {
         "PositionCorrection",  "BlobAnalysis",  "VertexDetection",
         "EdgeDetection",       "DistanceMeasure","LineDetection",
         "CircleDetection",     "Caliper",
-        // "ThreadInspection"  // 螺纹检测: 阶段3实现后加入
+        "ThreadInspection",
         "EndCorrection",       "CalculateVariable", "SetVariable",
         "DataJudge",           "DataDisplay",   "UpdateView",
     };

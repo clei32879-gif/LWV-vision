@@ -47,3 +47,21 @@ foreach(_plugin ${VI_ALL_PLUGINS})
     endif()
 endforeach()
 add_test(NAME tools_regression COMMAND test_tools_regression)
+
+# 螺纹检测回归: 链插件(静态注册)
+add_executable(test_thread test_thread.cpp)
+target_link_libraries(test_thread PRIVATE
+    VICore
+    VIEngine
+    VIHAL
+    VIUtils
+    ${OpenCV_LIBS}
+    Qt6::Core
+    Qt6::Gui
+)
+foreach(_plugin ${VI_ALL_PLUGINS})
+    if(TARGET ${_plugin})
+        target_link_libraries(test_thread PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${_plugin}>)
+    endif()
+endforeach()
+add_test(NAME thread_inspection COMMAND test_thread)

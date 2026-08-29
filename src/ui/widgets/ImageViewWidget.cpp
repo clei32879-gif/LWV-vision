@@ -130,6 +130,15 @@ void ImageViewWidget::drawOverlayShape(QPainter& painter, const QVariantMap& s) 
     } else if (type == "line") {
         painter.drawLine(QPointF(s.value("x1").toDouble(), s.value("y1").toDouble()),
                          QPointF(s.value("x2").toDouble(), s.value("y2").toDouble()));
+    } else if (type == "lines") {
+        // 批量线段(螺纹牙型刻线等): lines=[[x1,y1,x2,y2],...]
+        const QVariantList lns = s.value("lines").toList();
+        for (const QVariant& lv : lns) {
+            const QVariantList q = lv.toList();
+            if (q.size() < 4) continue;
+            painter.drawLine(QPointF(q[0].toDouble(), q[1].toDouble()),
+                             QPointF(q[2].toDouble(), q[3].toDouble()));
+        }
     } else if (type == "points") {
         const QVariantList pts = s.value("pts").toList();
         const double size = 3.0 / m_scale;

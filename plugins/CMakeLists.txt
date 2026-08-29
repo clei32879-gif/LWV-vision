@@ -1,6 +1,7 @@
 # 插件目录 - 只包含能编译的插件
 
 # 检测识别工具
+add_subdirectory(tools/ThreadInspection)
 add_subdirectory(tools/BlobAnalysis)
 add_subdirectory(tools/EdgeCircleFind)
 add_subdirectory(tools/BrightnessCheck)
