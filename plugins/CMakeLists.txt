@@ -1,0 +1,68 @@
+# 插件目录 - 只包含能编译的插件
+
+# 检测识别工具
+add_subdirectory(tools/BlobAnalysis)
+add_subdirectory(tools/BrightnessCheck)
+add_subdirectory(tools/CircleDetection)
+add_subdirectory(tools/EdgeDetection)
+add_subdirectory(tools/ImageProcess)
+add_subdirectory(tools/LineDetection)
+add_subdirectory(tools/TemplateMatch)
+add_subdirectory(tools/GrayscaleMatch)
+add_subdirectory(tools/ShapeMatch)
+add_subdirectory(tools/ContourMatch)
+add_subdirectory(tools/BarcodeReader)
+add_subdirectory(tools/QRCodeReader)
+add_subdirectory(tools/OCR)
+
+# 几何测量工具
+add_subdirectory(tools/DistanceMeasure)
+add_subdirectory(tools/AngleMeasure)
+add_subdirectory(tools/Caliper)
+
+# 图像处理工具
+add_subdirectory(tools/ImageFilter)
+add_subdirectory(tools/Threshold)
+add_subdirectory(tools/Morphology)
+add_subdirectory(tools/ColorConvert)
+
+# 逻辑控制工具
+add_subdirectory(logic/ConditionBranch)
+add_subdirectory(logic/DataJudge)
+add_subdirectory(logic/Loop)
+add_subdirectory(logic/Delay)
+
+# P0 核心工具
+add_subdirectory(tools/CaptureImage)
+add_subdirectory(tools/DataDisplay)
+add_subdirectory(tools/UpdateView)
+
+# P1 增强工具
+add_subdirectory(tools/Calculator)
+add_subdirectory(tools/ImageCompare)
+add_subdirectory(tools/Calibration)
+add_subdirectory(tools/PositionCorrection)
+
+# P2 新增检测工具
+add_subdirectory(tools/VertexDetection)
+add_subdirectory(tools/WidthDetection)
+add_subdirectory(tools/MultiContourMatch)
+add_subdirectory(tools/ContourCompare)
+add_subdirectory(tools/ColorDetection)
+
+# P3 标定和逻辑工具
+add_subdirectory(tools/CoordSystem)
+add_subdirectory(tools/ImageCorrection)
+add_subdirectory(tools/CalculateVariable)
+add_subdirectory(tools/SetVariable)
+add_subdirectory(tools/EndCorrection)
+
+# P4 通讯工具
+add_subdirectory(tools/SerialPort)
+add_subdirectory(tools/Ethernet)
+add_subdirectory(tools/ModbusRead)
+add_subdirectory(tools/ModbusWrite)
+
+# 通讯驱动
+add_subdirectory(comm/ModbusComm)
+add_subdirectory(comm/SerialPort)

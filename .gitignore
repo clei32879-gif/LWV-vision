@@ -1,0 +1,32 @@
+# ===== 构建产物 =====
+build/
+*.obj
+*.o
+*.a
+*.dll
+*.exe
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# ===== 第三方大文件（保留在磁盘，不入库）=====
+thirdparty/opencv/
+thirdparty/dvp2_sdk/
+
+# ===== IDE / 工具 =====
+.qtcreator/
+.mimocode/
+.vscode/
+*.user
+*.autosave
+CMakeLists.txt.user*
+
+# ===== 系统垃圾 =====
+._*
+.DS_Store
+Thumbs.db
+
+# ===== 日志与临时文件 =====
+stdout.txt
+stderr.txt
+*.log

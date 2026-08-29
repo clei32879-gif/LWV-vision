@@ -1,0 +1,7 @@
+add_library(YOLOv8Detect SHARED YOLOv8Detect.cpp YOLOv8Detect.h)
+target_include_directories(YOLOv8Detect PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(YOLOv8Detect PRIVATE Qt6::Core Qt6::Gui ${OpenCV_LIBS})
+if(ONNXRUNTIME_FOUND)
+    target_link_libraries(YOLOv8Detect PRIVATE onnxruntime)
+    target_compile_definitions(YOLOv8Detect PRIVATE VI_HAS_ONNXRUNTIME)
+endif()
