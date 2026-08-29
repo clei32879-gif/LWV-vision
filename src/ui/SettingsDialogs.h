@@ -10,6 +10,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QPlainTextEdit>
+#include <QCheckBox>
 
 namespace VisionInspector {
 
@@ -30,6 +31,7 @@ private:
     QComboBox* m_logLevel = nullptr;
     QLineEdit* m_imageDir = nullptr;
     QComboBox* m_language = nullptr;
+    QCheckBox* m_autoSaveNG = nullptr;
 };
 
 // ============================================================

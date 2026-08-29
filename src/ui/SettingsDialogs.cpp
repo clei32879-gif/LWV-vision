@@ -52,8 +52,12 @@ SystemSettingsDialog::SystemSettingsDialog(QWidget* parent)
         if (!dir.isEmpty()) m_imageDir->setText(dir);
     });
 
+    m_autoSaveNG = new QCheckBox(QStringLiteral("NG图像自动保存 (含检测标注, 保存到图像目录/ng/)"), this);
+    form->addRow(m_autoSaveNG);
+
     // 读取当前配置
     QSettings s("VisionInspector", "VisionInspector");
+    m_autoSaveNG->setChecked(s.value("autoSaveNGImages", false).toBool());
     m_imageDir->setText(s.value("imageSaveDir",
         QCoreApplication::applicationDirPath() + "/images").toString());
     const int level = s.value("logLevel", int(LogLevel::Info)).toInt();
@@ -69,6 +73,7 @@ SystemSettingsDialog::SystemSettingsDialog(QWidget* parent)
 void SystemSettingsDialog::onAccept() {
     QSettings s("VisionInspector", "VisionInspector");
     s.setValue("imageSaveDir", m_imageDir->text());
+    s.setValue("autoSaveNGImages", m_autoSaveNG->isChecked());
     s.setValue("logLevel", m_logLevel->currentData().toInt());
     Logger::instance().setLevel(LogLevel(m_logLevel->currentData().toInt()));
     accept();

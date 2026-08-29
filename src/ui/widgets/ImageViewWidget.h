@@ -39,6 +39,9 @@ public:
     void zoomFit();
     void zoom1x1();
 
+    /** 图像+叠加层合成为一张QImage (保存带标注图用) */
+    QImage renderAnnotated() const;
+
     /** 视图坐标 → 图像坐标 */
     QPointF viewToImage(const QPointF& viewPos) const;
     /** 图像坐标 → 视图坐标 */

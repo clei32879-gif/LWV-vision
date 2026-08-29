@@ -7,6 +7,7 @@
 #include "../ui/DataPanel.h"
 #include "../ui/LogPanel.h"
 #include "../ui/PropertyDialog.h"
+#include "../ui/widgets/ImageViewWidget.h"
 #include "../ui/PlcSimulatorDialog.h"
 #include "../ui/SettingsDialogs.h"
 #include "../ui/LoginDialog.h"
@@ -24,6 +25,8 @@
 #include <QMessageBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QDateTime>
+#include <QDir>
 #include <QCloseEvent>
 #include <QSettings>
 #include <QApplication>
@@ -77,6 +80,29 @@ MainWindow::MainWindow(QWidget* parent)
             // 检测结果叠加层
             m_multiView->setOverlays(0, m_flowEngine->lastOverlays());
             m_statusLabel->setText(allOk ? "执行完成 (全部OK)" : "执行完成 (有NG)");
+
+            // NG图像自动保存 (系统设置开启时)
+            if (!allOk && QSettings("VisionInspector", "VisionInspector")
+                              .value("autoSaveNGImages", false).toBool()) {
+                ImageViewWidget* view = m_multiView->viewAt(0);
+                if (view) {
+                    const QImage annotated = view->renderAnnotated();
+                    if (!annotated.isNull()) {
+                        const QString baseDir = QSettings("VisionInspector", "VisionInspector")
+                                                    .value("imageSaveDir",
+                                                           QCoreApplication::applicationDirPath()
+                                                               + "/images")
+                                                    .toString();
+                        QDir().mkpath(baseDir + "/ng");
+                        const QString ngPath = baseDir + "/ng/NG_"
+                                               + QDateTime::currentDateTime().toString(
+                                                     "yyyyMMdd_hhmmss_zzz")
+                                               + ".png";
+                        if (annotated.save(ngPath))
+                            m_logPanel->appendLog("NG图像已保存: " + ngPath);
+                    }
+                }
+            }
         });
 
     // 连续运行状态
@@ -168,6 +194,8 @@ void MainWindow::createMenus() {
     fileMenu->addAction(QString::fromUtf8("\u6253\u5f00\u9879\u76ee"), this, &MainWindow::onOpenProject);
     fileMenu->addAction(QString::fromUtf8("\u4fdd\u5b58\u9879\u76ee"), this, &MainWindow::onSaveProject);
     fileMenu->addAction(QString::fromUtf8("\u53e6\u5b58\u4e3a..."), this, &MainWindow::onSaveAsProject);
+    fileMenu->addSeparator();
+    fileMenu->addAction(QString::fromUtf8("\u4fdd\u5b58\u5f53\u524d\u753b\u9762(\u542b\u6807\u6ce8)"), this, &MainWindow::onSaveAnnotatedImage);
     fileMenu->addSeparator();
     fileMenu->addAction(QString::fromUtf8("\u9000\u51fa"), qApp, &QApplication::quit);
 
@@ -330,7 +358,7 @@ void MainWindow::onEditToolProperties(int index) {
             linkableData[t->instanceName()] = keys;
     }
 
-    PropertyDialog dlg(tool, availableImages, linkableData, this);
+    PropertyDialog dlg(tool, availableImages, linkableData, m_flowEngine->lastImage(), this);
     if (dlg.exec() == QDialog::Accepted) {
         if (m_flowEditor) m_flowEditor->refresh();
         m_projectMgr->markModified();
@@ -374,6 +402,28 @@ void MainWindow::onNewProject() {
     }
     m_fileLabel->setText("无项目");
     m_statusLabel->setText("新项目已创建");
+}
+
+void MainWindow::onSaveAnnotatedImage() {
+    ImageViewWidget* view = m_multiView->viewAt(0);
+    if (!view) return;
+    const QImage annotated = view->renderAnnotated();
+    if (annotated.isNull()) {
+        QMessageBox::information(this, "保存画面", "当前没有图像可保存");
+        return;
+    }
+    const QString defPath = QSettings("VisionInspector", "VisionInspector")
+                                .value("imageSaveDir",
+                                       QCoreApplication::applicationDirPath() + "/images")
+                                .toString()
+                            + "/annotated_" + QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss") + ".png";
+    QString path = QFileDialog::getSaveFileName(this, "保存当前画面(含检测标注)", defPath,
+                                                "PNG图像 (*.png);;JPEG图像 (*.jpg)");
+    if (path.isEmpty()) return;
+    if (annotated.save(path))
+        m_statusLabel->setText("已保存: " + QFileInfo(path).fileName());
+    else
+        QMessageBox::warning(this, "错误", "保存失败: " + path);
 }
 
 void MainWindow::onNewFromTemplate() {

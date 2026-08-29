@@ -1,4 +1,5 @@
 #include "PropertyDialog.h"
+#include "widgets/ImageViewWidget.h"
 #include <QVBoxLayout>
 #include <QFormLayout>
 #include <QDialogButtonBox>
@@ -13,27 +14,55 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QMenu>
+#include <QTabWidget>
 
 namespace VisionInspector {
 
 PropertyDialog::PropertyDialog(ITool* tool, const QStringList& availableTools,
                                const QMap<QString, QStringList>& linkableData,
+                               const CvImagePtr& lastImage,
                                QWidget* parent)
     : QDialog(parent), m_tool(tool), m_availableTools(availableTools),
-      m_linkableData(linkableData) {
+      m_linkableData(linkableData), m_lastImage(lastImage) {
     setWindowTitle(QString("属性编辑 - %1").arg(tool->displayName()));
-    setMinimumWidth(480);
+    setMinimumSize(560, 520);
     buildUI();
 }
 
 void PropertyDialog::buildUI() {
     auto* mainLayout = new QVBoxLayout(this);
+    m_tabs = new QTabWidget(this);
+    mainLayout->addWidget(m_tabs, 1);
+
+    m_buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    connect(m_buttonBox, &QDialogButtonBox::accepted, this, &PropertyDialog::accept);
+    connect(m_buttonBox, &QDialogButtonBox::rejected, this, &PropertyDialog::reject);
+    mainLayout->addWidget(m_buttonBox);
+
+    // ============ 页签1: 基本设置 ============
+    auto* basicPage = new QWidget(this);
+    auto* basicForm = new QFormLayout(basicPage);
+    m_nameEdit = new QLineEdit(m_tool->instanceName(), basicPage);
+    basicForm->addRow(QStringLiteral("工具名:"), m_nameEdit);
+    m_commentEdit = new QPlainTextEdit(m_tool->comment(), basicPage);
+    m_commentEdit->setFixedHeight(70);
+    basicForm->addRow(QStringLiteral("注释:"), m_commentEdit);
+    m_activeCheck = new QCheckBox(QStringLiteral("启用此工具 (取消勾选后流程执行时跳过)"), basicPage);
+    m_activeCheck->setChecked(m_tool->isActive());
+    basicForm->addRow(m_activeCheck);
+    basicForm->addRow(new QLabel(
+        QStringLiteral("类型: %1    分类: %2")
+            .arg(m_tool->typeName(), categoryToString(m_tool->category())), basicPage));
+    m_tabs->addTab(basicPage, QStringLiteral("基本设置"));
+
+    // ============ 页签2: 参数设置 ============
+    auto* paramPage = new QWidget(this);
+    auto* paramLayout = new QVBoxLayout(paramPage);
     m_formLayout = new QFormLayout();
-    mainLayout->addLayout(m_formLayout);
+    paramLayout->addLayout(m_formLayout);
+    paramLayout->addStretch();
+    m_tabs->addTab(paramPage, QStringLiteral("参数设置"));
 
-    PropertyDefList defs = m_tool->propertyDefs();
-
-    // 根据工具类型添加"输入图像"下拉框
     bool isCaptureTool = (m_tool->typeName() == "CaptureImage");
     bool needsImage = !isCaptureTool &&
                        m_tool->typeName() != "PositionCorrection" &&
@@ -46,8 +75,7 @@ void PropertyDialog::buildUI() {
                        m_tool->typeName() != "Loop";
 
     if (isCaptureTool) {
-        // 采集图像：显示相机/文件选项
-        auto* combo = new QComboBox(this);
+        auto* combo = new QComboBox(paramPage);
         combo->setMinimumWidth(200);
         combo->addItem("当前图像");
         combo->addItem("相机图像");
@@ -58,13 +86,11 @@ void PropertyDialog::buildUI() {
         m_formLayout->addRow("图像来源:", combo);
         m_editors["inputImage"] = combo;
     } else if (needsImage) {
-        // 其他需要图像的工具：仅显示流程中的图像处理工具
-        auto* combo = new QComboBox(this);
+        auto* combo = new QComboBox(paramPage);
         combo->setMinimumWidth(200);
         combo->addItem("当前图像");
-        for (const QString& toolName : m_availableTools) {
+        for (const QString& toolName : m_availableTools)
             combo->addItem(toolName);
-        }
         QString currentInput = m_tool->propertyValue("inputImage").toString();
         int idx = combo->findText(currentInput);
         if (idx >= 0) combo->setCurrentIndex(idx);
@@ -72,13 +98,14 @@ void PropertyDialog::buildUI() {
         m_editors["inputImage"] = combo;
     }
 
+    const PropertyDefList defs = m_tool->propertyDefs();
     for (const auto& def : defs) {
         QWidget* editor = nullptr;
         QVariant currentVal = m_tool->propertyValue(def.name);
 
         switch (def.type) {
         case PropertyType::Int: {
-            auto* spin = new QSpinBox(this);
+            auto* spin = new QSpinBox(paramPage);
             spin->setMinimum(def.minValue.toInt());
             spin->setMaximum(def.maxValue.toInt());
             spin->setValue(currentVal.toInt());
@@ -86,7 +113,7 @@ void PropertyDialog::buildUI() {
             break;
         }
         case PropertyType::Double: {
-            auto* dspin = new QDoubleSpinBox(this);
+            auto* dspin = new QDoubleSpinBox(paramPage);
             dspin->setDecimals(3);
             dspin->setMinimum(def.minValue.toDouble());
             dspin->setMaximum(def.maxValue.toDouble());
@@ -95,13 +122,13 @@ void PropertyDialog::buildUI() {
             break;
         }
         case PropertyType::Boolean: {
-            auto* check = new QCheckBox(this);
+            auto* check = new QCheckBox(paramPage);
             check->setChecked(currentVal.toBool());
             editor = check;
             break;
         }
         case PropertyType::Enum: {
-            auto* combo = new QComboBox(this);
+            auto* combo = new QComboBox(paramPage);
             combo->addItems(def.enumValues);
             combo->setCurrentIndex(currentVal.toInt());
             editor = combo;
@@ -109,7 +136,6 @@ void PropertyDialog::buildUI() {
         }
         case PropertyType::String:
         default: {
-            // 路径类型的属性 → 带文件浏览
             QString name = def.name.toLower();
             if (name.contains("path") || name.contains("file") || name.contains("dir") || name.contains("image")) {
                 bool isDir = name.contains("dir");
@@ -117,7 +143,6 @@ void PropertyDialog::buildUI() {
                     "图像文件 (*.png *.jpg *.jpeg *.bmp *.tif *.tiff);;所有文件 (*)";
                 editor = createPathEditor(def.name, currentVal.toString(), filter, isDir);
             } else {
-                // 普通字符串 → 带数据链接按钮
                 editor = createLinkEditor(def.name, currentVal.toString());
             }
             break;
@@ -125,18 +150,121 @@ void PropertyDialog::buildUI() {
         }
 
         if (editor) {
-            m_formLayout->addRow(def.label + ":", editor);
+            QString label = def.label;
+            if (!def.group.isEmpty()) label += QString(" [%1]").arg(def.group);
+            m_formLayout->addRow(label + ":", editor);
             m_editors[def.name] = editor;
         }
     }
 
-    // 数据判定区 (对齐CKVision: 工具内直接配上下限)
+    // ============ 页签3: 数据判定 ============
+    auto* judgePage = new QWidget(this);
+    auto* judgeLayout = new QVBoxLayout(judgePage);
+    judgeLayout->addWidget(new QLabel(
+        QStringLiteral("勾选启用后, 对应结果超出上下限即判NG (结果键来自最近一次执行):"), judgePage));
+    m_judgeTable = nullptr;
     buildJudgeSection();
+    if (m_judgeTable)
+        judgeLayout->addWidget(m_judgeTable);
+    else
+        judgeLayout->addWidget(new QLabel(
+            QStringLiteral("(尚无结果键 — 先执行一次流程后此处可配置判定)"), judgePage));
+    m_tabs->addTab(judgePage, QStringLiteral("数据判定"));
 
-    m_buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    connect(m_buttonBox, &QDialogButtonBox::accepted, this, &PropertyDialog::accept);
-    connect(m_buttonBox, &QDialogButtonBox::rejected, this, &PropertyDialog::reject);
-    mainLayout->addWidget(m_buttonBox);
+    // ============ 页签4: 试执行 ============
+    auto* tryPage = new QWidget(this);
+    auto* tryLayout = new QVBoxLayout(tryPage);
+    auto* tryBtn = new QPushButton(QStringLiteral("▶ 用最近一帧图像试执行当前参数"), tryPage);
+    tryLayout->addWidget(tryBtn);
+    auto* viewer = new ImageViewWidget(tryPage);
+    tryLayout->addWidget(viewer, 1);
+    connect(tryBtn, &QPushButton::clicked, this, [this, viewer]() {
+        // 先把界面上的参数写入工具副本再试跑 (不动正式配置)
+        onTryRun();
+        viewer->setImage(cvMatToQImage(m_lastImage ? *m_lastImage : CvImage()));
+        QVariantList overlays;
+        if (m_tool->status() == ToolStatus::OK)
+            overlays = QVector<QVariant>(m_tool->overlays().begin(),
+                                         m_tool->overlays().end()).toList();
+        viewer->setOverlays(overlays);
+    });
+    m_tabs->addTab(tryPage, QStringLiteral("试执行"));
+}
+
+void PropertyDialog::onTryRun() {
+    // 临时保存界面参数 → 执行 → 恢复 (与正式accept分离)
+    struct Restore { ITool* t; QMap<QString,QVariant> saved; } r{m_tool, {}};
+    // 读取界面值(仅缓存, 不写回) — 直接执行: 把界面参数临时套用
+    PropertyDefList defs = m_tool->propertyDefs();
+    for (const auto& def : defs) {
+        QWidget* editor = m_editors.value(def.name);
+        if (!editor) continue;
+        QVariant v;
+        switch (def.type) {
+        case PropertyType::Int:    v = qobject_cast<QSpinBox*>(editor)->value(); break;
+        case PropertyType::Double: v = qobject_cast<QDoubleSpinBox*>(editor)->value(); break;
+        case PropertyType::Boolean:v = qobject_cast<QCheckBox*>(editor)->isChecked(); break;
+        case PropertyType::Enum:   v = qobject_cast<QComboBox*>(editor)->currentIndex(); break;
+        default: {
+            auto* container = qobject_cast<QWidget*>(editor);
+            QLineEdit* line = container ? container->findChild<QLineEdit*>() : nullptr;
+            if (!line) line = qobject_cast<QLineEdit*>(editor);
+            if (line) v = line->text();
+            break;
+        }
+        }
+        if (v.isValid()) {
+            r.saved[def.name] = m_tool->propertyValue(def.name);
+            m_tool->setProperty(def.name, v);
+        }
+    }
+    // 执行(试)
+    if (m_lastImage && !m_lastImage->empty()) {
+        ToolContext ctx;
+        ctx.setCurrentImage(std::make_shared<CvImage>(m_lastImage->clone()));
+        m_tool->execute(ctx);
+    }
+    // 恢复原属性
+    for (auto it = r.saved.begin(); it != r.saved.end(); ++it)
+        m_tool->setProperty(it.key(), it.value());
+    (void)r;
+}
+
+void PropertyDialog::buildJudgeSection() {
+    QList<ResultJudgment> judges = m_tool->judgments();
+    const QStringList resultKeys = m_tool->resultData().keys();
+    for (const QString& key : resultKeys) {
+        bool exists = false;
+        for (const auto& j : judges)
+            if (j.resultKey == key) { exists = true; break; }
+        if (!exists && key != "judgeFailedKeys" && key != "error" && key != "status") {
+            ResultJudgment j;
+            j.resultKey = key;
+            judges.append(j);
+        }
+    }
+    if (judges.isEmpty()) return;
+
+    m_judgeTable = new QTableWidget(judges.size(), 4, this);
+    m_judgeTable->setHorizontalHeaderLabels({"结果键", "启用", "下限", "上限"});
+    m_judgeTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    m_judgeTable->verticalHeader()->setVisible(false);
+    for (int r = 0; r < judges.size(); ++r) {
+        const ResultJudgment& j = judges[r];
+        auto* keyItem = new QTableWidgetItem(j.resultKey);
+        keyItem->setFlags(keyItem->flags() & ~Qt::ItemIsEditable);
+        m_judgeTable->setItem(r, 0, keyItem);
+
+        auto* enableItem = new QTableWidgetItem();
+        enableItem->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        enableItem->setCheckState(j.enabled ? Qt::Checked : Qt::Unchecked);
+        m_judgeTable->setItem(r, 1, enableItem);
+
+        m_judgeTable->setItem(r, 2, new QTableWidgetItem(
+            j.lower <= -1e17 ? QString() : QString::number(j.lower)));
+        m_judgeTable->setItem(r, 3, new QTableWidgetItem(
+            j.upper >= 1e17 ? QString() : QString::number(j.upper)));
+    }
 }
 
 QWidget* PropertyDialog::createLinkEditor(const QString& name, const QString& value) {
@@ -145,11 +273,11 @@ QWidget* PropertyDialog::createLinkEditor(const QString& name, const QString& va
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(4);
 
-    auto* lineEdit = new QLineEdit(value, this);
+    auto* lineEdit = new QLineEdit(value, container);
     lineEdit->setPlaceholderText("可直接输入, 或点右侧按钮插入数据引用");
     layout->addWidget(lineEdit, 1);
 
-    auto* linkBtn = new QPushButton("...", this);
+    auto* linkBtn = new QPushButton("...", container);
     linkBtn->setMaximumWidth(30);
     linkBtn->setToolTip("插入数据链接: 引用前序工具的结果值, 执行时自动替换");
     layout->addWidget(linkBtn);
@@ -167,61 +295,12 @@ QWidget* PropertyDialog::createLinkEditor(const QString& name, const QString& va
                 hasItems = true;
             }
         }
-        if (!hasItems) {
+        if (!hasItems)
             menu.addAction("暂无可用数据 (先执行一次流程)")->setEnabled(false);
-        }
         menu.exec(linkBtn->mapToGlobal(QPoint(0, linkBtn->height())));
     });
 
     return container;
-}
-
-void PropertyDialog::buildJudgeSection() {
-    // 判定行集合 = 已配置的判定 ∪ 上次运行的结果键
-    QList<ResultJudgment> judges = m_tool->judgments();
-    QStringList resultKeys = m_tool->resultData().keys();
-    for (const QString& key : resultKeys) {
-        bool exists = false;
-        for (const auto& j : judges)
-            if (j.resultKey == key) { exists = true; break; }
-        if (!exists && key != "judgeFailedKeys" && key != "error" && key != "status") {
-            ResultJudgment j;
-            j.resultKey = key;
-            judges.append(j);
-        }
-    }
-    if (judges.isEmpty()) return;
-
-    auto* group = new QWidget(this);
-    auto* vLayout = new QVBoxLayout(group);
-    vLayout->setContentsMargins(0, 0, 0, 0);
-    vLayout->addWidget(new QLabel("数据判定 (勾选启用后, 结果超出上下限即判NG):", group));
-
-    m_judgeTable = new QTableWidget(judges.size(), 4, group);
-    m_judgeTable->setHorizontalHeaderLabels({"结果键", "启用", "下限", "上限"});
-    m_judgeTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    m_judgeTable->verticalHeader()->setVisible(false);
-    m_updatingJudge = true;
-
-    for (int r = 0; r < judges.size(); ++r) {
-        const ResultJudgment& j = judges[r];
-        auto* keyItem = new QTableWidgetItem(j.resultKey);
-        keyItem->setFlags(keyItem->flags() & ~Qt::ItemIsEditable);
-        m_judgeTable->setItem(r, 0, keyItem);
-
-        auto* enableItem = new QTableWidgetItem();
-        enableItem->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-        enableItem->setCheckState(j.enabled ? Qt::Checked : Qt::Unchecked);
-        m_judgeTable->setItem(r, 1, enableItem);
-
-        m_judgeTable->setItem(r, 2, new QTableWidgetItem(
-            j.lower <= -1e17 ? QString() : QString::number(j.lower)));
-        m_judgeTable->setItem(r, 3, new QTableWidgetItem(
-            j.upper >= 1e17 ? QString() : QString::number(j.upper)));
-    }
-    m_updatingJudge = false;
-    vLayout->addWidget(m_judgeTable);
-    static_cast<QVBoxLayout*>(layout())->addWidget(group);
 }
 
 QWidget* PropertyDialog::createPathEditor(const QString& name, const QString& value,
@@ -231,20 +310,18 @@ QWidget* PropertyDialog::createPathEditor(const QString& name, const QString& va
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(4);
 
-    auto* lineEdit = new QLineEdit(value, this);
+    auto* lineEdit = new QLineEdit(value, container);
     lineEdit->setObjectName("pathEdit_" + name);
     layout->addWidget(lineEdit, 1);
 
-    auto* browseBtn = new QPushButton("...", this);
+    auto* browseBtn = new QPushButton("...", container);
     browseBtn->setMaximumWidth(30);
     browseBtn->setToolTip("浏览...");
     layout->addWidget(browseBtn);
 
-    // 连接浏览按钮
     connect(browseBtn, &QPushButton::clicked, this, [this, lineEdit, filter, isDir]() {
         QString currentPath = lineEdit->text();
         QString newPath;
-
         if (isDir) {
             newPath = QFileDialog::getExistingDirectory(this, "选择目录",
                 currentPath.isEmpty() ? "." : currentPath);
@@ -252,25 +329,22 @@ QWidget* PropertyDialog::createPathEditor(const QString& name, const QString& va
             newPath = QFileDialog::getOpenFileName(this, "选择文件",
                 currentPath.isEmpty() ? "." : currentPath, filter);
         }
-
-        if (!newPath.isEmpty()) {
+        if (!newPath.isEmpty())
             lineEdit->setText(newPath);
-        }
     });
 
     return container;
 }
 
 void PropertyDialog::accept() {
-    // 保存输入图像选择
-    QWidget* inputImgEditor = m_editors.value("inputImage");
-    if (inputImgEditor) {
-        auto* combo = qobject_cast<QComboBox*>(inputImgEditor);
-        if (combo) {
-            m_tool->setProperty("inputImage", combo->currentText());
-        }
-    }
+    // 页签1: 基本设置
+    const QString newName = m_nameEdit->text().trimmed();
+    if (!newName.isEmpty())
+        m_tool->setInstanceName(newName);
+    m_tool->setComment(m_commentEdit->toPlainText());
+    m_tool->setActive(m_activeCheck->isChecked());
 
+    // 页签2: 参数设置
     PropertyDefList defs = m_tool->propertyDefs();
     for (const auto& def : defs) {
         QWidget* editor = m_editors.value(def.name);
@@ -291,7 +365,6 @@ void PropertyDialog::accept() {
             break;
         case PropertyType::String:
         default: {
-            // 处理路径类型（带浏览按钮的）
             auto* container = qobject_cast<QWidget*>(editor);
             if (container) {
                 auto* lineEdit = container->findChild<QLineEdit*>();
@@ -300,17 +373,15 @@ void PropertyDialog::accept() {
                     break;
                 }
             }
-            // 普通文本输入框
             auto* line = qobject_cast<QLineEdit*>(editor);
-            if (line) {
+            if (line)
                 m_tool->setProperty(def.name, line->text());
-            }
             break;
         }
         }
     }
 
-    // 保存数据判定
+    // 页签3: 数据判定
     if (m_judgeTable) {
         QList<ResultJudgment> judges;
         for (int r = 0; r < m_judgeTable->rowCount(); ++r) {

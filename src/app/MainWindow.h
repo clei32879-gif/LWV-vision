@@ -49,6 +49,7 @@ private slots:
     void onOpenProject();
     void onSaveProject();
     void onSaveAsProject();
+    void onSaveAnnotatedImage();
     void onExecuteOnce();
     void onStartRunning();
     void onStopRunning();

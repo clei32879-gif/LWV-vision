@@ -99,6 +99,25 @@ void ImageViewWidget::paintEvent(QPaintEvent*) {
     painter.restore();
 }
 
+QImage ImageViewWidget::renderAnnotated() const {
+    if (m_image.isNull()) return {};
+    QImage out = m_image.convertToFormat(QImage::Format_RGB32);
+    QPainter painter(&out);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    for (const QVariant& v : m_overlays) {
+        const QVariantMap shape = v.toMap();
+        QPen pen(QColor(shape.value("color").toString().isEmpty()
+                            ? QStringLiteral("#00ff00")
+                            : shape.value("color").toString()));
+        pen.setWidthF(1.5);
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        drawOverlayShape(painter, shape);
+    }
+    painter.end();
+    return out;
+}
+
 void ImageViewWidget::drawOverlayShape(QPainter& painter, const QVariantMap& s) const {
     const QString type = s.value("type").toString();
     if (type == "circle") {
