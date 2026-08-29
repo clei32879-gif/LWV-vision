@@ -11,6 +11,7 @@ ui_*.h
 
 # ===== 第三方大文件（保留在磁盘，不入库）=====
 /build/
+references/
 thirdparty/opencv/*
 thirdparty/dvp2_sdk/
 # 但OpenCV的cmake配置文件必须入库（已改为相对路径，可移植）
