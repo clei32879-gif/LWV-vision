@@ -22,3 +22,10 @@ target_link_libraries(test_engine PRIVATE
     Qt6::Concurrent
 )
 add_test(NAME flow_engine COMMAND test_engine)
+
+add_executable(test_edgedrawing test_edgedrawing.cpp)
+target_link_libraries(test_edgedrawing PRIVATE
+    ${OpenCV_LIBS}
+    Qt6::Core
+)
+add_test(NAME edge_drawing COMMAND test_edgedrawing)

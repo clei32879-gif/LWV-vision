@@ -106,17 +106,22 @@ int main(int argc, char* argv[]) {
         done.release();
     });
     engine.executeOnceAsync(flow);
-    if (done.tryAcquire(1, 3000)) {
-        CHECK(asyncOk, "异步执行完成且OK");
-    } else {
-        CHECK(false, "异步执行超时(3s)");
+    // 跨线程信号经事件队列送达, 等待时需处理事件
+    bool asyncDone = false;
+    QElapsedTimer wait2; wait2.start();
+    while (wait2.elapsed() < 3000) {
+        QCoreApplication::processEvents();
+        if (done.tryAcquire(1, 20)) { asyncDone = true; break; }
     }
+    CHECK(asyncDone && asyncOk, "异步执行完成且OK");
 
     // ---- 测试3: 连续运行停止响应 < 500ms ----
     std::printf("测试3: 连续运行停止响应\n");
     QSemaphore runStarted;
+    QSemaphore runStopped;
     QObject::connect(&engine, &FlowEngine::runStateChanged, [&](bool running) {
         if (running) runStarted.release();
+        else         runStopped.release();
     });
     engine.startRunning(flow);
     CHECK(runStarted.tryAcquire(1, 3000), "连续运行已启动");
@@ -124,11 +129,12 @@ int main(int argc, char* argv[]) {
     QElapsedTimer timer;
     timer.start();
     engine.stopRunning();
-    QSemaphore stopped;
-    QObject::connect(&engine, &FlowEngine::runStateChanged, [&](bool running) {
-        if (!running) stopped.release();
-    });
-    const bool stoppedFast = stopped.tryAcquire(1, 2000) && timer.elapsed() < 500;
+    // 等待停止信号(先连接后停止, 避免竞态丢失)
+    bool stoppedFast = false;
+    while (timer.elapsed() < 2000) {
+        QCoreApplication::processEvents();
+        if (runStopped.tryAcquire(1, 20)) { stoppedFast = timer.elapsed() < 500; break; }
+    }
     CHECK(stoppedFast, QString("停止响应 %1ms < 500ms").arg(timer.elapsed()).toLocal8Bit().constData());
 
     std::printf("\n%s (失败: %d)\n", g_failures == 0 ? "全部通过" : "存在失败", g_failures);
