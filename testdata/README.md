@@ -23,6 +23,11 @@ cmake --build build/release --target generate_testdata
 testdata_gen [输出目录] [OK张数] [每类NG张数]
 ```
 
+## 真实实物图
+
+`real_samples/` — 度申相机实拍精选样本（螺丝缺陷分类/螺母多视角），原始图库见 `G:\图片素材`（1.3GB不入库）。
+详情看 [real_samples/README.md](real_samples/README.md)。
+
 ## 用途
 
 1. **虚拟相机回放**：`testdata/virtual_camera/` 下的图会被虚拟相机按帧率循环播放
