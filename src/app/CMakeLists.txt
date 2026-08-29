@@ -1,5 +1,5 @@
 # Main Application
-qt_add_executable(VisionInspector
+qt_add_executable(LWVision
     main.cpp
     MainWindow.h
     MainWindow.cpp
@@ -7,7 +7,7 @@ qt_add_executable(VisionInspector
     AppSettings.cpp
 )
 
-target_link_libraries(VisionInspector PRIVATE
+target_link_libraries(LWVision PRIVATE
     VICore
     VIEngine
     VIHAL
@@ -36,25 +36,25 @@ set(ALL_PLUGINS
     EndCorrection
 )
 foreach(_plugin ${ALL_PLUGINS})
-    target_link_libraries(VisionInspector PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${_plugin}>)
+    target_link_libraries(LWVision PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${_plugin}>)
 endforeach()
 
 # Link DVP2 SDK
 if(VI_HAS_DVP2)
-    target_link_libraries(VisionInspector PRIVATE DVPCamera64)
-    target_link_directories(VisionInspector PRIVATE ${DVP2_LIB_DIR})
+    target_link_libraries(LWVision PRIVATE DVPCamera64)
+    target_link_directories(LWVision PRIVATE ${DVP2_LIB_DIR})
 endif()
 
 if(MSVC)
-    target_compile_options(VisionInspector PRIVATE $<$<CONFIG:Debug>:/Zi>)
-    set_target_properties(VisionInspector PROPERTIES WIN32_EXECUTABLE TRUE)
+    target_compile_options(LWVision PRIVATE $<$<CONFIG:Debug>:/Zi>)
+    set_target_properties(LWVision PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
 
-install(TARGETS VisionInspector RUNTIME DESTINATION bin)
+install(TARGETS LWVision RUNTIME DESTINATION bin)
 
 if(VI_HAS_DVP2)
-    add_custom_command(TARGET VisionInspector POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DVP2_DLL_DIR}/DVPCamera64.dll" "$<TARGET_FILE_DIR:VisionInspector>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DVP2_DLL_DIR}/dvpir64.dll" "$<TARGET_FILE_DIR:VisionInspector>"
+    add_custom_command(TARGET LWVision POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DVP2_DLL_DIR}/DVPCamera64.dll" "$<TARGET_FILE_DIR:LWVision>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DVP2_DLL_DIR}/dvpir64.dll" "$<TARGET_FILE_DIR:LWVision>"
         COMMENT "Copying DVP2 DLLs...")
 endif()

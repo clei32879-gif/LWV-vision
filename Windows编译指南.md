@@ -1,221 +1,112 @@
-# LW Vision 立维视觉 — Windows 编译部署指南
+# LW Vision 立维视觉 — 编译部署指南
 
-## 一、环境准备
+> 本文档是唯一的权威编译文档。工程路径可移植：**项目放在任何盘符、任何电脑都能编译**，无需修改任何文件。
+> （原 SETUP.md / docs/Windows开发环境搭建.md 为历史文档，已合并到本文）
 
-### 1.1 必装软件
+## 一、环境要求
 
-| 软件 | 版本 | 下载地址 | 说明 |
-|------|------|---------|------|
-| **Qt** | 6.11.1 | https://www.qt.io/download-qt-installer | 选MinGW 13.1.0组件 |
-| **CMake** | 3.21+ | https://cmake.org/download/ | 安装时选"Add to PATH" |
-| **OpenCV** | 5.0.0 | https://opencv.org/releases/ | 解压到D:\Development\OpenCV |
-| **Git** | 最新 | https://git-scm.com/download/win | 可选，用于版本管理 |
-
-### 1.2 可选软件（相机SDK）
-
-| SDK | 用途 | 安装路径 |
-|-----|------|---------|
-| DVP2 SDK | 度申相机 | C:\Program Files (x86)\DVP2 SDK CN |
-| MvCameraControl | 海康相机 | 默认路径即可 |
-| Pylon SDK | 巴斯勒相机 | 默认路径即可 |
-| GxIAPI SDK | 大恒相机 | 默认路径即可 |
-
-### 1.3 可选软件（AI推理）
-
-| 软件 | 版本 | 用途 |
+| 软件 | 版本 | 说明 |
 |------|------|------|
-| ONNX Runtime | 1.17+ | YOLOv8推理，下载Windows x64版本 |
+| **Qt** | 6.2+ （验证过 6.10.3 / 6.11.1） | 在线安装器勾选 **MinGW 组件**（如 MinGW 13.1.0 64-bit） |
+| **CMake** | 3.21+ | Qt 自带的 CMake 即可（Qt/Tools/CMake_64） |
+| **MinGW** | 随 Qt 安装 | Qt/Tools/mingw13xx_64 |
+| **OpenCV** | 5.0.0 MinGW 编译版 | **项目已自带**（thirdparty/opencv/build），无需安装 |
 
----
+### 可选组件
 
-## 二、Qt安装步骤
+| 组件 | 用途 | 说明 |
+|------|------|------|
+| DVP2 SDK（度申相机） | 真实相机采集 | 安装到 `C:\Program Files (x86)\DVP2 SDK CN`；未安装时程序以无相机模式编译，不影响其他功能 |
+| ONNX Runtime | YOLOv8 AI 推理 | 预留，后续版本接入 |
 
-### 2.1 下载安装Qt
+## 二、编译（三选一）
 
-1. 运行Qt在线安装程序
-2. 登录/注册Qt账号
-3. 选择组件：
-   - ✅ Qt 6.11.1 → MinGW 13.1.0 64-bit
-   - ✅ Developer and Designer Tools → MinGW 13.1.0
-4. 安装到 `D:\Development\Qt`
+### 方式A：一键脚本（推荐）
 
-### 2.2 配置环境变量
-
-在系统环境变量PATH中添加：
-```
-D:\Development\Qt\6.11.1\mingw_64\bin
-D:\Development\Qt\Tools\mingw1310_64\bin
-D:\Development\Qt\Tools\mingw1310_64\opt\bin
-```
-
-验证：打开CMD输入
-```
-qmake --version
-g++ --version
-cmake --version
-```
-
----
-
-## 三、OpenCV安装步骤
-
-### 3.1 下载OpenCV
-
-1. 下载 OpenCV 5.0.0 Windows版
-2. 运行安装程序，解压到 `D:\Development\OpenCV`
-3. 最终路径：`D:\Development\OpenCV\opencv\build`
-
-### 3.2 MinGW编译OpenCV（重要！）
-
-> ⚠️ **MSVC版OpenCV和MinGW不兼容，必须用MinGW重新编译OpenCV**
+双击 `build.bat`，或命令行执行：
 
 ```bat
-cd D:\Development\OpenCV\opencv
-mkdir build_mingw
-cd build_mingw
-cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_opencv_python2=OFF -DBUILD_opencv_python3=OFF
-mingw32-make -j8
-mingw32-make install
+build.bat          :: Debug 版
+build.bat release  :: Release 版
 ```
 
-编译完成后，OpenCV在：`D:\Development\OpenCV\opencv\build_mingw\install`
+脚本自动探测 Qt 安装位置（支持 C/D/E/F 盘），配置并编译，产物在：
 
----
+```
+build\default\bin\LWVision.exe   (Debug)
+build\release\bin\LWVision.exe   (Release)
+```
 
-## 四、编译LW Vision
-
-### 4.1 命令行编译（推荐）
+### 方式B：命令行手动
 
 ```bat
-:: 1. 打开CMD，进入项目目录
-cd F:\guangxuan
+:: QT_ROOT_DIR 指向 Qt 的 mingw_64 目录（按实际安装路径调整）
+set QT_ROOT_DIR=C:\Qt\6.10.3\mingw_64
+set PATH=%QT_ROOT_DIR%\bin;C:\Qt\Tools\mingw1310_64\bin;%PATH%
 
-:: 2. 创建build目录
-mkdir build
-cd build
-
-:: 3. CMake配置（MinGW）
-cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DOpenCV_DIR=D:\Development\OpenCV\opencv\build_mingw\install
-
-:: 4. 编译
-mingw32-make -j8
-
-:: 5. 运行
-bin\LWVision.exe
+cmake --preset default
+cmake --build build/default -j
 ```
 
-### 4.2 Qt Creator编译（图形界面，更简单）
+### 方式C：Qt Creator
 
-1. 打开 **Qt Creator**
-2. 菜单 → 文件 → 打开文件或项目 → 选择 `F:\guangxuan\CMakeLists.txt`
-3. 配置项目：
-   - 构建套件选择：**Qt 6.11.1 MinGW 64-bit**
-   - 构建目录：`F:\guangxuan\build`
-4. 点击左下角 **🔨构建** 按钮（或Ctrl+B）
-5. 点击 **▶运行** 按钮（或Ctrl+R）
+1. 文件 → 打开文件或项目 → 选 `CMakeLists.txt`
+2. 构建套件选 **Qt 6.x MinGW 64-bit**
+3. 构建目录设为 `build/default`（与预设一致）
+4. Ctrl+B 构建，Ctrl+R 运行
 
-### 4.3 MSVC编译（如果用Visual Studio）
+## 三、OpenCV 说明
+
+- 项目内 `thirdparty/opencv/build` 是随项目携带的 **MinGW 编译版 OpenCV 5.0.0**，CMake 自动按项目相对路径找到它，**换电脑无需任何操作**。
+- 如需重新编译 OpenCV（例如换编译器版本）：
 
 ```bat
-:: 打开 "x64 Native Tools Command Prompt for VS 2022"
-cd F:\guangxuan
-mkdir build_msvc
-cd build_msvc
-cmake .. -G "Visual Studio 17 2022" -A x64 -DOpenCV_DIR=D:\Development\OpenCV\opencv\build
-cmake --build . --config Release -j8
+cd thirdparty\opencv\opencv-5.0.0
+mkdir build_mingw && cd build_mingw
+cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_EXAMPLES=OFF
+mingw32-make -j8 && mingw32-make install
+:: 将 install 目录内容同步回 thirdparty\opencv\build
 ```
 
----
+> ⚠️ MSVC 预编译版 OpenCV 与 MinGW ABI 不兼容，必须用 MinGW 自行编译。
 
-## 五、编译选项说明
+## 四、相机支持
 
-| 选项 | 默认值 | 说明 |
-|------|--------|------|
-| `-DVI_BUILD_PLUGINS=ON` | ON | 编译所有插件 |
-| `-DVI_BUILD_TESTS=OFF` | OFF | 编译测试程序 |
-| `-DOpenCV_DIR=xxx` | 自动检测 | OpenCV路径 |
-| `-DCMAKE_BUILD_TYPE=Release` | Release | Release优化，Debug调试 |
+- **DVP2 SDK（度申）**：安装后重新编译即自动启用（CMake 输出中 `DVP2 SDK: ON`）。
+- 未安装 SDK 时：相机菜单可打开但扫描不到设备，其余功能正常。
+- 海康 MVS / 巴斯勒 Pylon：驱动接口已预留（`src/hal/ICameraDriver.h`），插件待实现。
 
----
-
-## 六、编译常见问题
-
-### Q1: OpenCV找不到
-```
-CMake Error: Could not find OpenCV
-```
-**解决：** 指定OpenCV路径：
-```
-cmake .. -DOpenCV_DIR=D:\Development\OpenCV\opencv\build_mingw\install
-```
-
-### Q2: MinGW和MSVC的OpenCV不兼容
-```
-undefined reference to cv::xxx
-```
-**解决：** 必须用MinGW编译OpenCV（见第三节），不能用MSVC预编译版。
-
-### Q3: Qt版本不对
-```
-Could not find a package configuration file provided by "Qt6"
-```
-**解决：** 确保PATH中有Qt的cmake路径：
-```
-set CMAKE_PREFIX_PATH=D:\Development\Qt\6.11.1\mingw_64
-```
-
-### Q4: DVP2 SDK找不到
-```
-DVP2 SDK not found at ...
-```
-**解决：** 如果没有度申相机SDK，可以忽略（不影响编译，度申驱动会跳过）。如有SDK但路径不对，修改CMakeLists.txt中的DVP2_SDK_DIR。
-
-### Q5: 编译中文乱码
-```
-warning: unknown escape sequence
-```
-**解决：** CMakeLists.txt已设置 `/utf-8`，如仍有问题确保源文件保存为UTF-8编码。
-
----
-
-## 七、部署到工控机
-
-### 7.1 打包
+## 五、部署到工控机
 
 ```bat
-:: 在build目录下
-windeployqt bin\LWVision.exe
+:: 1. 编译 Release 版
+build.bat release
+
+:: 2. 拷贝 Release 运行所需 DLL
+cd build\release\bin
+windeployqt LWVision.exe
 ```
 
-### 7.2 所需DLL
+确保 exe 同目录有以下 DLL（windeployqt 会自动拷大部分）：
 
-确保以下DLL在exe同目录：
-- Qt6Core.dll, Qt6Gui.dll, Qt6Widgets.dll, Qt6Xml.dll
-- libgcc_s_seh-1.dll, libstdc++-6.dll, libwinpthread-1.dll (MinGW运行时)
-- opencv_core500.dll, opencv_imgproc500.dll 等
-- DVPCamera64.dll, dvpir64.dll (度申相机，如有)
-- onnxruntime.dll (YOLOv8推理，如有)
+- `Qt6Core.dll` `Qt6Gui.dll` `Qt6Widgets.dll` `Qt6Network.dll` `Qt6SerialPort.dll`
+- `libgcc_s_seh-1.dll` `libstdc++-6.dll` `libwinpthread-1.dll`（MinGW 运行时）
+- `libopencv_core500.dll` `libopencv_imgproc500.dll` 等（从 thirdparty\opencv\build\bin 拷）
+- `DVPCamera64.dll` `dvpir64.dll`（装了 DVP2 SDK 才有）
 
-### 7.3 目录结构
+## 六、常见问题
 
-```
-LWVision/
-├── LWVision.exe          # 主程序
-├── *.dll                 # 所有依赖DLL
-├── plugins/              # 插件DLL（自动生成）
-├── config/               # 配置文件
-│   └── global.json       # 全局配置
-└── projects/             # 项目文件
-    └── <项目名>/
-        └── project.json  # 项目配置
-```
+**Q1：CMake 报找不到 Qt6**
+未设置 `QT_ROOT_DIR`。确认它指向 `...\6.x.x\mingw_64`（bin 里有 qmake.exe），或直接用 build.bat。
 
----
+**Q2：`undefined reference to cv::xxx`**
+用了 MSVC 版 OpenCV。改用项目自带的 MinGW 版（默认行为），或按第三节重新编译。
 
-## 八、快速开始（5分钟上手）
+**Q3：编译中文乱码/转义警告**
+CMake 已设 UTF-8 编码选项；确保源码文件以 UTF-8（无 BOM 亦可）保存。
 
-1. **安装Qt** → 选MinGW 13.1.0
-2. **安装CMake** → 勾选Add to PATH
-3. **编译OpenCV** → MinGW编译一次（约15分钟）
-4. **打开Qt Creator** → 打开CMakeLists.txt → 构建 → 运行
-5. 完成 ✅
+**Q4：exe 能编译但启动闪退**
+通常是缺 DLL 或 Qt 插件（platforms/qwindows.dll）。用 windeployqt 部署，或先在 Qt Creator 里运行确认。
+
+**Q5：在 exFAT 移动硬盘上开发要注意什么**
+git 功能正常；但建议重要节点 push 到远端仓库（GitHub/Gitee 私有仓库）做异地备份，移动硬盘不做唯一副本。

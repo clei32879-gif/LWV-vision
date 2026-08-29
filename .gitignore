@@ -10,8 +10,15 @@ qrc_*.cpp
 ui_*.h
 
 # ===== 第三方大文件（保留在磁盘，不入库）=====
-thirdparty/opencv/
+/build/
+thirdparty/opencv/*
 thirdparty/dvp2_sdk/
+# 但OpenCV的cmake配置文件必须入库（已改为相对路径，可移植）
+!thirdparty/opencv/build/
+thirdparty/opencv/build/*
+!thirdparty/opencv/build/OpenCVConfig.cmake
+!thirdparty/opencv/build/OpenCVConfig-version.cmake
+!thirdparty/opencv/build/OpenCVModules.cmake
 
 # ===== IDE / 工具 =====
 .qtcreator/

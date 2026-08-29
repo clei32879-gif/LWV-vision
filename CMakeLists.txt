@@ -42,7 +42,15 @@ target_include_directories(nlohmann_json INTERFACE ${CMAKE_SOURCE_DIR}/thirdpart
 add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
 
 # ============================================================
-# DVP2 SDK (Daheng Do3think Camera)
+# OpenCV (随项目携带的MinGW编译版，路径相对于项目根目录，换电脑无需修改)
+# ============================================================
+set(OpenCV_DIR "${CMAKE_SOURCE_DIR}/thirdparty/opencv/build")
+set(OpenCV_INCLUDE_DIRS "${OpenCV_DIR}/include")
+set(OpenCV_LIBRARY_DIRS "${OpenCV_DIR}/lib")
+
+# ============================================================
+# DVP2 SDK (度申相机，可选；未安装时以模拟模式编译)
+# 优先找系统安装目录，其次找项目 thirdparty 目录
 # ============================================================
 set(DVP2_SDK_DIR "C:/Program Files (x86)/DVP2 SDK CN/library/Visual C++")
 set(DVP2_INCLUDE_DIR "${DVP2_SDK_DIR}/include")
@@ -78,13 +86,8 @@ find_package(Qt6 QUIET COMPONENTS
 )
 
 # ============================================================
-# Find OpenCV (optional)
+# Find OpenCV (optional, 路径已在上方设置为项目内 thirdparty)
 # ============================================================
-# 优先使用项目内编译的MinGW版本OpenCV
-set(OpenCV_DIR "D:/guangxuan/thirdparty/opencv/build")
-set(OpenCV_INCLUDE_DIRS "D:/guangxuan/thirdparty/opencv/build/include")
-set(OpenCV_LIBRARY_DIRS "D:/guangxuan/thirdparty/opencv/build/lib")
-
 find_package(OpenCV QUIET COMPONENTS core imgproc)
 
 if(OpenCV_FOUND)
@@ -159,7 +162,7 @@ endif()
 # Build Info
 # ============================================================
 message(STATUS "")
-message(STATUS "========== VisionInspector Build Config ==========")
+message(STATUS "========== LW Vision 立维视觉 Build Config ==========")
 message(STATUS "  Version:        ${PROJECT_VERSION}")
 message(STATUS "  C++ Standard:   ${CMAKE_CXX_STANDARD}")
 message(STATUS "  Qt Version:     ${Qt6_VERSION}")
