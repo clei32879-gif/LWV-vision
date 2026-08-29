@@ -1,92 +1,101 @@
+/**
+ * @file ModbusWrite.cpp
+ * @brief Modbus写数据工具 — 通过自研Modbus TCP主站写PLC
+ *
+ * 典型用途: 检测完成后写OK/NG信号给PLC触发吹气。
+ * 写入值支持 "$(工具名.键)" 引用 (值为字符串属性, 引擎自动解析)。
+ */
 #include "ModbusWrite.h"
 #include "../../../src/engine/ToolRegistry.h"
-#include <QTcpSocket>
+#include "../../../src/hal/ModbusTcpMaster.h"
+#include <QRegularExpression>
 
 namespace VisionInspector {
 
 PropertyDefList ModbusWrite::propertyDefs() const {
     return {
-        PropertyDef::enumProp("dataType", "数据类型", {"保持寄存器", "线圈"}, 0),
-        PropertyDef::intProp("startAddress", "起始地址", 0, 0, 65535),
-        PropertyDef::intProp("slaveId", "从站地址", 1, 1, 247),
-        PropertyDef::stringProp("writeData", "写入数据", "0"),
-        PropertyDef::stringProp("dataKey", "数据链接", ""),
+        PropertyDef::stringProp("host", "PLC地址", "127.0.0.1", "连接"),
+        PropertyDef::intProp("port", "端口", 502, 1, 65535, "连接"),
+        PropertyDef::intProp("slaveId", "从站地址", 1, 1, 247, "连接"),
+        PropertyDef::enumProp("dataType", "写入类型", {"保持寄存器", "线圈"}, 0, "写入"),
+        PropertyDef::intProp("startAddress", "起始地址(0起)", 0, 0, 65535, "写入"),
+        PropertyDef::stringProp("writeValue", "写入值", "1", "写入"),
+        PropertyDef::stringProp("note", "备注", "", "写入"),
     };
 }
 
 bool ModbusWrite::execute(ToolContext& context) {
-    void* ptr = context.getData("tcpSocket").value<void*>();
-    QTcpSocket* socket = static_cast<QTcpSocket*>(ptr);
-    if (!socket || socket->state() != QAbstractSocket::ConnectedState) {
-        setResultData("error", "未连接到Modbus设备");
-        setStatus(ToolStatus::NG);
-        return false;
+    const int dataType = propertyValue("dataType").toInt();
+    const int startAddr = propertyValue("startAddress").toInt();
+    const int slaveId = propertyValue("slaveId").toInt();
+    const QString host = propertyValue("host").toString();
+    const quint16 port = quint16(propertyValue("port").toInt());
+    QString valueStr = propertyValue("writeValue").toString().trimmed();
+
+    // 兜底解析引用 (单工具调试场景引擎已解析过; 这里再兜一次)
+    if (valueStr.contains(QStringLiteral("$("))) {
+        static const QRegularExpression rx(QStringLiteral("\\$\\(([^)]+)\\)"));
+        auto it = rx.globalMatch(valueStr);
+        while (it.hasNext()) {
+            auto m = it.next();
+            const QString ref = m.captured(1);
+            const int dot = ref.lastIndexOf('.');
+            if (dot <= 0) continue;
+            QVariant v = context.getData(ref);
+            if (!v.isValid())
+                v = context.getData(ref.left(dot) + QLatin1Char('.') + ref.mid(dot + 1));
+            if (v.isValid()) valueStr.replace(m.captured(0), v.toString());
+        }
     }
-    
-    int dataType = propertyValue("dataType").toInt();
-    int startAddr = propertyValue("startAddress").toInt();
-    int slaveId = propertyValue("slaveId").toInt();
-    
-    // 获取要写入的数据
-    QVector<quint16> values;
-    QString dataKey = propertyValue("dataKey").toString();
-    if (!dataKey.isEmpty() && context.hasData(dataKey)) {
-        values = context.getData(dataKey).value<QVector<quint16>>();
+
+    QString err;
+    auto* master = ModbusTcpMaster::acquire(host, port, &err);
+    bool ok = false;
+
+    if (dataType == 0) {
+        // 保持寄存器: 支持逗号分隔多值 (单值走FC6, 多值走FC16)
+        const QStringList parts = valueStr.split(",", Qt::SkipEmptyParts);
+        if (parts.isEmpty()) {
+            setResultData("error", "无写入数据");
+            setStatus(ToolStatus::NG);
+            return false;
+        }
+        QVector<quint16> values;
+        for (const QString& p : parts) {
+            bool numOk = false;
+            const int v = p.trimmed().toInt(&numOk);
+            if (!numOk) {
+                setResultData("error", QString("数值无效: %1").arg(p.trimmed()));
+                setStatus(ToolStatus::NG);
+                return false;
+            }
+            values.append(quint16(v));
+        }
+        ok = values.size() == 1
+                 ? master->writeRegister(startAddr, values[0], slaveId, &err)
+                 : master->writeRegisters(startAddr, values, slaveId, &err);
+        if (ok) setResultData("written", values[0]);
+        setResultData("count", ok ? values.size() : 0);
     } else {
-        QString writeData = propertyValue("writeData").toString();
-        QStringList parts = writeData.split(",", Qt::SkipEmptyParts);
-        for (const QString& part : parts) {
-            values.append(part.trimmed().toUShort());
-        }
+        // 线圈: 值为 0/1/off/on
+        const QString low = valueStr.toLower();
+        const bool on = (low == "1" || low == "on" || low == "true");
+        ok = master->writeCoil(startAddr, on, slaveId, &err);
+        if (ok) setResultData("written", on ? 1 : 0);
+        setResultData("count", ok ? 1 : 0);
     }
-    
-    if (values.isEmpty()) {
-        setResultData("error", "无数据可写入");
+
+    if (!ok) {
+        setResultData("error", err);
         setStatus(ToolStatus::NG);
         return false;
     }
-    
-    // 构建Modbus请求
-    QByteArray request;
-    quint8 functionCode = (dataType == 0) ? 0x06 : 0x05; // 保持寄存器或线圈
-    request.append((char)slaveId);
-    request.append((char)functionCode);
-    request.append((char)((startAddr >> 8) & 0xFF));
-    request.append((char)(startAddr & 0xFF));
-    request.append((char)((values[0] >> 8) & 0xFF));
-    request.append((char)(values[0] & 0xFF));
-    
-    // 添加CRC
-    quint16 crc = 0xFFFF;
-    for (int i = 0; i < request.size(); ++i) {
-        crc ^= (quint8)request[i];
-        for (int j = 0; j < 8; ++j) {
-            if (crc & 1) crc = (crc >> 1) ^ 0xA001;
-            else crc >>= 1;
-        }
-    }
-    request.append((char)((crc >> 8) & 0xFF));
-    request.append((char)(crc & 0xFF));
-    
-    // 发送请求
-    socket->write(request);
-    socket->waitForBytesWritten(1000);
-    
-    // 等待响应
-    if (socket->waitForReadyRead(3000)) {
-        QByteArray response = socket->readAll();
-        if (response.size() >= 8) {
-            setResultData("status", "写入成功");
-            setResultData("address", startAddr);
-            setResultData("value", values[0]);
-            setStatus(ToolStatus::OK);
-            return true;
-        }
-    }
-    
-    setResultData("error", "写入超时或响应错误");
-    setStatus(ToolStatus::NG);
-    return false;
+
+    setResultData("status", QString("写入成功: %1 %2 = %3")
+                              .arg(dataType == 0 ? "R" : "C")
+                              .arg(startAddr).arg(valueStr));
+    setStatus(ToolStatus::OK);
+    return true;
 }
 
 } // namespace VisionInspector

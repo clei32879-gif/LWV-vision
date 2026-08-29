@@ -7,7 +7,9 @@
 #include "../ui/DataPanel.h"
 #include "../ui/LogPanel.h"
 #include "../ui/PropertyDialog.h"
+#include "../ui/PlcSimulatorDialog.h"
 #include "../ui/IconHelper.h"
+#include "../hal/ModbusTcpMaster.h"
 #include "AppSettings.h"
 
 #include <QMenuBar>
@@ -162,6 +164,8 @@ void MainWindow::createMenus() {
     setMenu->addAction(QString::fromUtf8("\u7cfb\u7edf\u8bbe\u7f6e"), this, &MainWindow::onSystemSettings);
     setMenu->addAction(QString::fromUtf8("\u9879\u76ee\u8bbe\u7f6e"), this, &MainWindow::onProjectSettings);
     setMenu->addAction(QString::fromUtf8("\u5168\u5c40\u53d8\u91cf"), this, &MainWindow::onGlobalVariables);
+    setMenu->addSeparator();
+    setMenu->addAction(QString::fromUtf8("PLC\u6a21\u62df\u5668..."), this, &MainWindow::onPlcSimulator);
 
     QMenu* camMenu = menuBar()->addMenu(QString::fromUtf8("\u76f8\u673a(&C)"));
     camMenu->addAction(QString::fromUtf8("\u626b\u63cf\u76f8\u673a"), this, &MainWindow::onScanCameras);
@@ -390,6 +394,13 @@ void MainWindow::onGlobalVariables() {
     QMessageBox::information(this, "全局变量", "待实现");
 }
 
+void MainWindow::onPlcSimulator() {
+    auto* dlg = PlcSimulatorDialog::instance(this);
+    dlg->show();
+    dlg->raise();
+    dlg->activateWindow();
+}
+
 void MainWindow::onSwitchUser() {
     QMessageBox::information(this, "切换用户", "待实现");
 }
@@ -520,6 +531,7 @@ void MainWindow::saveSettings() {
 
 void MainWindow::closeEvent(QCloseEvent* event) {
     if (m_camera) m_camera->closeCamera();
+    ModbusTcpMaster::releaseAll();   // 断开所有Modbus连接
     saveSettings();
     event->accept();
 }

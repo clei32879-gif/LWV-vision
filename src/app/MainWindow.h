@@ -56,6 +56,7 @@ private slots:
     void onUISettings();
     void onGlobalVariables();
     void onSwitchUser();
+    void onPlcSimulator();
     void onScanCameras();
     void onOpenCamera();
     void onUseVirtualCamera();

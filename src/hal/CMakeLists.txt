@@ -25,6 +25,12 @@ target_sources(VIHAL PRIVATE
     # Hardware device manager
     HardwareManager.h
     HardwareManager.cpp
+
+    # Modbus TCP 主站与从站模拟器 (自研, 仅依赖Qt Network)
+    ModbusTcpMaster.h
+    ModbusTcpMaster.cpp
+    ModbusTcpSlave.h
+    ModbusTcpSlave.cpp
 )
 
 target_link_libraries(VIHAL PUBLIC

@@ -1,4 +1,4 @@
-/** @file ModbusRead.h - Modbus读数据工具 */
+/** @file ModbusRead.h - Modbus读数据工具 (Modbus TCP) */
 #pragma once
 #include "../../../src/engine/ITool.h"
 namespace VisionInspector {

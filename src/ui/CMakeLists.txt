@@ -35,6 +35,10 @@ target_sources(VIUI PRIVATE
     PropertyDialog.h
     PropertyDialog.cpp
 
+    # PLC模拟器对话框 (Modbus TCP从站)
+    PlcSimulatorDialog.h
+    PlcSimulatorDialog.cpp
+
     # 界面编辑器 (DIY)
     UIEditor.h
     UIEditor.cpp
@@ -57,10 +61,12 @@ target_sources(VIUI PRIVATE
 target_link_libraries(VIUI PUBLIC
     VICore
     VIEngine
+    VIHAL
     ${OpenCV_LIBS}
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
+    Qt6::Network
 )
 
 # OpenGL可选
