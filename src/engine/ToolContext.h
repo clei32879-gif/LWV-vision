@@ -97,6 +97,23 @@ public:
     const DataMap& allData() const { return m_data; }
 
     // --------------------------------------------------------
+    // 工具结果聚合 (按工具名归档, 支持工具间引用)
+    // --------------------------------------------------------
+
+    /** 归档某工具的执行结果 (FlowEngine在工具执行完调用) */
+    void setToolResult(const QString& toolName, const DataMap& result) {
+        m_toolResults[toolName] = result;
+    }
+
+    /** 获取某工具的结果数据 */
+    DataMap toolResult(const QString& toolName) const {
+        return m_toolResults.value(toolName);
+    }
+
+    /** 已产生结果的工具名列表 (供属性引用提示) */
+    QStringList toolNames() const { return m_toolResults.keys(); }
+
+    // --------------------------------------------------------
     // 消息值 (流程控制用, 对应CKVision的消息机制)
     // --------------------------------------------------------
 
@@ -135,13 +152,15 @@ public:
     void clear() {
         m_images.clear();
         m_data.clear();
+        m_toolResults.clear();
         m_message = 0;
         // 不清空硬件接口和全局变量
     }
 
 private:
-    QMap<QString, CvImagePtr> m_images;  // 命名图像
-    DataMap m_data;                      // 通用数据
+    QMap<QString, CvImagePtr> m_images;      // 命名图像
+    DataMap m_data;                          // 通用数据 (含 "工具名.键" 聚合)
+    QMap<QString, DataMap> m_toolResults;    // 各工具的结果归档
     int m_message = 0;                   // 消息值
 
     // 硬件接口 (非拥有, 由外部设置)

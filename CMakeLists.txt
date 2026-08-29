@@ -76,6 +76,7 @@ find_package(Qt6 6.2 REQUIRED COMPONENTS
     Gui
     Widgets
     Network
+    Concurrent
 )
 
 find_package(Qt6 QUIET COMPONENTS

@@ -23,6 +23,7 @@
 #include <QTextStream>
 #include <QStandardPaths>
 #include <QDir>
+#include <QMutex>
 #include <memory>
 
 namespace VisionInspector {
@@ -86,6 +87,7 @@ private:
     QString m_currentLogFile;
     QFile* m_logFile = nullptr;
     QTextStream* m_logStream = nullptr;
+    QMutex m_mutex;  // 工作线程也会写日志, 保护文件流
 };
 
 } // namespace VisionInspector

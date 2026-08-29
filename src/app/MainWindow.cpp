@@ -59,6 +59,24 @@ MainWindow::MainWindow(QWidget* parent)
             if (m_flowEditor) m_flowEditor->updateToolStatus(index, status);
         });
 
+    // 流程执行结果 (从工作线程异步送达UI线程)
+    connect(m_flowEngine, &FlowEngine::flowExecuted, this,
+        [this](Flow*, bool allOk) {
+#ifdef VI_HAS_OPENCV
+            CvImagePtr img = m_flowEngine->lastImage();
+            if (img && !img->empty()) {
+                m_multiView->setImage(0, cvMatToQImage(*img));
+            }
+#endif
+            m_statusLabel->setText(allOk ? "执行完成 (全部OK)" : "执行完成 (有NG)");
+        });
+
+    // 连续运行状态
+    connect(m_flowEngine, &FlowEngine::runStateChanged, this,
+        [this](bool running) {
+            m_statusLabel->setText(running ? "运行中..." : "已停止");
+        });
+
     setWindowTitle("LW Vision v1.0.0 - 立维视觉");
     resize(1400, 900);
     VI_LOG_INFO("MainWindow created");
@@ -337,26 +355,13 @@ void MainWindow::onSaveAsProject() {
 }
 
 void MainWindow::onExecuteOnce() {
-    ToolContext context;
-#ifdef VI_HAS_OPENCV
-    if (m_camera && m_camera->isOpen() && m_camera->isAcquiring()) {
-        CvImage frame = m_camera->grabFrame(1000);
-        if (!frame.empty()) {
-            auto img = std::make_shared<CvImage>(frame.clone());
-            context.setCurrentImage(img);
-            m_logPanel->appendLog("已获取相机图像");
-        }
+    if (m_flowEngine->isExecuting()) {
+        m_statusLabel->setText("正在执行中, 请稍候...");
+        return;
     }
-#endif
-    bool allOk = m_flowEngine->executeOnce(nullptr, context);
-#ifdef VI_HAS_OPENCV
-    auto lastImage = context.currentImage();
-    if (lastImage && !lastImage->empty()) {
-        QImage img = cvMatToQImage(*lastImage);
-        m_multiView->setImage(0, img);
-    }
-#endif
-    m_statusLabel->setText(allOk ? "执行完成 (全部OK)" : "执行完成 (有NG)");
+    m_statusLabel->setText("执行中...");
+    // 异步执行: 算法在工作线程跑, UI不卡
+    m_flowEngine->executeOnceAsync(nullptr);
 }
 
 void MainWindow::onStartRunning() {

@@ -41,6 +41,7 @@ target_link_libraries(VIEngine PUBLIC
     ${OpenCV_LIBS}
     Qt6::Core
     Qt6::Gui
+    Qt6::Concurrent
 )
 
 target_include_directories(VIEngine PUBLIC

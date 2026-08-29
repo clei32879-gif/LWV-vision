@@ -80,7 +80,8 @@ void Logger::log(LogLevel level, const QString& message) {
         case LogLevel::Error: qCritical().noquote() << line; break;
     }
 
-    // 写入文件
+    // 写入文件 (工作线程并发写, 需要互斥)
+    QMutexLocker locker(&m_mutex);
     if (m_autoSave && m_logStream) {
         *m_logStream << line << "\n";
         m_logStream->flush();

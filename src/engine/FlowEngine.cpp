@@ -1,28 +1,94 @@
 /**
  * @file FlowEngine.cpp
- * @brief 流程执行引擎实现
+ * @brief 流程执行引擎实现 (多线程版)
  */
 
 #include "FlowEngine.h"
 #include "../utils/Logger.h"
 #include "../hal/ICameraDriver.h"
-#include <QTimer>
-#include <QCoreApplication>
-#include <QDebug>
+#include <QElapsedTimer>
+#include <QThread>
+#include <QtConcurrent/QtConcurrentRun>
+#include <QRegularExpression>
 
 namespace VisionInspector {
 
 // ============================================================
-// Flow 实现
+// 工具属性引用解析
+//   字符串属性里的 "$(工具名.键)" 在执行时替换为该工具的结果值。
+//   例: "$(找圆_1.radius)" -> 128.35
+// ============================================================
+namespace {
+
+QVariant resolvePropertyRefs(const QVariant& value, const ToolContext& ctx) {
+    if (value.typeId() != QMetaType::QString) return value;
+    const QString src = value.toString();
+    if (!src.contains(QStringLiteral("$("))) return value;
+
+    static const QRegularExpression rx(
+        QStringLiteral("\\$\\(([^)]+)\\)"));
+    QString out = src;
+    auto it = rx.globalMatch(src);
+    bool changed = false;
+    while (it.hasNext()) {
+        auto m = it.next();
+        const QString ref = m.captured(1);       // "工具名.键"
+        const int dot = ref.lastIndexOf('.');
+        if (dot <= 0) continue;
+        const QString toolName = ref.left(dot);
+        const QString key = ref.mid(dot + 1);
+        QVariant v = ctx.getData(toolName + QLatin1Char('.') + key);
+        if (!v.isValid())
+            v = ctx.toolResult(toolName).value(key);
+        if (v.isValid()) {
+            out.replace(m.captured(0), v.toString());
+            changed = true;
+        }
+    }
+    return changed ? QVariant(out) : value;
+}
+
+/**
+ * RAII: 执行前把含引用的属性替换为解析值, 执行后恢复原值。
+ * 这样不破坏用户配置的模板, 也无需每个工具感知引用机制。
+ */
+struct PropertyResolveGuard {
+    ITool* tool;
+    QMap<QString, QVariant> saved;
+
+    PropertyResolveGuard(ITool* t, const ToolContext& ctx) : tool(t) {
+        const auto defs = t->propertyDefs();
+        for (const auto& def : defs) {
+            const QVariant v = t->propertyValue(def.name);
+            if (v.typeId() == QMetaType::QString &&
+                v.toString().contains(QStringLiteral("$("))) {
+                saved[def.name] = v;
+                t->setProperty(def.name, resolvePropertyRefs(v, ctx));
+            }
+        }
+    }
+    ~PropertyResolveGuard() {
+        for (auto it = saved.begin(); it != saved.end(); ++it)
+            tool->setProperty(it.key(), it.value());
+    }
+    Q_DISABLE_COPY_MOVE(PropertyResolveGuard)
+};
+
+} // anonymous namespace
+
+// ============================================================
+// Flow 实现 (线程安全)
 // ============================================================
 
 void Flow::addTool(ITool* tool) {
-    if (tool)
-        m_tools.append(tool);
+    if (!tool) return;
+    QMutexLocker locker(&m_mutex);
+    m_tools.append(tool);
 }
 
 void Flow::insertTool(int index, ITool* tool) {
     if (!tool) return;
+    QMutexLocker locker(&m_mutex);
     if (index < 0 || index >= m_tools.size())
         m_tools.append(tool);
     else
@@ -30,31 +96,47 @@ void Flow::insertTool(int index, ITool* tool) {
 }
 
 void Flow::removeTool(int index) {
+    QMutexLocker locker(&m_mutex);
     if (index >= 0 && index < m_tools.size())
         m_tools.removeAt(index);
 }
 
 void Flow::removeTool(ITool* tool) {
+    QMutexLocker locker(&m_mutex);
     m_tools.removeAll(tool);
 }
 
 void Flow::moveTool(int from, int to) {
+    QMutexLocker locker(&m_mutex);
     if (from < 0 || from >= m_tools.size()) return;
     if (to < 0 || to >= m_tools.size()) return;
     m_tools.move(from, to);
 }
 
 ITool* Flow::toolAt(int index) const {
+    QMutexLocker locker(&m_mutex);
     if (index >= 0 && index < m_tools.size())
         return m_tools[index];
     return nullptr;
 }
 
+int Flow::toolCount() const {
+    QMutexLocker locker(&m_mutex);
+    return m_tools.size();
+}
+
+QList<ITool*> Flow::snapshotTools() const {
+    QMutexLocker locker(&m_mutex);
+    return m_tools;   // QList隐式共享, 迭代副本与后续修改安全隔离
+}
+
 void Flow::clear() {
+    QMutexLocker locker(&m_mutex);
     m_tools.clear();
 }
 
 QJsonObject Flow::toJson() const {
+    QMutexLocker locker(&m_mutex);
     QJsonObject json;
     json["name"] = m_name;
     json["autoExecute"] = m_autoExecute;
@@ -69,12 +151,14 @@ QJsonObject Flow::toJson() const {
 }
 
 void Flow::fromJson(const QJsonObject& json) {
-    m_name = json.value("name").toString();
-    m_autoExecute = json.value("autoExecute").toBool(true);
-    m_delayMs = json.value("delayMs").toInt(0);
-
-    // 工具的加载需要ToolRegistry, 这里只清理, 实际创建由ProjectManager处理
-    clear();
+    {
+        QMutexLocker locker(&m_mutex);
+        m_name = json.value("name").toString();
+        m_autoExecute = json.value("autoExecute").toBool(true);
+        m_delayMs = json.value("delayMs").toInt(0);
+        m_tools.clear();
+    }
+    // 工具的重建需要ToolRegistry, 由ProjectManager负责
 }
 
 // ============================================================
@@ -104,7 +188,12 @@ Flow* FlowEngine::findFlow(const QString& name) const {
     return nullptr;
 }
 
-bool FlowEngine::executeOnce(Flow* flow, ToolContext& context) {
+CvImagePtr FlowEngine::lastImage() const {
+    QMutexLocker locker(&m_lastImageMutex);
+    return m_lastImage;
+}
+
+bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
     if (!flow) {
         // 找第一个自动执行的流程
         for (Flow* f : m_flows) {
@@ -125,7 +214,7 @@ bool FlowEngine::executeOnce(Flow* flow, ToolContext& context) {
     context.setPLCDriver(m_plc);
     context.setServoDriver(m_servo);
     context.setGlobalVariables(m_globalVars);
-    context.setRunIndex(++m_runIndex);
+    context.setRunIndex(m_runIndex.fetch_add(1) + 1);
 
     bool allOk = true;
 
@@ -133,9 +222,18 @@ bool FlowEngine::executeOnce(Flow* flow, ToolContext& context) {
                 .arg(flow->name())
                 .arg(flow->toolCount()));
 
-    // 按顺序执行所有工具
-    for (int i = 0; i < flow->toolCount(); ++i) {
-        ITool* tool = flow->toolAt(i);
+    // 快照工具列表: 执行期间UI线程增删工具不影响本轮
+    const QList<ITool*> tools = flow->snapshotTools();
+
+    for (int i = 0; i < tools.size(); ++i) {
+        ITool* tool = tools[i];
+
+        // 中止检查 (stopRunning后当前工具执行完即退出)
+        if (m_abort) {
+            VI_LOG_WARN("收到中止请求, 提前结束流程");
+            allOk = false;
+            break;
+        }
 
         // 跳过禁用的工具
         if (!tool->isActive()) {
@@ -151,7 +249,7 @@ bool FlowEngine::executeOnce(Flow* flow, ToolContext& context) {
         }
         // 添加前序工具的输出图像
         for (int j = 0; j < i; ++j) {
-            ITool* prevTool = flow->toolAt(j);
+            ITool* prevTool = tools[j];
             if (prevTool && prevTool->isActive()) {
                 availableImages << prevTool->instanceName();
             }
@@ -161,8 +259,13 @@ bool FlowEngine::executeOnce(Flow* flow, ToolContext& context) {
         // 设置执行状态
         emit toolStatusChanged(flow, i, ToolStatus::Running);
 
-        // 执行!
+        // 属性引用解析 (执行前替换 "$(工具名.键)", 执行后恢复)
+        PropertyResolveGuard guard(tool, context);
+
+        // 执行! (计时)
         bool success = false;
+        QElapsedTimer timer;
+        timer.start();
         try {
             success = tool->execute(context);
         } catch (const std::exception& e) {
@@ -175,11 +278,13 @@ bool FlowEngine::executeOnce(Flow* flow, ToolContext& context) {
                         .arg(tool->instanceName()));
             success = false;
         }
+        const qint64 elapsedMs = timer.elapsed();
 
         // 更新状态
         ToolStatus status = success ? ToolStatus::OK : ToolStatus::NG;
         tool->setStatus(status);
         emit toolStatusChanged(flow, i, status);
+        emit toolExecuted(flow, i, status, elapsedMs);
 
         // 保存工具的输出图像到命名槽中，供后续工具引用
         CvImagePtr outputImg = context.currentImage();
@@ -187,10 +292,23 @@ bool FlowEngine::executeOnce(Flow* flow, ToolContext& context) {
             context.setImage(tool->instanceName(), outputImg);
         }
 
+        // 结果聚合: 写入 "工具名.键" 全局命名空间 + 按工具归档
+        const DataMap result = tool->resultData();
+        context.setToolResult(tool->instanceName(), result);
+        for (auto it = result.begin(); it != result.end(); ++it) {
+            context.setData(tool->instanceName() + QLatin1Char('.') + it.key(), it.value());
+        }
+
         if (!success) {
             allOk = false;
-            // 可以选择继续执行或停止, 这里选择继续(类似CKVision默认行为)
+            // 与CKVision默认一致: NG不中断, 继续执行后续工具
         }
+    }
+
+    // 记录末帧图
+    {
+        QMutexLocker locker(&m_lastImageMutex);
+        m_lastImage = context.currentImage();
     }
 
     emit flowExecuted(flow, allOk);
@@ -202,42 +320,69 @@ bool FlowEngine::executeOnce(Flow* flow, ToolContext& context) {
     return allOk;
 }
 
+void FlowEngine::executeOnceAsync(Flow* flow) {
+    bool expected = false;
+    if (!m_executing.compare_exchange_strong(expected, true)) {
+        VI_LOG_WARN("流程正在执行中, 忽略本次执行请求");
+        return;
+    }
+    (void)QtConcurrent::run([this, flow]() {
+        ToolContext context;
+        doExecute(flow, context);
+        m_executing = false;
+    });
+}
+
+bool FlowEngine::executeOnce(Flow* flow, ToolContext& context) {
+    bool expected = false;
+    if (!m_executing.compare_exchange_strong(expected, true)) {
+        VI_LOG_WARN("流程正在执行中, 忽略同步执行请求");
+        return false;
+    }
+    bool ok = doExecute(flow, context);
+    m_executing = false;
+    return ok;
+}
+
 void FlowEngine::startRunning(Flow* flow) {
-    if (m_running) {
+    bool expected = false;
+    if (!m_running.compare_exchange_strong(expected, true)) {
         VI_LOG_WARN("已在运行中, 忽略启动请求");
         return;
     }
+    m_abort = false;
+    emit runStateChanged(true);
+    VI_LOG_INFO("开始连续运行: " + (flow ? flow->name() : QString("默认流程")));
 
-    m_running = true;
-    VI_LOG_INFO("开始循环运行: " + (flow ? flow->name() : QString("默认")));
+    (void)QtConcurrent::run([this, flow]() { runLoop(flow); });
+}
 
-    // 使用定时器循环执行
-    // 实际实现中应该使用独立线程, 这里先用简单方式
-    QTimer* timer = new QTimer(this);
-    timer->setSingleShot(false);
-
-    int delay = flow ? flow->delayMs() : 0;
-    if (delay <= 0) delay = 10; // 最小10ms
-    timer->setInterval(delay);
-
-    Flow* targetFlow = flow;
-    connect(timer, &QTimer::timeout, this, [this, targetFlow, timer]() {
-        if (!m_running) {
-            timer->stop();
-            timer->deleteLater();
-            return;
-        }
+void FlowEngine::runLoop(Flow* flow) {
+    while (m_running && !m_abort) {
+        m_executing = true;
         ToolContext context;
-        executeOnce(targetFlow, context);
-    });
+        doExecute(flow, context);
+        m_executing = false;
 
-    timer->start();
+        if (m_abort || !m_running) break;
+
+        // 轮次间隔 (期间可快速响应停止)
+        int delay = flow ? flow->delayMs() : 0;
+        if (delay <= 0) delay = 10;
+        for (int slept = 0; m_running && !m_abort && slept < delay; slept += 20)
+            QThread::msleep(20);
+    }
+    m_running = false;
+    m_abort = false;
+    emit runStateChanged(false);
+    VI_LOG_INFO("连续运行已停止");
 }
 
 void FlowEngine::stopRunning() {
     if (!m_running) return;
+    m_abort = true;
     m_running = false;
-    VI_LOG_INFO("停止循环运行");
+    VI_LOG_INFO("请求停止连续运行");
 }
 
 } // namespace VisionInspector
