@@ -39,9 +39,13 @@ MainWindow::MainWindow(QWidget* parent)
     m_flowEngine = new FlowEngine(this);
     m_stats = new GlobalStats(this);
     m_hardware = new HardwareManager(this);
-    m_camera = new DeshengCamera(this);
 
-    connect(m_camera, &DeshengCamera::imageReceived, this, &MainWindow::onCameraImageReceived);
+    // 相机驱动: 装了度申SDK用真相机, 否则用虚拟相机(回放/合成图案)
+#ifdef VI_HAS_DVP2
+    setCameraDriver(new DeshengCamera(this));
+#else
+    setCameraDriver(new VirtualCamera(this));
+#endif
 
     qDebug() << "MainWindow: About to call setupUI...";
     setupUI();
@@ -144,6 +148,7 @@ void MainWindow::createMenus() {
     QMenu* camMenu = menuBar()->addMenu(QString::fromUtf8("\u76f8\u673a(&C)"));
     camMenu->addAction(QString::fromUtf8("\u626b\u63cf\u76f8\u673a"), this, &MainWindow::onScanCameras);
     camMenu->addAction(QString::fromUtf8("\u6253\u5f00/\u5173\u95ed\u76f8\u673a"), this, &MainWindow::onOpenCamera);
+    camMenu->addAction(QString::fromUtf8("\u4f7f\u7528\u865a\u62df\u76f8\u673a"), this, &MainWindow::onUseVirtualCamera);
 
     QMenu* opMenu = menuBar()->addMenu(QString::fromUtf8("\u64cd\u4f5c(&O)"));
     opMenu->addAction(QString::fromUtf8("\u6267\u884c\u7a0b\u5e8f"), this, &MainWindow::onExecuteOnce);
@@ -449,18 +454,44 @@ void MainWindow::onOpenCamera() {
     }
 }
 
-void MainWindow::onCameraImageReceived() {
-    if (!m_camera || !m_multiView) return;
-    CvImage frame = m_camera->grabFrame(100);
+void MainWindow::setCameraDriver(ICameraDriver* cam)
+{
+    if (m_camera && m_camera->isOpen()) m_camera->closeCamera();
+    m_camera = cam;
+    if (m_camera) {
+        connect(m_camera, &ICameraDriver::imageReceived,
+                this, &MainWindow::onCameraImageReceived);
+        connect(m_camera, &ICameraDriver::errorOccurred, this,
+                [this](const QString& err) {
+                    m_logPanel->appendLog(err);
+                });
+    }
+}
+
+void MainWindow::onUseVirtualCamera()
+{
+    if (qobject_cast<VirtualCamera*>(m_camera)) {
+        m_statusLabel->setText("当前已是虚拟相机");
+        return;
+    }
+    setCameraDriver(new VirtualCamera(this));
+    m_cameraLabel->setText("相机: 虚拟相机");
+    m_connectionLabel->setText("未连接");
+    m_statusLabel->setText("已切换到虚拟相机(回放/合成图案)");
+    m_logPanel->appendLog("已切换到虚拟相机。将测试图片放到 testdata/virtual_camera/ 目录可获得回放画面");
+}
+
+void MainWindow::onCameraImageReceived(const CvImage& image) {
+    if (!m_multiView) return;
 #ifdef VI_HAS_OPENCV
-    if (!frame.empty()) {
-        QImage img = cvMatToQImage(frame);
+    if (!image.empty()) {
+        QImage img = cvMatToQImage(image);
         m_multiView->setImage(0, img);
         m_multiView->setStatus(0, "OK");
     }
 #else
-    if (!frame.isNull()) {
-        m_multiView->setImage(0, frame);
+    if (!image.isNull()) {
+        m_multiView->setImage(0, image);
         m_multiView->setStatus(0, "OK");
     }
 #endif

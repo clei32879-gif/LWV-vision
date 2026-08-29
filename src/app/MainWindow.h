@@ -11,7 +11,9 @@
 #include "../engine/FlowEngine.h"
 #include "../engine/InspectionResult.h"
 #include "../hal/HardwareManager.h"
+#include "../hal/ICameraDriver.h"
 #include "../hal/DeshengCamera.h"
+#include "../hal/VirtualCamera.h"
 #include "../ui/widgets/MultiViewWidget.h"
 #include <QMainWindow>
 #include <QSplitter>
@@ -56,7 +58,8 @@ private slots:
     void onSwitchUser();
     void onScanCameras();
     void onOpenCamera();
-    void onCameraImageReceived();
+    void onUseVirtualCamera();
+    void onCameraImageReceived(const CvImage& image);
     void onToolAdded(const QString& typeName);
     void toggleFullscreen();
     void onZoomIn();
@@ -80,7 +83,9 @@ private:
     FlowEngine* m_flowEngine = nullptr;
     GlobalStats* m_stats = nullptr;
     HardwareManager* m_hardware = nullptr;
-    DeshengCamera* m_camera = nullptr;
+    ICameraDriver* m_camera = nullptr;      // 当前相机驱动(度申/虚拟相机等)
+
+    void setCameraDriver(ICameraDriver* cam); // 切换驱动并重连信号
 
     // UI components
     DisplayArea* m_displayArea = nullptr;

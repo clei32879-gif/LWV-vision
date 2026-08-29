@@ -9,6 +9,10 @@ target_sources(VIHAL PRIVATE
     DeshengCamera.h
     DeshengCamera.cpp
 
+    # Virtual camera driver (无硬件开发/演示)
+    VirtualCamera.h
+    VirtualCamera.cpp
+
     # PLC driver interface
     IPLCDriver.h
 
