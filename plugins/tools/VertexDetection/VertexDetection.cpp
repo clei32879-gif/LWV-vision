@@ -15,6 +15,7 @@ PropertyDefList VertexDetection::propertyDefs() const {
         PropertyDef::doubleProp("roiCenterY", "ROI中心Y", 70, 0, 10000),
         PropertyDef::doubleProp("roiWidth", "ROI宽度", 100, 1, 10000),
         PropertyDef::doubleProp("roiHeight", "ROI高度", 100, 1, 10000),
+        PropertyDef::boolProp("useCorrection", "跟随位置补正", false, "ROI"),
         PropertyDef::enumProp("edgePolarity", "边缘极性", {"任意", "亮到暗", "暗到亮"}, 0),
         PropertyDef::enumProp("detectPosition", "检测位置", {"起始", "最近", "最远", "最强"}, 0),
         PropertyDef::intProp("gradientThreshold", "梯度阈值", 40, 1, 255),
@@ -37,6 +38,10 @@ bool VertexDetection::execute(ToolContext& context) {
     m_roi.centerY = propertyValue("roiCenterY").toDouble();
     m_roi.width = propertyValue("roiWidth").toDouble();
     m_roi.height = propertyValue("roiHeight").toDouble();
+    {
+        double ang = 0;   // VertexDetection 无角度
+        applyCorrection(context, m_roi.centerX, m_roi.centerY, ang);   // 位置补正跟随
+    }
     int polarity = propertyValue("edgePolarity").toInt();
     int threshold = propertyValue("gradientThreshold").toInt();
     int scanWidth = propertyValue("scanWidth").toInt();

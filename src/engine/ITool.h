@@ -229,6 +229,17 @@ protected:
     CvImagePtr getInputImage(const ToolContext& context) const;
     void setOutputImage(ToolContext& context, const CvImagePtr& img);
 
+    /**
+     * 位置补正跟随 (P0-1 数据流打通):
+     * 当本工具开启 useCorrection 属性 且 上下文存在补正矩阵
+     * (coord_cos/sin/originX/originY, 由 位置补正/坐标系统 工具写入) 时,
+     * 把"模板/基准坐标系"下定义的点 (x,y) 与角度 angleDeg(度) 变换到当前图像坐标系。
+     * 返回 true 表示已应用补正; false 表示未开启或无补正数据。
+     * 工具调用方式: 在读取 ROI 属性后, 若返回 true 用变换后的值继续执行。
+     */
+    bool applyCorrection(const ToolContext& context,
+                         double& x, double& y, double& angleDeg) const;
+
 protected:
     QVariantMap m_properties;
 

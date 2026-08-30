@@ -28,6 +28,7 @@ PropertyDefList CircleDetection::propertyDefs() const {
         PropertyDef::doubleProp("roiThickness", "卡尺长度(搜索带宽)", 24, 1, 500, "ROI"),
         PropertyDef::doubleProp("roiStartAngle", "起始角度", 0, -360, 360, "ROI"),
         PropertyDef::doubleProp("roiSweepAngle", "扫描角度", 360, 1, 360, "ROI"),
+        PropertyDef::boolProp("useCorrection", "跟随位置补正", false, "ROI"),
         PropertyDef::enumProp("edgePolarity", "边缘极性", {"任意", "亮到暗", "暗到亮"}, 0, "检测"),
         PropertyDef::intProp("gradientThreshold", "梯度阈值", 30, 1, 255, "检测"),
         PropertyDef::intProp("filterHalfWidth", "梯度平滑半宽", 2, 1, 20, "检测"),
@@ -54,6 +55,7 @@ bool CircleDetection::execute(ToolContext& context) {
     m_roi.thickness = propertyValue("roiThickness").toDouble();
     m_roi.startAngle = propertyValue("roiStartAngle").toDouble();
     m_roi.sweepAngle = propertyValue("roiSweepAngle").toDouble();
+    applyCorrection(context, m_roi.centerX, m_roi.centerY, m_roi.startAngle);   // 位置补正跟随
 
     ScanOptions opt;
     opt.polarity = propertyValue("edgePolarity").toInt();

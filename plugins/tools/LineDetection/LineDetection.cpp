@@ -27,6 +27,7 @@ PropertyDefList LineDetection::propertyDefs() const {
         PropertyDef::doubleProp("roiWidth", "ROI宽度(长边)", 200, 1, 10000, "ROI"),
         PropertyDef::doubleProp("roiHeight", "ROI高度(扫描向)", 40, 1, 10000, "ROI"),
         PropertyDef::doubleProp("roiAngle", "ROI角度", 0, -180, 180, "ROI"),
+        PropertyDef::boolProp("useCorrection", "跟随位置补正", false, "ROI"),
         PropertyDef::enumProp("edgePolarity", "边缘极性", {"任意", "亮到暗", "暗到亮"}, 0, "检测"),
         PropertyDef::enumProp("edgePosition", "边缘位置", {"最强", "首个", "末个"}, 0, "检测"),
         PropertyDef::intProp("gradientThreshold", "梯度阈值", 30, 1, 255, "检测"),
@@ -48,11 +49,12 @@ bool LineDetection::execute(ToolContext& context) {
     if (input->channels() > 1) cv::cvtColor(*input, src, cv::COLOR_BGR2GRAY);
     else src = *input;
 
-    const double cx = propertyValue("roiCenterX").toDouble();
-    const double cy = propertyValue("roiCenterY").toDouble();
+    double cx = propertyValue("roiCenterX").toDouble();
+    double cy = propertyValue("roiCenterY").toDouble();
     const double roiW = propertyValue("roiWidth").toDouble();
     const double roiH = propertyValue("roiHeight").toDouble();
-    const double roiAng = propertyValue("roiAngle").toDouble();
+    double roiAng = propertyValue("roiAngle").toDouble();
+    applyCorrection(context, cx, cy, roiAng);   // 位置补正跟随
 
     ScanOptions opt;
     opt.polarity = propertyValue("edgePolarity").toInt();

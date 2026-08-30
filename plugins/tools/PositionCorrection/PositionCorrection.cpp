@@ -47,6 +47,7 @@ bool PositionCorrection::execute(ToolContext& context) {
     
     // 存储坐标变换矩阵（供ROI跟随移动使用）
     double rad = correctedAngle * M_PI / 180.0;
+    context.setData("coord_angle", correctedAngle);   // 角度跟随 (与CoordSystem一致)
     context.setData("coord_cos", std::cos(rad));
     context.setData("coord_sin", std::sin(rad));
     context.setData("coord_originX", correctedX);

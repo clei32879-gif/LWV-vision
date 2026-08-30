@@ -141,6 +141,75 @@ int main(int argc, char* argv[]) {
         delete lineTool;
     }
 
+    // ---- 4. 位置补正数据流 (P0-1): ROI自动跟随平移+旋转 ----
+    // 补正矩阵: origin=(60,40), 角度=10°  → 参考点(300,220)映射到图像坐标
+    {
+        const double cosA = std::cos(10.0 * CV_PI / 180.0);
+        const double sinA = std::sin(10.0 * CV_PI / 180.0);
+        // x_img = 60 + 300*cosA - 220*sinA, y_img = 40 + 300*sinA + 220*cosA
+        const double expX = 60 + 300 * cosA - 220 * sinA;   // ≈317.24
+        const double expY = 40 + 300 * sinA + 220 * cosA;   // ≈308.75
+        const double imgAngle = 30.0;   // 参考ROI角20° + 补正角10°
+
+        // 图像: 在补正后的位置/角度画一条亮线
+        cv::Mat img(480, 640, CV_8UC1, cv::Scalar(45));
+        cv::Point2d c(expX, expY);
+        const double rad = imgAngle * CV_PI / 180.0;
+        cv::Point2d dir(std::cos(rad), std::sin(rad));
+        cv::line(img, c + dir * 220.0, c - dir * 220.0, cv::Scalar(230), 3, cv::LINE_AA);
+
+        // 上下文注入补正矩阵 (模拟 位置补正/坐标系统 工具的输出)
+        ToolContext ctx;
+        ctx.setCurrentImage(std::make_shared<CvImage>(img));
+        ctx.setData("coord_cos", cosA);
+        ctx.setData("coord_sin", sinA);
+        ctx.setData("coord_originX", 60.0);
+        ctx.setData("coord_originY", 40.0);
+        ctx.setData("coord_angle", 10.0);
+
+        // 开启跟随: ROI 按"参考坐标"(300,220,20°)定义, 应被变换到(317,309,30°)
+        ITool* posTool = reg.createTool("LineDetection");
+        posTool->setInstanceName("补正跟随");
+        posTool->setProperty("useCorrection", true);
+        posTool->setProperty("roiCenterX", 300.0);
+        posTool->setProperty("roiCenterY", 220.0);
+        posTool->setProperty("roiWidth", 260.0);
+        posTool->setProperty("roiHeight", 40.0);
+        posTool->setProperty("roiAngle", 20.0);
+        posTool->setProperty("scanCount", 20);
+        posTool->setProperty("gradientThreshold", 30);
+        const bool posFound = posTool->execute(ctx);
+        CHECK(posFound, "补正跟随: 执行成功");
+        if (posFound) {
+            const double cxr = posTool->resultData().value("centerX").toDouble();
+            const double cyr = posTool->resultData().value("centerY").toDouble();
+            const double angR = posTool->resultData().value("angle").toDouble();
+            CHECK(std::hypot(cxr - expX, cyr - expY) <= 4.0,
+                  QString("补正跟随: 线中心(%.1f,%.1f) 期望(%.1f,%.1f)")
+                      .arg(cxr).arg(cyr).arg(expX).arg(expY).toLocal8Bit().constData());
+            double d = std::fabs(angR - imgAngle);
+            d = std::min(d, 180.0 - d);
+            CHECK(d < 0.8, QString("补正跟随: 角度%1° 期望%2°").arg(angR).arg(imgAngle)
+                               .toLocal8Bit().constData());
+        }
+        delete posTool;
+
+        // 反向对照: 不开启跟随, ROI停留在参考坐标(300,220,20°) → 应找不到补正后的线
+        ITool* noTool = reg.createTool("LineDetection");
+        noTool->setInstanceName("不跟随");
+        noTool->setProperty("useCorrection", false);
+        noTool->setProperty("roiCenterX", 300.0);
+        noTool->setProperty("roiCenterY", 220.0);
+        noTool->setProperty("roiWidth", 120.0);   // 窄ROI, 补正后线(317,309)落在其外
+        noTool->setProperty("roiHeight", 24.0);
+        noTool->setProperty("roiAngle", 20.0);
+        noTool->setProperty("scanCount", 12);
+        noTool->setProperty("gradientThreshold", 30);
+        const bool noFound = noTool->execute(ctx);
+        CHECK(!noFound, "不跟随: 参考坐标ROI应找不到补正后的线(反向对照)");
+        delete noTool;
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);

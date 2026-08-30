@@ -1,4 +1,4 @@
-﻿#include "BrightnessCheck.h"
+#include "BrightnessCheck.h"
 #include "../../../src/engine/ToolRegistry.h"
 #ifdef VI_HAS_OPENCV
 #include <opencv2/imgproc.hpp>
@@ -14,6 +14,7 @@ PropertyDefList BrightnessCheck::propertyDefs() const {
         PropertyDef::doubleProp("roiCenterY", "ROI中心Y", 70, 0, 10000),
         PropertyDef::doubleProp("roiWidth", "ROI宽度", 100, 1, 10000),
         PropertyDef::doubleProp("roiHeight", "ROI高度", 100, 1, 10000),
+        PropertyDef::boolProp("useCorrection", "跟随位置补正", false, "ROI"),
         PropertyDef::intProp("lowThreshold", "下限阈值", 0, 0, 255),
         PropertyDef::intProp("highThreshold", "上限阈值", 255, 0, 255),
     };

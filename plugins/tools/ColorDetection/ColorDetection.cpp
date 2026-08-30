@@ -14,6 +14,7 @@ PropertyDefList ColorDetection::propertyDefs() const {
         PropertyDef::doubleProp("roiCenterY", "ROI中心Y", 70, 0, 10000),
         PropertyDef::doubleProp("roiWidth", "ROI宽度", 100, 1, 10000),
         PropertyDef::doubleProp("roiHeight", "ROI高度", 100, 1, 10000),
+        PropertyDef::boolProp("useCorrection", "跟随位置补正", false, "ROI"),
         PropertyDef::enumProp("colorSpace", "颜色空间", {"RGB", "HSV", "LAB"}, 1),
         PropertyDef::intProp("hueMin", "色相最小值", 0, 0, 180),
         PropertyDef::intProp("hueMax", "色相最大值", 180, 0, 180),
@@ -39,6 +40,10 @@ bool ColorDetection::execute(ToolContext& context) {
     m_roi.centerY = propertyValue("roiCenterY").toDouble();
     m_roi.width = propertyValue("roiWidth").toDouble();
     m_roi.height = propertyValue("roiHeight").toDouble();
+    {
+        double ang = 0;   // ColorDetection 无角度
+        applyCorrection(context, m_roi.centerX, m_roi.centerY, ang);   // 位置补正跟随
+    }
     int colorSpace = propertyValue("colorSpace").toInt();
     int hueMin = propertyValue("hueMin").toInt();
     int hueMax = propertyValue("hueMax").toInt();

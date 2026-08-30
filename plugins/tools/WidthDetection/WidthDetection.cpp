@@ -15,6 +15,7 @@ PropertyDefList WidthDetection::propertyDefs() const {
         PropertyDef::doubleProp("roiCenterY", "ROI中心Y", 70, 0, 10000),
         PropertyDef::doubleProp("roiWidth", "ROI宽度", 100, 1, 10000),
         PropertyDef::doubleProp("roiHeight", "ROI高度", 100, 1, 10000),
+        PropertyDef::boolProp("useCorrection", "跟随位置补正", false, "ROI"),
         PropertyDef::intProp("threshold", "阈值", 128, 0, 255),
         PropertyDef::enumProp("measureMode", "测量模式", {"水平宽度", "垂直宽度"}, 0),
         PropertyDef::intProp("scanLine", "扫描行号", 0, 0, 10000),
@@ -35,6 +36,10 @@ bool WidthDetection::execute(ToolContext& context) {
     m_roi.centerY = propertyValue("roiCenterY").toDouble();
     m_roi.width = propertyValue("roiWidth").toDouble();
     m_roi.height = propertyValue("roiHeight").toDouble();
+    {
+        double ang = 0;   // WidthDetection 无角度
+        applyCorrection(context, m_roi.centerX, m_roi.centerY, ang);   // 位置补正跟随
+    }
     int thresh = propertyValue("threshold").toInt();
     int mode = propertyValue("measureMode").toInt();
     QRectF roiRect = m_roi.boundingRect();

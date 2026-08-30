@@ -1,4 +1,4 @@
-﻿#include "EdgeDetection.h"
+#include "EdgeDetection.h"
 #include "../../../src/engine/ToolRegistry.h"
 #ifdef VI_HAS_OPENCV
 #include <opencv2/imgproc.hpp>
@@ -16,6 +16,7 @@ PropertyDefList EdgeDetection::propertyDefs() const {
         PropertyDef::doubleProp("roiWidth", "ROI宽度", 100, 1, 10000),
         PropertyDef::doubleProp("roiHeight", "ROI高度", 100, 1, 10000),
         PropertyDef::doubleProp("roiAngle", "ROI角度", 0, -180, 180),
+        PropertyDef::boolProp("useCorrection", "跟随位置补正", false, "定位"),
         // 检测参数
         PropertyDef::enumProp("edgePolarity", "边缘极性", {"任意", "亮到暗", "暗到亮"}, 0),
         PropertyDef::enumProp("edgePosition", "边缘位置", {"起始位置", "最近", "最远", "最强", "全部"}, 0),
@@ -40,6 +41,7 @@ bool EdgeDetection::execute(ToolContext& context) {
     m_roi.width = propertyValue("roiWidth").toDouble();
     m_roi.height = propertyValue("roiHeight").toDouble();
     m_roi.angle = propertyValue("roiAngle").toDouble();
+    applyCorrection(context, m_roi.centerX, m_roi.centerY, m_roi.angle);   // 位置补正跟随
 
     int polarity = propertyValue("edgePolarity").toInt();
     int position = propertyValue("edgePosition").toInt();

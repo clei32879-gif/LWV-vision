@@ -14,6 +14,7 @@ PropertyDefList MultiContourMatch::propertyDefs() const {
         PropertyDef::doubleProp("roiCenterY", "ROI中心Y", 70, 0, 10000),
         PropertyDef::doubleProp("roiWidth", "ROI宽度", 100, 1, 10000),
         PropertyDef::doubleProp("roiHeight", "ROI高度", 100, 1, 10000),
+        PropertyDef::boolProp("useCorrection", "跟随位置补正", false, "ROI"),
         PropertyDef::doubleProp("minArea", "最小面积", 100, 1, 100000),
         PropertyDef::doubleProp("maxArea", "最大面积", 50000, 1, 1000000),
         PropertyDef::intProp("minCount", "最少数量", 1, 1, 100),
@@ -35,6 +36,10 @@ bool MultiContourMatch::execute(ToolContext& context) {
     m_roi.centerY = propertyValue("roiCenterY").toDouble();
     m_roi.width = propertyValue("roiWidth").toDouble();
     m_roi.height = propertyValue("roiHeight").toDouble();
+    {
+        double ang = 0;   // MultiContourMatch 无角度
+        applyCorrection(context, m_roi.centerX, m_roi.centerY, ang);   // 位置补正跟随
+    }
     double minArea = propertyValue("minArea").toDouble();
     double maxArea = propertyValue("maxArea").toDouble();
     int minCount = propertyValue("minCount").toInt();

@@ -2,6 +2,7 @@
 #include "ToolRegistry.h"
 #include <QJsonArray>
 #include <QDebug>
+#include <cmath>
 
 namespace VisionInspector {
 
@@ -101,6 +102,40 @@ CvImagePtr ITool::getInputImage(const ToolContext& context) const {
 
 void ITool::setOutputImage(ToolContext& context, const CvImagePtr& img) {
     context.setCurrentImage(img);
+}
+
+bool ITool::applyCorrection(const ToolContext& context,
+                            double& x, double& y, double& angleDeg) const {
+    // 未开启跟随则原样返回
+    if (!propertyValue("useCorrection").toBool()) return false;
+
+    // 上下文不存在补正数据 (位置补正/坐标系统未执行, 或已被结束补正清除)
+    if (!context.hasData("coord_cos") || !context.hasData("coord_sin") ||
+        !context.hasData("coord_originX") || !context.hasData("coord_originY"))
+        return false;
+
+    // 补正矩阵: 把模板/基准坐标映射到图像坐标
+    //   x_img = originX + x*cos - y*sin
+    //   y_img = originY + x*sin + y*cos
+    const double c = context.getDouble("coord_cos", 1.0);
+    const double s = context.getDouble("coord_sin", 0.0);
+    const double ox = context.getDouble("coord_originX", 0.0);
+    const double oy = context.getDouble("coord_originY", 0.0);
+
+    // 单位矩阵 (无实际偏移/旋转) 时无需处理
+    if (std::fabs(c - 1.0) < 1e-9 && std::fabs(s) < 1e-9 &&
+        std::fabs(ox) < 1e-9 && std::fabs(oy) < 1e-9)
+        return false;
+
+    const double nx = ox + x * c - y * s;
+    const double ny = oy + x * s + y * c;
+    x = nx;
+    y = ny;
+
+    // 角度跟随: 基准角度 + 补正角度
+    const double corrAngle = context.getDouble("coord_angle", 0.0);
+    angleDeg += corrAngle;
+    return true;
 }
 
 } // namespace VisionInspector

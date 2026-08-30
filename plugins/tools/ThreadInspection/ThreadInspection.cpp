@@ -70,6 +70,7 @@ PropertyDefList ThreadInspection::propertyDefs() const {
     return {
         PropertyDef::doubleProp("roiCenterX", "工件中心X(-1=图像中心)", -1, -1, 10000, "定位"),
         PropertyDef::doubleProp("roiCenterY", "工件中心Y(-1=图像中心)", -1, -1, 10000, "定位"),
+        PropertyDef::boolProp("useCorrection", "跟随位置补正", false, "定位"),
         PropertyDef::doubleProp("partRadius", "工件外径半径", 110, 1, 5000, "定位"),
         PropertyDef::enumProp("threadPolarity", "牙型极性", {"暗牙(亮底)", "亮牙(暗底)"}, 0, "检测"),
         PropertyDef::doubleProp("threadInnerRatio", "螺纹环内径占比", 0.72, 0.1, 0.98, "检测"),
@@ -100,6 +101,10 @@ bool ThreadInspection::execute(ToolContext& context) {
     double cy = propertyValue("roiCenterY").toDouble();
     if (cx < 0) cx = src.cols / 2.0;
     if (cy < 0) cy = src.rows / 2.0;
+    {
+        double ang = 0;   // 螺纹检测无角度
+        applyCorrection(context, cx, cy, ang);   // 位置补正跟随
+    }
     const double partR = propertyValue("partRadius").toDouble();
     m_center = cv::Point2d(cx, cy);
     m_outerR = partR;

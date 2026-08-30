@@ -1,4 +1,4 @@
-﻿#include "BlobAnalysis.h"
+#include "BlobAnalysis.h"
 #include "../../../src/engine/ToolRegistry.h"
 #ifdef VI_HAS_OPENCV
 #include <opencv2/imgproc.hpp>
@@ -14,6 +14,7 @@ PropertyDefList BlobAnalysis::propertyDefs() const {
         PropertyDef::doubleProp("roiCenterY", "ROI中心Y", 70, 0, 10000),
         PropertyDef::doubleProp("roiWidth", "ROI宽度", 100, 1, 10000),
         PropertyDef::doubleProp("roiHeight", "ROI高度", 100, 1, 10000),
+        PropertyDef::boolProp("useCorrection", "跟随位置补正", false, "ROI"),
         PropertyDef::intProp("threshold", "阈值", 127, 0, 255),
         PropertyDef::boolProp("autoThreshold", "自动计算阈值", true),
         PropertyDef::enumProp("detectionType", "检测类型", {"黑色", "白色"}, 0),
@@ -35,6 +36,10 @@ bool BlobAnalysis::execute(ToolContext& context) {
     m_roi.centerY = propertyValue("roiCenterY").toDouble();
     m_roi.width = propertyValue("roiWidth").toDouble();
     m_roi.height = propertyValue("roiHeight").toDouble();
+    {
+        double ang = 0;   // Blob 无角度
+        applyCorrection(context, m_roi.centerX, m_roi.centerY, ang);   // 位置补正跟随
+    }
     int thresh = propertyValue("threshold").toInt();
     bool autoThresh = propertyValue("autoThreshold").toBool();
     int detType = propertyValue("detectionType").toInt();
