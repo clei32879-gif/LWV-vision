@@ -239,6 +239,35 @@ void MainWindow::createViewMenu() {
     viewMenu->addAction(m_logDock->toggleViewAction());
     viewMenu->addSeparator();
     viewMenu->addAction(QString::fromUtf8("\u5168\u5c4f\u663e\u793a"), this, &MainWindow::toggleFullscreen);
+
+    // 帮助菜单 (放在最后)
+    QMenu* helpMenu = menuBar()->addMenu(QString::fromUtf8("\u5e2e\u52a9(&H)"));
+    helpMenu->addAction(QString::fromUtf8("\u5173\u4e8e(&A)..."), this, &MainWindow::onAbout);
+}
+
+void MainWindow::onAbout() {
+    QString cvVer = QStringLiteral("未启用");
+#ifdef VI_HAS_OPENCV
+    cvVer = QString::fromLatin1(CV_VERSION);
+#endif
+    const QString html = QStringLiteral(
+        "<h3 style='margin-bottom:2px;'>LW Vision 立维视觉</h3>"
+        "<p style='margin-top:2px;'>通用工业机器视觉检测平台<br/>"
+        "传统视觉算法 + AI 深度学习相结合</p>"
+        "<hr/>"
+        "<p>"
+        "版本号：v%1<br/>"
+        "开发语言：C++17<br/>"
+        "界面框架：Qt %2（MinGW）<br/>"
+        "视觉算法库：OpenCV %3<br/>"
+        "AI 推理引擎：ONNX Runtime 1.18.1（CPU）"
+        "</p>"
+        "<p style='color:#888;'>立维视觉 · 学习研究用途</p>")
+        .arg(versionString())
+        .arg(QStringLiteral(QT_VERSION_STR))
+        .arg(cvVer);
+
+    QMessageBox::about(this, QStringLiteral("关于 LW Vision"), html);
 }
 
 void MainWindow::createToolBar() {
