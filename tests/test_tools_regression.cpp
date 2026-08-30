@@ -569,6 +569,52 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // ---- 10. 相机标定: calibrateCamera 多图内参/畸变 (P0-3 §3.3) ----
+    // testdata_gen 以已知内参 (fx=fy=800, cx=320, cy=240) + 6组姿态投影生成 calib_cam/*.png
+    {
+        const QString camDir = d.absoluteFilePath("calib_cam");
+        QDir cd2(camDir);
+        const QStringList camBoards = cd2.entryList({"*.png"}, QDir::Files, QDir::Name);
+        if (camBoards.size() >= 4) {
+            ToolContext ctx;
+            ITool* cal = reg.createTool("Calibration");
+            cal->setInstanceName("相机标定");
+            cal->setProperty("calibMethod", 3);       // 相机标定(多图)
+            cal->setProperty("imageDir", camDir);
+            cal->setProperty("boardCols", 9);
+            cal->setProperty("boardRows", 6);
+            cal->setProperty("squareSize", 10.0);     // mm
+            const bool ok = cal->execute(ctx);
+            CHECK(ok, "相机标定: 执行成功");
+            if (ok) {
+                const int views = cal->resultData().value("viewCount").toInt();
+                CHECK(views >= 4, QString("相机标定: 有效视角%1≥4").arg(views).toLocal8Bit().constData());
+                const double fx = cal->resultData().value("fx").toDouble();
+                const double fy = cal->resultData().value("fy").toDouble();
+                const double cx = cal->resultData().value("cx").toDouble();
+                const double cy = cal->resultData().value("cy").toDouble();
+                // 真值 fx=fy=800, cx=320, cy=240; 合成图应恢复接近真值(容差10%)
+                CHECK(std::fabs(fx - 800.0) < 80.0,
+                      QString("相机标定: fx=%.1f 期望≈800").arg(fx).toLocal8Bit().constData());
+                CHECK(std::fabs(fy - 800.0) < 80.0,
+                      QString("相机标定: fy=%.1f 期望≈800").arg(fy).toLocal8Bit().constData());
+                CHECK(std::fabs(cx - 320.0) < 30.0,
+                      QString("相机标定: cx=%.1f 期望≈320").arg(cx).toLocal8Bit().constData());
+                CHECK(std::fabs(cy - 240.0) < 30.0,
+                      QString("相机标定: cy=%.1f 期望≈240").arg(cy).toLocal8Bit().constData());
+                const double rms = cal->resultData().value("reprojectionError").toDouble();
+                // 合成棋盘格是理想投影, 重投影误差应很小
+                CHECK(rms < 0.5, QString("相机标定: 重投影误差%.3fpx<0.5").arg(rms, 0, 'f', 3).toLocal8Bit().constData());
+                // 上下文写入校验
+                const double ctxFx = ctx.getDouble("calibration_camera_fx", 0);
+                CHECK(std::fabs(ctxFx - fx) < 1e-6, "相机标定: 上下文fx一致");
+            }
+            delete cal;
+        } else {
+            CHECK(false, QString("相机标定资产缺失: 期望≥4张实际%1").arg(camBoards.size()).toLocal8Bit().constData());
+        }
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);

@@ -16,6 +16,8 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/geometry/2d.hpp>
+#include <opencv2/geometry/3d.hpp>
+#include <opencv2/calib.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <QCoreApplication>
 #include <QDir>
@@ -182,6 +184,60 @@ int main(int argc, char* argv[]) {
             std::fprintf(stderr, "[calib] write rot board...\n"); std::fflush(stderr);
             imwrite((calDir + "/board_rot12.png").toLocal8Bit().toStdString(), rotated);
             ++generated;
+        }
+    }
+
+    // 相机内参/畸变标定板组 (供 Calibration 相机标定 回归):
+    //   用已知内参 K + 6 组不同旋转/平移姿态做真实投影生成,
+    //   回归可反标定恢复 K 并与真值比对。
+    {
+        const QString calDir = outDir + "/calib_cam";
+        QDir().mkpath(calDir);
+        const int bCols = 9, bRows = 6;         // 内角点 (findChessboardCorners 的 pattern)
+        const double sq = 10.0;                 // 世界单格边长 (mm)
+        // 方格数 = 内角点+1: 10列×7行; 角点网格 = (10+1)×(7+1)
+        const int sqCols = bCols + 1, sqRows = bRows + 1;
+        // 模拟相机内参 (640x480 传感器, 焦距 800px)
+        const double fx = 800.0, fy = 800.0, cx = 320.0, cy = 240.0;
+        Mat K = (Mat_<double>(3, 3) << fx, 0, cx, 0, fy, cy, 0, 0, 1);
+        // 棋盘格世界点 (z=0 平面, 以板中心为原点): (sqCols+1)×(sqRows+1) 角点网格
+        std::vector<Point3f> obj3d;
+        const double halfW = sqCols * sq / 2.0, halfH = sqRows * sq / 2.0;
+        for (int r = 0; r <= sqRows; ++r)
+            for (int c = 0; c <= sqCols; ++c)
+                obj3d.push_back(Point3f(c * sq - halfW, r * sq - halfH, 0));
+        // 6 组姿态: 旋转向量(rvec) + 平移(tvec, 相机在 z≈270mm 前方)
+        // z 越小投影越大; 单格 10mm×800px/270mm ≈ 30px, 保证角点检测可靠
+        const struct { Vec3d rvec; Vec3d tvec; const char* name; } poses[] = {
+            { {0, 0, 0},           {0, 0, 270}, "cam_front"   },
+            { {0.25, 0, 0},        {0, 0, 270}, "cam_tiltx"   },
+            { {0, -0.30, 0},       {0, 0, 285}, "cam_tilty"   },
+            { {0, 0, 0.35},        {18, 0, 270}, "cam_rotz"   },
+            { {0.20, 0.20, 0.15},  {0, 14, 280}, "cam_combo"  },
+            { {-0.25, 0.15, -0.1}, {-12, -9, 300}, "cam_far" },
+        };
+        for (const auto& p : poses) {
+            std::vector<Point2f> imgPts;
+            projectPoints(obj3d, p.rvec, p.tvec, K, noArray(), imgPts);
+            Mat img(H, W, CV_8UC1, Scalar(255));
+            // 画黑格 (与 drawChessboard 约定一致: 左上角格为白, (r+c)%2==1 为黑格)
+            for (int r = 0; r < sqRows; ++r) {
+                for (int c = 0; c < sqCols; ++c) {
+                    if ((r + c) % 2 == 0) continue;
+                    const Point pts[1][4] = {
+                        { imgPts[r * (sqCols + 1) + c],
+                          imgPts[r * (sqCols + 1) + c + 1],
+                          imgPts[(r + 1) * (sqCols + 1) + c + 1],
+                          imgPts[(r + 1) * (sqCols + 1) + c] }
+                    };
+                    const Point* pp[1] = { pts[0] };
+                    int npts[1] = { 4 };
+                    fillPoly(img, pp, npts, 1, Scalar(0));
+                }
+            }
+            imwrite((calDir + QString("/%1.png").arg(p.name)).toLocal8Bit().toStdString(), img);
+            ++generated;
+            std::fprintf(stderr, "[calib_cam] write %s.png...\n", p.name); std::fflush(stderr);
         }
     }
 

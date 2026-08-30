@@ -1,15 +1,18 @@
 /**
  * @file Calibration.cpp
- * @brief 标定校准工具（像素→毫米转换 + 真棋盘格标定）
+ * @brief 标定校准工具（像素→毫米转换 + 真棋盘格标定 + 相机内参/畸变标定）
  *
- * 三种标定方式:
+ * 四种标定方式:
  *   0 两点标定: 手动输入像素长度与实际长度换算
  *   1 已知比例: 直接输入 mm/pixel
  *   2 棋盘格标定: 对输入图像做 findChessboardCorners 角点检测,
  *     由相邻角点间距(像素)与实际格子尺寸自动计算 mm/pixel (标定真实化 P0-3)
+ *   3 相机标定: 读取目录内多张不同姿态棋盘格图, calibrateCamera
+ *     求内参矩阵 K + 畸变系数 + 重投影误差 (P0-3 §3.3, opencv_calib 启用)
  *
  * 标定结果统一写入上下文: calibration_ratio(px→mm), calibration_pixel_per_mm,
- * calibration_mm_per_pixel 等, 供后续测量/检测工具换算使用。
+ * calibration_mm_per_pixel 等, 供后续测量/检测工具换算使用;
+ * 相机标定额外写入 calibration_camera_* (内参/畸变/重投影误差)。
  */
 #include "Calibration.h"
 #include "../../../src/engine/ToolRegistry.h"
@@ -18,7 +21,10 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/objdetect.hpp>
 #include <opencv2/calib.hpp>
+#include <opencv2/geometry/3d.hpp>
+#include <opencv2/imgcodecs.hpp>
 #endif
+#include <QDir>
 #include <algorithm>
 #include <cmath>
 
@@ -26,7 +32,8 @@ namespace VisionInspector {
 
 PropertyDefList Calibration::propertyDefs() const {
     return {
-        PropertyDef::enumProp("calibMethod", "标定方法", {"两点标定", "已知比例", "棋盘格标定"}, 1),
+        PropertyDef::enumProp("calibMethod", "标定方法",
+                              {"两点标定", "已知比例", "棋盘格标定", "相机标定(多图)"}, 1),
         // 两点标定
         PropertyDef::doubleProp("pixelLength", "像素长度", 100.0, 1, 10000),
         PropertyDef::doubleProp("realLength", "实际长度(mm)", 10.0, 0.001, 10000),
@@ -37,6 +44,8 @@ PropertyDefList Calibration::propertyDefs() const {
         PropertyDef::intProp("boardRows", "内角点行数", 6, 3, 30),
         PropertyDef::doubleProp("squareSize", "格子边长(mm)", 10.0, 0.1, 1000),
         PropertyDef::stringProp("unit", "单位", "mm"),
+        // 相机标定(多图): 棋盘格图片目录
+        PropertyDef::stringProp("imageDir", "棋盘格图片目录", "", "目录"),
         PropertyDef::enumProp("applyTo", "应用范围", {"当前流程", "所有流程"}, 0),
     };
 }
@@ -55,6 +64,9 @@ bool Calibration::execute(ToolContext& context) {
     } else if (method == 1) {
         // 已知比例
         ratio = propertyValue("pixelRatio").toDouble();
+    } else if (method == 3) {
+        // 相机标定(多图): 内参矩阵 + 畸变系数 + 重投影误差
+        return calibrateCameraMulti(context);
     } else {
         // 棋盘格标定 (真角点检测, 自动计算比例)
 #ifdef VI_HAS_OPENCV
@@ -171,6 +183,128 @@ bool Calibration::execute(ToolContext& context) {
 
     setStatus(ToolStatus::OK);
     return true;
+}
+
+bool Calibration::calibrateCameraMulti(ToolContext& context) {
+#ifdef VI_HAS_OPENCV
+    const QString imageDir = propertyValue("imageDir").toString();
+    const int cols = propertyValue("boardCols").toInt();
+    const int rows = propertyValue("boardRows").toInt();
+    const double squareSize = propertyValue("squareSize").toDouble();
+    if (imageDir.isEmpty() || cols < 2 || rows < 2 || squareSize <= 0) {
+        setResultData("error", "相机标定参数无效(imageDir/棋盘格参数)");
+        setStatus(ToolStatus::NG);
+        return false;
+    }
+    QDir dir(imageDir);
+    const QStringList filters = {QStringLiteral("*.png"), QStringLiteral("*.jpg"),
+                                 QStringLiteral("*.jpeg"), QStringLiteral("*.bmp")};
+    const QStringList files = dir.entryList(filters, QDir::Files, QDir::Name);
+    if (files.isEmpty()) {
+        setResultData("error", QString("目录无图片: %1").arg(imageDir));
+        setStatus(ToolStatus::NG);
+        return false;
+    }
+
+    // 世界坐标: 棋盘格 z=0 平面, 单格 squareSize (mm)
+    std::vector<cv::Point3f> objBoard;
+    for (int r = 0; r < rows; ++r)
+        for (int c = 0; c < cols; ++c)
+            objBoard.emplace_back(float(c * squareSize), float(r * squareSize), 0.f);
+
+    std::vector<std::vector<cv::Point3f>> objectPoints;
+    std::vector<std::vector<cv::Point2f>> imagePoints;
+    cv::Size imageSize;
+    int viewCount = 0;
+    for (const QString& f : files) {
+        const cv::Mat img = cv::imread((imageDir + "/" + f).toLocal8Bit().toStdString(),
+                                       cv::IMREAD_GRAYSCALE);
+        if (img.empty()) continue;
+        if (viewCount == 0) imageSize = img.size();
+        std::vector<cv::Point2f> corners;
+        if (cv::findChessboardCornersSB(img, cv::Size(cols, rows), corners) &&
+            static_cast<int>(corners.size()) == cols * rows) {
+            cv::cornerSubPix(img, corners, cv::Size(5, 5), cv::Size(-1, -1),
+                             cv::TermCriteria(cv::TermCriteria::EPS +
+                                                  cv::TermCriteria::COUNT,
+                                              30, 0.01));
+            objectPoints.push_back(objBoard);
+            imagePoints.push_back(corners);
+            ++viewCount;
+        }
+    }
+    if (viewCount < 3) {
+        setResultData("error", QString("有效视角%1<3, 相机标定需≥3张可检棋盘格图").arg(viewCount));
+        setStatus(ToolStatus::NG);
+        return false;
+    }
+
+    // 内参标定: 求 K(3x3) + 畸变系数 + 每视角外参
+    cv::Mat cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
+    cv::Mat distCoeffs;
+    std::vector<cv::Mat> rvecs, tvecs;
+    const double rms = cv::calibrateCamera(objectPoints, imagePoints, imageSize,
+                                           cameraMatrix, distCoeffs, rvecs, tvecs);
+    (void)rms;
+
+    // 重投影误差(平均像素误差)
+    double totalErr = 0, totalPts = 0;
+    for (size_t i = 0; i < imagePoints.size(); ++i) {
+        std::vector<cv::Point2f> reproj;
+        cv::projectPoints(objectPoints[i], rvecs[i], tvecs[i],
+                          cameraMatrix, distCoeffs, reproj);
+        for (size_t j = 0; j < imagePoints[i].size(); ++j)
+            totalErr += cv::norm(imagePoints[i][j] - reproj[j]);
+        totalPts += imagePoints[i].size();
+    }
+    const double meanErr = totalPts > 0 ? totalErr / totalPts : 0;
+
+    const double fx = cameraMatrix.at<double>(0, 0);
+    const double fy = cameraMatrix.at<double>(1, 1);
+    const double cx = cameraMatrix.at<double>(0, 2);
+    const double cy = cameraMatrix.at<double>(1, 2);
+    QVariantList distList;
+    for (int i = 0; i < distCoeffs.cols * distCoeffs.rows; ++i)
+        distList.append(distCoeffs.at<double>(i));
+
+    // 结果键
+    setResultData("fx", fx);
+    setResultData("fy", fy);
+    setResultData("cx", cx);
+    setResultData("cy", cy);
+    setResultData("distCoeffs", distList);
+    setResultData("reprojectionError", meanErr);
+    setResultData("viewCount", viewCount);
+    setResultData("totalViews", (int)files.size());
+    setResultData("calibrated", true);
+    setResultData("cameraMatrix", QVariantList{fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0});
+
+    // 写入上下文, 供去畸变/3D重建等下游使用
+    context.setData("calibration_camera_fx", fx);
+    context.setData("calibration_camera_fy", fy);
+    context.setData("calibration_camera_cx", cx);
+    context.setData("calibration_camera_cy", cy);
+    context.setData("calibration_camera_dist", distList);
+    context.setData("calibration_reprojection_error", meanErr);
+    context.setData("calibration_camera_matrix", QVariantList{fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0});
+
+    if (propertyValue("applyTo").toInt() == 1) {
+        if (auto* gv = context.globalVariables()) {
+            gv->set("calibration_camera_fx", fx);
+            gv->set("calibration_camera_fy", fy);
+            gv->set("calibration_camera_cx", cx);
+            gv->set("calibration_camera_cy", cy);
+            gv->set("calibration_reprojection_error", meanErr);
+        }
+    }
+
+    setStatus(ToolStatus::OK);
+    return true;
+#else
+    setResultData("error", "需要OpenCV库");
+    setStatus(ToolStatus::NG);
+    return false;
+#endif
 }
 
 } // namespace VisionInspector
