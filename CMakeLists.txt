@@ -44,12 +44,12 @@ set(VI_ALL_PLUGINS
     LineIntersect LineToLine ExtendPoint RotatePoint PointToLine
     CircleToLine CircleToCircle
     ImageFilter Threshold Morphology ColorConvert
-    ConditionBranch DataJudge Loop LoopEnd StopLoop Delay SystemTime GetVariable GenerateText SplitText CompareText DataQueue
+    ConditionBranch DataJudge Loop LoopEnd StopLoop Delay SystemTime GetVariable GenerateText SplitText CompareText DataQueue PlaySound WriteText FileWatch
     CaptureImage DataDisplay UpdateView
     Calculator ImageCompare Calibration PositionCorrection
     VertexDetection WidthDetection MultiContourMatch ContourCompare ColorDetection
     CoordSystem CoordinateCalibration HandEyeCalibration ImageCorrection ImageUndistort CalculateVariable SetVariable GetVariable
-    SerialPortTool EthernetTool ModbusRead ModbusWrite PlcLink
+    SerialPortTool EthernetTool ModbusRead ModbusWrite PlcLink TcpData
     EndCorrection
 )
 

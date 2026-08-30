@@ -1,0 +1,6 @@
+﻿add_library(PlaySound STATIC)
+target_sources(PlaySound PRIVATE PlaySound.h PlaySound.cpp)
+target_link_libraries(PlaySound PUBLIC VICore VIEngine VIUtils Qt6::Core)
+if(WIN32)
+    target_link_libraries(PlaySound PUBLIC winmm)
+endif()

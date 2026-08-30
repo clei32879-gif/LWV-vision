@@ -71,6 +71,7 @@ target_link_libraries(test_tools_regression PRIVATE
     ${OpenCV_LIBS}
     Qt6::Core
     Qt6::Gui
+    Qt6::Network
 )
 foreach(_plugin ${VI_ALL_PLUGINS})
     if(TARGET ${_plugin})

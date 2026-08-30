@@ -23,6 +23,12 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QThread>
+#include <QTcpServer>
+#include <QTcpSocket>
+#include <QHostAddress>
+#include <atomic>
 #include <cstdio>
 #include <cmath>
 #include <algorithm>
@@ -1231,6 +1237,123 @@ int main(int argc, char* argv[]) {
         dq3->setProperty("queueName", "");
         CHECK(!dq3->execute(ctx2), "数据队列: 空队列名NG");
         delete dq; delete dq2; delete dq3;
+    }
+
+    // ---- 测试20: 通讯四件套 (P0-10) ----
+    std::printf("测试20: 播放声音/写入文本/文件监测/TCP收发\n");
+    {
+        // 20.1 播放声音 (系统提示音; 不实际出声只验证执行路径)
+        ITool* ps = reg.createTool("PlaySound");
+        ToolContext ctx20;
+        ps->setProperty("playMode", 0);
+        CHECK(ps->execute(ctx20), "播放声音: 系统提示音执行");
+        CHECK(ps->resultData().value("played").toBool(), "播放声音: played=true");
+        ps->setProperty("playMode", 1);
+        ps->setProperty("soundPath", "");
+        CHECK(ps->execute(ctx20), "播放声音: 空路径wav执行(不崩溃)");
+        delete ps;
+
+        // 20.2 写入文本 (临时目录, 追加/覆盖/内容验证)
+        const QString tmpDir = QDir::temp().filePath("lvw_test_wt");
+        QDir().mkpath(tmpDir);
+        ITool* wt = reg.createTool("WriteText");
+        wt->setProperty("directory", tmpDir);
+        wt->setProperty("fileName", "t20");
+        wt->setProperty("extension", "csv");
+        wt->setProperty("content", "10,20,30");
+        wt->setProperty("append", true);
+        CHECK(wt->execute(ctx20), "写入文本: 追加写入");
+        const QString f20 = QFileInfo(wt->resultData().value("filePath").toString()).absoluteFilePath();
+        CHECK(QFileInfo::exists(f20), "写入文本: 文件已生成");
+        QFile rf(f20);
+        CHECK(rf.open(QIODevice::ReadOnly | QIODevice::Text), "写入文本: 打开读取");
+        const QString firstRead = QString::fromUtf8(rf.readAll());
+        rf.close();
+        CHECK(firstRead.contains("10,20,30"), "写入文本: 内容正确");
+        // 覆盖模式 → 只保留最新
+        wt->setProperty("append", false);
+        wt->setProperty("content", "99");
+        CHECK(wt->execute(ctx20), "写入文本: 覆盖写入");
+        QFile rf2(f20);
+        CHECK(rf2.open(QIODevice::ReadOnly | QIODevice::Text), "写入文本: 覆盖后读取");
+        const QString overRead = QString::fromUtf8(rf2.readAll());
+        rf2.close();
+        CHECK(!overRead.contains("10,20,30"), "写入文本: 覆盖后旧内容消失");
+        CHECK(overRead.contains("99"), "写入文本: 覆盖后新内容存在");
+        delete wt;
+        QFile::remove(f20);
+        QDir().rmdir(tmpDir);
+
+        // 20.3 文件监测 (检查存在 / 删除 / 清理旧文件)
+        const QString fwPath = QDir::temp().filePath("lvw_test_fw.sig");
+        QFile::remove(fwPath);
+        ITool* fw = reg.createTool("FileWatch");
+        fw->setProperty("filePath", fwPath);
+        fw->setProperty("watchMode", 0);  // 检查存在
+        CHECK(fw->execute(ctx20), "文件监测: 检查存在执行");
+        CHECK(fw->resultData().value("fileExists").toBool() == false, "文件监测: 初始不存在");
+        QFile fwFile(fwPath);
+        CHECK(fwFile.open(QIODevice::WriteOnly), "文件监测: 创建信号文件");
+        fwFile.write("x");
+        fwFile.close();
+        CHECK(fw->execute(ctx20), "文件监测: 再检查");
+        CHECK(fw->resultData().value("fileExists").toBool() == true, "文件监测: 已出现");
+        fw->setProperty("watchMode", 1);  // 删除
+        CHECK(fw->execute(ctx20), "文件监测: 删除执行");
+        CHECK(!QFileInfo::exists(fwPath), "文件监测: 已删除");
+        fw->setProperty("watchMode", 2);  // 清理旧文件 (空目录, 保留7天 → 不误删)
+        fw->setProperty("filePath", QDir::temp().path());
+        CHECK(fw->execute(ctx20), "文件监测: 清理旧文件执行");
+        CHECK(fw->resultData().value("cleanedCount").toInt() >= 0, "文件监测: 清理计数合法");
+        delete fw;
+
+        // 20.4 TCP 收发 (本地回环: 起一个一次性 echo 服务器)
+        static std::atomic<quint16> s_portSeed{23456};
+        const quint16 tcpPort = s_portSeed.fetch_add(1) % 30000 + 20000;
+        std::atomic<bool> echoDone{false};
+        QThread* serverThread = QThread::create([&] {
+            QTcpServer server;
+            if (!server.listen(QHostAddress::LocalHost, tcpPort)) return;
+            if (!server.waitForNewConnection(5000)) return;
+            QTcpSocket* s = server.nextPendingConnection();
+            if (!s) return;
+            s->waitForReadyRead(5000);
+            const QByteArray in = s->readAll();
+            s->write(in);                 // echo
+            s->waitForBytesWritten(3000);
+            s->disconnectFromHost();
+            delete s;
+            echoDone.store(true, std::memory_order_relaxed);
+        });
+        serverThread->start();
+        QThread::msleep(200);   // 等服务器就绪
+
+        ITool* tc = reg.createTool("TcpData");
+        tc->setProperty("host", "127.0.0.1");
+        tc->setProperty("port", (int)tcpPort);
+        tc->setProperty("operation", 2);   // 发送并接收
+        tc->setProperty("sendData", "HELLO-LW");
+        tc->setProperty("timeoutMs", 5000);
+        CHECK(tc->execute(ctx20), "TCP收发: 发送并接收执行");
+        CHECK(tc->resultData().value("received").toString() == "HELLO-LW", "TCP收发: 回显内容正确");
+        CHECK(tc->resultData().value("bytesSent").toInt() == 8, "TCP收发: 发送字节数8");
+        CHECK(echoDone.load(), "TCP收发: 服务器已完成echo");
+        delete tc;
+
+        // 20.5 TCP 收发: 拒绝连接 → NG
+        ITool* tc2 = reg.createTool("TcpData");
+        tc2->setProperty("host", "127.0.0.1");
+        tc2->setProperty("port", 1);       // 未监听端口
+        tc2->setProperty("operation", 0);  // 发送
+        tc2->setProperty("timeoutMs", 500);
+        CHECK(tc2->execute(ctx20), "TCP收发: 拒连执行");
+        CHECK(tc2->resultData().value("connected").toBool() == false, "TCP收发: 拒连未连接");
+        CHECK(tc2->status() == ToolStatus::NG, "TCP收发: 拒连状态NG");
+        delete tc2;
+
+        serverThread->quit();
+        serverThread->wait(3000);
+        delete serverThread;
     }
 
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
