@@ -43,6 +43,8 @@ int main(int argc, char* argv[]) {
     CHECK(engine->inputWidth() == 640 && engine->inputHeight() == 640,
           QString("输入尺寸 %1x%2 (=640)").arg(engine->inputWidth())
               .arg(engine->inputHeight()).toLocal8Bit().constData());
+    std::printf("  执行提供器: %s\n",
+                engine->executionProvider().toLocal8Bit().constData());
 
     // 2. 真实样本图推理
     std::printf("测试2: 真实样本图推理(螺丝长_良品)\n");

@@ -76,6 +76,14 @@ void YoloTeachWizard::setupUi() {
         QStringLiteral("可选: 逗号分隔的类别名, 如 划痕,凹坑,裂纹 (留空则用模型自带元数据)"));
     cfgForm->addRow(QStringLiteral("类别名:"), m_classesEdit);
 
+#ifdef VI_HAS_ONNXRT
+    m_deviceCombo = new QComboBox(cfgGroup);
+    m_deviceCombo->addItem(QStringLiteral("自动 (优先GPU)"), (int)InferEngine::Device::Auto);
+    m_deviceCombo->addItem(QStringLiteral("仅CPU"), (int)InferEngine::Device::Cpu);
+    m_deviceCombo->addItem(QStringLiteral("仅DirectML(GPU)"), (int)InferEngine::Device::Dml);
+    cfgForm->addRow(QStringLiteral("运行设备:"), m_deviceCombo);
+#endif
+
     root->addWidget(cfgGroup);
 
     // ── 实时画面 ──
@@ -103,6 +111,12 @@ void YoloTeachWizard::setupUi() {
 
     connect(m_stationCombo, &QComboBox::currentIndexChanged,
             this, &YoloTeachWizard::onStationChanged);
+#ifdef VI_HAS_ONNXRT
+    connect(m_deviceCombo, &QComboBox::currentIndexChanged, this, [this](int) {
+        const auto dev = static_cast<InferEngine::Device>(m_deviceCombo->currentData().toInt());
+        InferEngine::setDevicePreference(dev);
+    });
+#endif
     connect(browseBtn, &QPushButton::clicked, this, &YoloTeachWizard::onBrowseModel);
     connect(capBtn, &QPushButton::clicked, this, &YoloTeachWizard::onCapture);
     connect(m_detectBtn, &QPushButton::toggled, this, &YoloTeachWizard::onToggleDetect);
@@ -213,7 +227,8 @@ void YoloTeachWizard::onDetectTick() {
     m_liveView->setImage(m_lastLiveFrame);
     m_liveView->setOverlays(overlays);
     m_statusLabel->setText(
-        QStringLiteral("检测到 %1 个目标 (置信度≥%2)").arg(dets.size()).arg(conf));
+        QStringLiteral("检测到 %1 个目标 (置信度≥%2 · %3)")
+            .arg(dets.size()).arg(conf).arg(engine->executionProvider()));
 #endif
 #endif
 }

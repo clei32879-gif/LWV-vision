@@ -17,7 +17,7 @@
 | 组件 | 用途 | 说明 |
 |------|------|------|
 | DVP2 SDK（度申相机） | 真实相机采集 | 安装到 `C:\Program Files (x86)\DVP2 SDK CN`；未安装时程序以无相机模式编译，不影响其他功能 |
-| ONNX Runtime | YOLOv8 AI 推理 | 预留，后续版本接入 |
+| ONNX Runtime (DirectML) | YOLOv8 AI 推理 / GPU 加速 | 项目已自带 DirectML 版 ONNX Runtime（thirdparty/onnxruntime，含 DirectML.dll）；运行时优先 DirectML(GPU)，不可用时自动回退 CPU |
 
 ## 二、编译（三选一）
 

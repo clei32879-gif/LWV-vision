@@ -16,6 +16,12 @@
 #include <QFile>
 #include <QJsonObject>
 
+// DirectML EP 附加函数手工声明:
+// dml_provider_factory.h 依赖 Windows SDK 的 d3d12.h / DirectML.h (MinGW 不可用),
+// 而该导出仅 DirectML 版 onnxruntime.dll 提供; CPU 版调用会返回非空 status。
+extern "C" OrtStatusPtr OrtSessionOptionsAppendExecutionProvider_DML(
+    OrtSessionOptions* options, int device_id);
+
 namespace VisionInspector {
 
 struct InferEngine::Impl {
@@ -24,17 +30,57 @@ struct InferEngine::Impl {
     QString path;
     int inW = 0, inH = 0;
     QMap<int, QString> classNames;   // 类别索引 -> 名称 (分类模型)
+    QString provider;                // 实际使用的执行提供器: "CPU" / "DirectML"
 };
 
 InferEngine::InferEngine() : m_impl(std::make_unique<Impl>()) {}
 InferEngine::~InferEngine() = default;
+
+namespace {
+InferEngine::Device g_devicePref = InferEngine::Device::Auto;
+}
+
+void InferEngine::setDevicePreference(Device d) { g_devicePref = d; }
+InferEngine::Device InferEngine::devicePreference() { return g_devicePref; }
+
+QString InferEngine::executionProvider() const { return m_impl->provider; }
 
 bool InferEngine::loadModel(const QString& onnxPath, QString* err) {
     try {
         Ort::SessionOptions opts;
         opts.SetIntraOpNumThreads(4);
         const std::wstring w = onnxPath.toStdWString();
-        m_impl->session = std::make_unique<Ort::Session>(m_impl->env, w.c_str(), opts);
+
+        // GPU 加速: 优先尝试 DirectML EP (Auto/Dml 模式), 失败回退 CPU
+        bool dmlOk = false;
+        if (g_devicePref != Device::Cpu) {
+            OrtStatus* st = OrtSessionOptionsAppendExecutionProvider_DML(opts, 0);
+            if (st == nullptr) {
+                dmlOk = true;
+            } else {
+                // CPU 版 DLL 或 DirectML.dll 缺失时走到这里 — 释放 status, 走 CPU
+                Ort::GetApi().ReleaseStatus(st);
+            }
+        }
+        if (!dmlOk && g_devicePref == Device::Dml) {
+            // 强制 DML 但不可用
+            if (err) *err = QStringLiteral("DirectML 执行提供器不可用 (缺少 DirectML.dll 或无 D3D12 显卡)");
+            return false;
+        }
+        try {
+            m_impl->session = std::make_unique<Ort::Session>(m_impl->env, w.c_str(), opts);
+        } catch (const Ort::Exception& e) {
+            // Auto 模式下 DML 注册成功但会话创建失败(模型算子不支持等) → 回退纯 CPU 重试
+            if (dmlOk && g_devicePref == Device::Auto) {
+                Ort::SessionOptions cpuOpts;
+                cpuOpts.SetIntraOpNumThreads(4);
+                m_impl->session = std::make_unique<Ort::Session>(m_impl->env, w.c_str(), cpuOpts);
+                dmlOk = false;
+            } else {
+                throw;
+            }
+        }
+        m_impl->provider = dmlOk ? QStringLiteral("DirectML") : QStringLiteral("CPU");
         m_impl->path = onnxPath;
         // 解析输入尺寸 (N,C,H,W)
         Ort::AllocatorWithDefaultOptions alloc;
@@ -328,15 +374,20 @@ QMap<QString, std::shared_ptr<InferEngine>> g_modelCache;
 }
 
 std::shared_ptr<InferEngine> InferEngine::acquire(const QString& onnxPath, QString* err) {
+    // 缓存键含设备偏好: 切换设备后重新建会话
+    const QString devKey = (g_devicePref == Device::Cpu) ? QStringLiteral("cpu")
+                         : (g_devicePref == Device::Dml) ? QStringLiteral("dml")
+                                                         : QStringLiteral("auto");
+    const QString key = onnxPath + QStringLiteral("|") + devKey;
     QMutexLocker locker(&g_modelMutex);
-    auto it = g_modelCache.find(onnxPath);
+    auto it = g_modelCache.find(key);
     if (it != g_modelCache.end()) return it.value();
     auto engine = std::make_shared<InferEngine>();
     if (!engine->loadModel(onnxPath, err)) {
         if (err && err->isEmpty()) *err = "模型加载失败";
         return nullptr;
     }
-    g_modelCache.insert(onnxPath, engine);
+    g_modelCache.insert(key, engine);
     return engine;
 }
 

@@ -46,6 +46,7 @@ private:
     QLineEdit* m_modelEdit = nullptr;
     QDoubleSpinBox* m_confSpin = nullptr;
     QLineEdit* m_classesEdit = nullptr;
+    QComboBox* m_deviceCombo = nullptr;   // 运行设备: 自动/CPU/DirectML
     ImageViewWidget* m_liveView = nullptr;
     QLabel* m_statusLabel = nullptr;
     QPushButton* m_detectBtn = nullptr;

@@ -62,6 +62,14 @@ public:
     /** 类别名查询 (检测/分类通用), 无则返回 "classN" */
     QString className(int classId) const;
 
+    /** 推理设备偏好 (Auto=优先GPU, CPU=仅CPU, Dml=仅DirectML) */
+    enum class Device { Auto, Cpu, Dml };
+    static void setDevicePreference(Device d);
+    static Device devicePreference();
+
+    /** 当前会话实际使用的执行提供器 (如 "DirectML" / "CPU") */
+    QString executionProvider() const;
+
     /** 通用推理: 输入BGR图按模型输入尺寸缩放+归一化(可选letterbox), 返回第一个输出张量 */
     bool run(const cv::Mat& bgr, std::vector<float>& output,
              std::vector<int64_t>& outShape, QString* err = nullptr);

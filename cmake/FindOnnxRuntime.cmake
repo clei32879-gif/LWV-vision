@@ -22,6 +22,14 @@ if(EXISTS "${ONNXRT_DIR}/lib/onnxruntime.lib")
                 "${ONNXRT_DIR}/lib/onnxruntime.dll"
                 "$<TARGET_FILE_DIR:${target}>"
             COMMENT "Copying onnxruntime.dll...")
+        # DirectML GPU 加速运行时 (可选: 存在则一并拷贝)
+        if(EXISTS "${ONNXRT_DIR}/lib/DirectML.dll")
+            add_custom_command(TARGET ${target} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${ONNXRT_DIR}/lib/DirectML.dll"
+                    "$<TARGET_FILE_DIR:${target}>"
+                COMMENT "Copying DirectML.dll...")
+        endif()
     endfunction()
 else()
     set(VI_HAS_ONNXRT OFF)

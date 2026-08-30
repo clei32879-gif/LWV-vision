@@ -30,6 +30,8 @@ echo [3/5] Copy OpenCV + ONNX Runtime ...
 for %%F in (thirdparty\opencv\build\bin\libopencv_*.dll) do copy /y "%%F" "%DST%\" >nul
 copy /y "%SRC%\onnxruntime.dll" "%DST%\" >nul 2>&1
 copy /y "%SRC%\onnxruntime_providers_shared.dll" "%DST%\" >nul 2>&1
+copy /y "%SRC%\DirectML.dll" "%DST%\" >nul 2>&1
+if exist thirdparty\onnxruntime\lib\DirectML.dll copy /y thirdparty\onnxruntime\lib\DirectML.dll "%DST%\" >nul 2>&1
 
 echo [4/5] Copy models + sample images ...
 mkdir "%DST%\models" 2>nul
