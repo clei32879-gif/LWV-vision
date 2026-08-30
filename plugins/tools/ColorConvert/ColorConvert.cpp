@@ -1,4 +1,4 @@
-﻿#include "ColorConvert.h"
+#include "ColorConvert.h"
 #include "../../../src/engine/ToolRegistry.h"
 #ifdef VI_HAS_OPENCV
 #include <opencv2/imgproc.hpp>
@@ -18,11 +18,17 @@ bool ColorConvert::execute(ToolContext& context) {
     if (!input || input->empty()) { setStatus(ToolStatus::NG); setResultData("error", "输入图像为空"); return false; }
     int format = propertyValue("targetFormat").toInt();
     cv::Mat result;
+    // M-40修复: 灰度图转HSV/LAB时先复制3通道再转换, 而非停留在BGR
+    cv::Mat bgr;
+    if (input->channels() == 1)
+        cv::cvtColor(*input, bgr, cv::COLOR_GRAY2BGR);
+    else
+        bgr = *input;
     switch (format) {
     case 0: if (input->channels() > 1) cv::cvtColor(*input, result, cv::COLOR_BGR2GRAY); else result = *input; break;
-    case 1: if (input->channels() > 1) cv::cvtColor(*input, result, cv::COLOR_BGR2HSV); else cv::cvtColor(*input, result, cv::COLOR_GRAY2BGR); break;
-    case 2: if (input->channels() > 1) cv::cvtColor(*input, result, cv::COLOR_BGR2Lab); else cv::cvtColor(*input, result, cv::COLOR_GRAY2BGR); break;
-    case 3: result = *input; break;
+    case 1: cv::cvtColor(bgr, result, cv::COLOR_BGR2HSV); break;
+    case 2: cv::cvtColor(bgr, result, cv::COLOR_BGR2Lab); break;
+    case 3: result = bgr; break;
     default: result = *input; break;
     }
     setOutputImage(context, std::make_shared<CvImage>(result.clone()));

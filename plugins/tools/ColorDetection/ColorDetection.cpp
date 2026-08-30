@@ -59,10 +59,31 @@ bool ColorDetection::execute(ToolContext& context) {
     int rh = std::min((int)roiRect.height(), src.rows - ry);
     if (rw <= 0 || rh <= 0) { setStatus(ToolStatus::NG); return false; }
     cv::Mat roiImg = src(cv::Rect(rx, ry, rw, rh)).clone();
-    cv::Mat hsv;
-    cv::cvtColor(roiImg, hsv, cv::COLOR_BGR2HSV);
     cv::Mat mask;
-    cv::inRange(hsv, cv::Scalar(hueMin, satMin, valMin), cv::Scalar(hueMax, satMax, valMax), mask);
+    // M-41修复: colorSpace属性此前读取后未使用, 恒BGR2HSV → 按选择分支
+    switch (colorSpace) {
+    case 0: {   // RGB
+        cv::Mat rgb;
+        cv::cvtColor(roiImg, rgb, cv::COLOR_BGR2RGB);
+        cv::inRange(rgb, cv::Scalar(hueMin, satMin, valMin),
+                         cv::Scalar(hueMax, satMax, valMax), mask);
+        break;
+    }
+    case 2: {   // LAB
+        cv::Mat lab;
+        cv::cvtColor(roiImg, lab, cv::COLOR_BGR2Lab);
+        cv::inRange(lab, cv::Scalar(hueMin, satMin, valMin),
+                         cv::Scalar(hueMax, satMax, valMax), mask);
+        break;
+    }
+    default: {  // HSV (原默认行为)
+        cv::Mat hsv;
+        cv::cvtColor(roiImg, hsv, cv::COLOR_BGR2HSV);
+        cv::inRange(hsv, cv::Scalar(hueMin, satMin, valMin),
+                         cv::Scalar(hueMax, satMax, valMax), mask);
+        break;
+    }
+    }
     // 形态学操作清理
     cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
     cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel);
