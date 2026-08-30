@@ -155,6 +155,33 @@ public:
                 {"当前图像", "相机图像", "文件图像", "自定义"}, 0),
         };
     }
+
+    // 该工具是否需要输入图像(用于自动补"采集图像"与属性界面是否显示"输入图像")
+    static bool needsInputImage(const QString& typeName) {
+        static const QStringList noImageTools = {
+            QStringLiteral("CaptureImage"),
+            QStringLiteral("PositionCorrection"),
+            QStringLiteral("EndCorrection"),
+            QStringLiteral("CoordSystem"),
+            QStringLiteral("Calibration"),
+            QStringLiteral("CalculateVariable"),
+            QStringLiteral("SetVariable"),
+            QStringLiteral("Calculator"),
+            QStringLiteral("DataJudge"),
+            QStringLiteral("ConditionBranch"),
+            QStringLiteral("Delay"),
+            QStringLiteral("Loop"),
+            QStringLiteral("EthernetTool"),
+            QStringLiteral("SerialPort"),
+            QStringLiteral("SerialPortTool"),
+            QStringLiteral("ModbusComm"),
+            QStringLiteral("ModbusRead"),
+            QStringLiteral("ModbusWrite"),
+            QStringLiteral("DataDisplay"),
+            QStringLiteral("UpdateView"),
+        };
+        return !noImageTools.contains(typeName);
+    }
     
     virtual PropertyDefList propertyDefs() const { return {}; }
     virtual QVariant propertyValue(const QString& name) const;

@@ -19,6 +19,9 @@
 #include <QInputDialog>
 #include <QStyleOptionGraphicsItem>
 #include <QStyle>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
 
 namespace VisionInspector {
 
@@ -163,6 +166,7 @@ public:
 
 signals:
     void deleteRequested();
+    void toolDropped(const QString& typeName);
 
 protected:
     void wheelEvent(QWheelEvent* event) override;
@@ -170,6 +174,9 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 private:
     bool m_panning = false;
@@ -238,6 +245,7 @@ signals:
     void toolPaste(int index);
 
     void connectionCreated(int fromIndex, int toIndex);
+    void toolDropped(const QString& typeName);
 
 private slots:
     void onSceneDeleteRequested();

@@ -58,21 +58,19 @@ void PropertyDialog::buildUI() {
     // ============ 页签2: 参数设置 ============
     auto* paramPage = new QWidget(this);
     auto* paramLayout = new QVBoxLayout(paramPage);
+    // 使用提示: 让用户一眼知道怎么操作
+    auto* hint = new QLabel(
+        QStringLiteral("说明：修改下方参数后，点[试执行]可预览效果；确认无误后点[确定]。"), paramPage);
+    hint->setStyleSheet("color: #4a9eff; background: #1e2a3a; padding: 6px; border-radius: 3px;");
+    hint->setWordWrap(true);
+    paramLayout->addWidget(hint);
     m_formLayout = new QFormLayout();
     paramLayout->addLayout(m_formLayout);
     paramLayout->addStretch();
     m_tabs->addTab(paramPage, QStringLiteral("参数设置"));
 
-    bool isCaptureTool = (m_tool->typeName() == "CaptureImage");
-    bool needsImage = !isCaptureTool &&
-                       m_tool->typeName() != "PositionCorrection" &&
-                       m_tool->typeName() != "EndCorrection" &&
-                       m_tool->typeName() != "CoordSystem" &&
-                       m_tool->typeName() != "CalculateVariable" &&
-                       m_tool->typeName() != "SetVariable" &&
-                       m_tool->typeName() != "DataJudgment" &&
-                       m_tool->typeName() != "Delay" &&
-                       m_tool->typeName() != "Loop";
+    const bool isCaptureTool = (m_tool->typeName() == "CaptureImage");
+    const bool needsImage = ITool::needsInputImage(m_tool->typeName());
 
     if (isCaptureTool) {
         auto* combo = new QComboBox(paramPage);
@@ -189,6 +187,9 @@ void PropertyDialog::buildUI() {
         viewer->setOverlays(overlays);
     });
     m_tabs->addTab(tryPage, QStringLiteral("试执行"));
+
+    // 默认定位到"参数设置", 让用户先看到该工具最关键的配置
+    m_tabs->setCurrentIndex(1);
 }
 
 void PropertyDialog::onTryRun() {

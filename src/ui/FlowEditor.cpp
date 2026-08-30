@@ -467,7 +467,10 @@ void FlowEditor::setupView() {
     m_view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_view->setFrameShape(QFrame::NoFrame);
     m_view->setStyleSheet("background-color: #2b2b2b; border: none;");
-    m_view->setAcceptDrops(false);
+    m_view->setAcceptDrops(true);
+
+    // 从工具箱拖入工具
+    connect(m_view, &FlowView::toolDropped, this, &FlowEditor::toolDropped);
 
     // 启用鼠标中键平移
     m_view->viewport()->setCursor(Qt::ArrowCursor);
@@ -763,6 +766,39 @@ FlowView::FlowView(QWidget* parent) : QGraphicsView(parent) {
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setFrameShape(QFrame::NoFrame);
     setStyleSheet("background-color: #2b2b2b; border: none;");
+}
+
+// 接收从工具箱拖来的工具
+void FlowView::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasFormat(QStringLiteral("application/x-lwvision-tool"))) {
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+    } else {
+        QGraphicsView::dragEnterEvent(event);
+    }
+}
+
+void FlowView::dragMoveEvent(QDragMoveEvent* event) {
+    if (event->mimeData()->hasFormat(QStringLiteral("application/x-lwvision-tool"))) {
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+    } else {
+        QGraphicsView::dragMoveEvent(event);
+    }
+}
+
+void FlowView::dropEvent(QDropEvent* event) {
+    if (event->mimeData()->hasFormat(QStringLiteral("application/x-lwvision-tool"))) {
+        const QString typeName =
+            QString::fromUtf8(event->mimeData()->data(QStringLiteral("application/x-lwvision-tool")));
+        if (!typeName.isEmpty()) {
+            emit toolDropped(typeName);
+            event->setDropAction(Qt::CopyAction);
+            event->accept();
+            return;
+        }
+    }
+    QGraphicsView::dropEvent(event);
 }
 
 void FlowView::wheelEvent(QWheelEvent* event) {

@@ -202,6 +202,7 @@ void MainWindow::setupUI() {
     createViewMenu();
     
     connect(m_toolbox, &Toolbox::toolDoubleClicked, this, &MainWindow::onToolAdded);
+    connect(m_flowEditor, &FlowEditor::toolDropped, this, &MainWindow::onToolAdded);
     connect(m_flowEditor, &FlowEditor::toolEditProperties, this, &MainWindow::onEditToolProperties);
     
     setWindowTitle("LW Vision v1.0.0 - 立维视觉");
@@ -384,7 +385,6 @@ void MainWindow::onToolAdded(const QString& typeName) {
         return;
     }
     
-    // 智能命名：只有重复工具才加数字后缀
     Flow* flow = nullptr;
     if (m_flowEngine->flowCount() > 0) {
         flow = m_flowEngine->flows().first();
@@ -392,6 +392,18 @@ void MainWindow::onToolAdded(const QString& typeName) {
         flow = new Flow(this);
         flow->setName("主流程");
         m_flowEngine->addFlow(flow);
+    }
+    
+    // 空流程首次添加"需要图像"的工具时, 自动在最前面补一个"采集图像"
+    // (对齐CKVision: 流程总是从图像源开始, 避免"检测直线"这类工具因无输入图像用不了)
+    if (flow->toolCount() == 0 && typeName != "CaptureImage"
+        && ITool::needsInputImage(typeName)) {
+        ITool* cap = ToolRegistry::instance().createTool("CaptureImage");
+        if (cap) {
+            cap->setInstanceName(cap->displayName());
+            flow->addTool(cap);
+            m_logPanel->appendLog("已自动添加图像源: 采集图像 (检测/测量工具需要输入图像)");
+        }
     }
     
     // 统计同类型工具数量
@@ -411,6 +423,7 @@ void MainWindow::onToolAdded(const QString& typeName) {
 
     // 追加工具到流程末尾
     flow->addTool(tool);
+    const int newIndex = flow->toolCount() - 1;
     
     // 如果添加的是位置补正，自动在后面添加结束补正
     if (typeName == "PositionCorrection") {
@@ -436,6 +449,11 @@ void MainWindow::onToolAdded(const QString& typeName) {
     m_flowEditor->refresh();
     m_logPanel->appendLog(QString("已添加工具: %1").arg(tool->instanceName()));
     m_statusLabel->setText(QString("已添加: %1").arg(tool->displayName()));
+
+    // 添加后自动打开属性框, 让用户立刻知道怎么配置(双击节点也可再次打开)
+    if (newIndex >= 0 && newIndex < flow->toolCount()) {
+        onEditToolProperties(newIndex);
+    }
 }
 
 void MainWindow::onEditToolProperties(int index) {
