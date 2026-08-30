@@ -12,6 +12,7 @@
 #include <QElapsedTimer>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QSemaphore>
+#include <atomic>
 #include <cstdio>
 
 #ifdef VI_HAS_OPENCV
@@ -80,6 +81,26 @@ public:
     }
 };
 
+// ---- 测试工具D: H-4/H-5 并发写接口 (暴露 protected 写方法给压力线程) ----
+class ToolStress : public ITool {
+    Q_OBJECT
+public:
+    QString typeName() const override { return "ToolStress"; }
+    QString displayName() const override { return "并发压力"; }
+    ToolCategory category() const override { return ToolCategory::System; }
+    PropertyDefList propertyDefs() const override {
+        return { PropertyDef::doubleProp("value", "输出值", 1.0) };
+    }
+    bool execute(ToolContext&) override { return true; }
+    // 压力线程: 模拟工作线程写属性/结果/状态
+    void stressWrite(int seq) {
+        setProperty("value", seq);
+        setResultData("value", seq);
+        setResultData("seq", seq);
+        setStatus(seq % 2 ? ToolStatus::OK : ToolStatus::NG);
+    }
+};
+
 #include "test_engine.moc"
 
 int main(int argc, char* argv[]) {
@@ -92,6 +113,8 @@ int main(int argc, char* argv[]) {
                                      []() { return new ToolChecker(); }});
     reg.registerTool("ToolSlow", {"ToolSlow", "慢工具", ToolCategory::System,
                                   []() { return new ToolSlow(); }});
+    reg.registerTool("ToolStress", {"ToolStress", "并发压力", ToolCategory::System,
+                                    []() { return new ToolStress(); }});
     CHECK(reg.allMetaData().size() >= 3, "工具注册成功");
 
     FlowEngine engine;
@@ -201,6 +224,50 @@ int main(int argc, char* argv[]) {
         CHECK(!engine.flows().contains(f2), "流程已移除");
         // 工具指针已由Flow回收, 此处仅验证不崩溃且计数正确
         CHECK(true, "删除流程(含工具回收)未崩溃");
+    }
+
+    // ---- 测试6: H-4/H-5 属性/结果/状态并发读写 (工作线程写 vs 主线程读) ----
+    std::printf("测试6: 工具状态并发读写压力\n");
+    {
+        auto* stress = static_cast<ToolStress*>(reg.createTool("ToolStress"));
+        stress->setInstanceName("压力工具");
+        std::atomic<bool> stop{false};
+        std::atomic<int> writes{0};
+        // 工作线程: 高频写属性/结果/状态
+        auto writer = QtConcurrent::run([stress, &stop, &writes] {
+            int seq = 0;
+            while (!stop.load(std::memory_order_relaxed)) {
+                stress->stressWrite(seq++);
+                writes.store(seq, std::memory_order_relaxed);
+            }
+        });
+        // 主线程: 高频读属性/结果/状态 (与写并发, 应无崩溃/无半写状态)
+        // 注意: 单次 resultData() 是锁内整表快照副本;
+        // 多个键是分次锁写, 跨键可能读到合法中间态(值5+序4), 属正常语义, 不做跨键断言
+        QThread::msleep(20);   // 先让写线程启动, 避免首读遇空快照误判
+        QElapsedTimer timer;
+        timer.start();
+        int reads = 0;
+        bool snapshotIntact = true;
+        while (timer.elapsed() < 400) {
+            (void)stress->propertyValue("value");
+            const DataMap rd = stress->resultData();      // 锁内快照副本
+            // 单键值必须是有效整数(无半写/撕裂的 QVariant); 空快照容忍
+            if (!rd.isEmpty()) {
+                bool okNum = false;
+                const int v = rd.value("value").toInt(&okNum);
+                if (!okNum || v < 0) { snapshotIntact = false; break; }
+            }
+            (void)stress->status();
+            ++reads;
+            if (reads % 5000 == 0) QThread::msleep(1);
+        }
+        stop.store(true, std::memory_order_relaxed);
+        writer.waitForFinished();
+        CHECK(reads > 0, "主线程高频读取完成");
+        CHECK(snapshotIntact, "结果快照单键值完整(未读半写状态)");
+        CHECK(writes.load() > 0, "工作线程高频写入完成");
+        delete stress;
     }
 
     std::printf("\n%s (失败: %d)\n", g_failures == 0 ? "全部通过" : "存在失败", g_failures);

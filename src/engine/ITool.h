@@ -24,6 +24,8 @@
 #include <QJsonArray>
 #include <memory>
 #include <functional>
+#include <mutex>
+#include <mutex>
 
 namespace VisionInspector {
 
@@ -144,7 +146,10 @@ public:
     bool isActive() const { return m_active; }
     void setActive(bool active) { m_active = active; }
 
-    ToolStatus status() const { return m_status; }
+    ToolStatus status() const {
+        std::lock_guard<std::mutex> lk(m_stateMutex);
+        return m_status;
+    }
 
     // --- Property system ---
 
@@ -187,21 +192,36 @@ public:
     virtual PropertyDefList propertyDefs() const { return {}; }
     virtual QVariant propertyValue(const QString& name) const;
     virtual void setProperty(const QString& name, const QVariant& value);
-    const QVariantMap& properties() const { return m_properties; }
+    // 锁内快照返回副本 (H-5: UI线程读与工作线程写不竞态)
+    QVariantMap properties() const {
+        std::lock_guard<std::mutex> lk(m_stateMutex);
+        return m_properties;
+    }
 
     // --- Execution (core!) ---
 
     virtual bool execute(ToolContext& context) = 0;
-    const DataMap& resultData() const { return m_resultData; }
+    // 锁内快照返回副本 (H-5: 结果键枚举不读半写状态)
+    DataMap resultData() const {
+        std::lock_guard<std::mutex> lk(m_stateMutex);
+        return m_resultData;
+    }
     virtual std::vector<QVariant> overlays() const { return {}; }
 
     // --- 结果判定 (上下限, 执行后由流程引擎调用) ---
 
-    const QList<ResultJudgment>& judgments() const { return m_judgments; }
-    void setJudgments(const QList<ResultJudgment>& j) { m_judgments = j; }
+    QList<ResultJudgment> judgments() const {
+        std::lock_guard<std::mutex> lk(m_stateMutex);
+        return m_judgments;
+    }
+    void setJudgments(const QList<ResultJudgment>& j) {
+        std::lock_guard<std::mutex> lk(m_stateMutex);
+        m_judgments = j;
+    }
 
     /** 是否有启用的判定 */
     bool hasJudgments() const {
+        std::lock_guard<std::mutex> lk(m_stateMutex);
         for (const auto& j : m_judgments)
             if (j.enabled) return true;
         return false;
@@ -219,10 +239,14 @@ public:
     virtual void fromJson(const QJsonObject& json);
 
 public:
-    void setStatus(ToolStatus status) { m_status = status; }
+    void setStatus(ToolStatus status) {
+        std::lock_guard<std::mutex> lk(m_stateMutex);
+        m_status = status;
+    }
 
 protected:
     void setResultData(const QString& key, const QVariant& value) {
+        std::lock_guard<std::mutex> lk(m_stateMutex);
         m_resultData[key] = value;
     }
 
@@ -250,6 +274,9 @@ private:
     ToolStatus m_status = ToolStatus::Idle;
     DataMap m_resultData;
     QList<ResultJudgment> m_judgments;   // 工具内建上下限判定
+    // H-4/H-5 线程安全: 保护 m_properties/m_resultData/m_status/m_judgments
+    // (工作线程 execute 写 vs UI 线程属性对话框/结果枚举读)
+    mutable std::mutex m_stateMutex;
 };
 
 // ============================================================

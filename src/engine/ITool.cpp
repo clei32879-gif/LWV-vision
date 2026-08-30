@@ -7,6 +7,7 @@
 namespace VisionInspector {
 
 QVariant ITool::propertyValue(const QString& name) const {
+    std::lock_guard<std::mutex> lk(m_stateMutex);
     if (m_properties.contains(name))
         return m_properties.value(name);
     for (const auto& def : propertyDefs()) {
@@ -17,6 +18,7 @@ QVariant ITool::propertyValue(const QString& name) const {
 }
 
 void ITool::setProperty(const QString& name, const QVariant& value) {
+    std::lock_guard<std::mutex> lk(m_stateMutex);
     m_properties[name] = value;
 }
 
@@ -32,14 +34,18 @@ QJsonObject ITool::toJson() const {
             propsJson[def.name] = QJsonValue::fromVariant(def.defaultValue);
         }
     }
-    for (auto it = m_properties.begin(); it != m_properties.end(); ++it) {
-        propsJson[it.key()] = QJsonValue::fromVariant(it.value());
+    {
+        std::lock_guard<std::mutex> lk(m_stateMutex);
+        for (auto it = m_properties.begin(); it != m_properties.end(); ++it) {
+            propsJson[it.key()] = QJsonValue::fromVariant(it.value());
+        }
     }
     json["properties"] = propsJson;
 
     // 结果判定
     QJsonArray judgeArray;
-    for (const auto& j : m_judgments) {
+    QList<ResultJudgment> judges = judgments();
+    for (const auto& j : judges) {
         judgeArray.append(QJsonObject{
             {"key", j.resultKey}, {"enabled", j.enabled},
             {"lower", j.lower}, {"upper", j.upper}});
@@ -53,10 +59,13 @@ void ITool::fromJson(const QJsonObject& json) {
     m_comment = json.value("comment").toString();
     m_active = json.value("active").toBool(true);
     QJsonObject propsJson = json.value("properties").toObject();
-    for (auto it = propsJson.begin(); it != propsJson.end(); ++it) {
-        m_properties[it.key()] = it.value().toVariant();
+    {
+        std::lock_guard<std::mutex> lk(m_stateMutex);
+        for (auto it = propsJson.begin(); it != propsJson.end(); ++it) {
+            m_properties[it.key()] = it.value().toVariant();
+        }
     }
-    m_judgments.clear();
+    QList<ResultJudgment> jl;
     const QJsonArray judgeArray = json.value("judgments").toArray();
     for (const auto& v : judgeArray) {
         const QJsonObject o = v.toObject();
@@ -66,25 +75,28 @@ void ITool::fromJson(const QJsonObject& json) {
         j.lower = o.value("lower").toDouble(-1e18);
         j.upper = o.value("upper").toDouble(1e18);
         if (!j.resultKey.isEmpty())
-            m_judgments.append(j);
+            jl.append(j);
     }
+    setJudgments(jl);
 }
 
 bool ITool::evaluateJudgments() {
     QStringList failed;
-    for (const auto& j : m_judgments) {
+    QList<ResultJudgment> judges = judgments();
+    for (const auto& j : judges) {
         if (!j.enabled) continue;
-        if (!m_resultData.contains(j.resultKey)) {
+        const QVariant rv = resultData().value(j.resultKey);
+        if (!rv.isValid()) {
             failed << j.resultKey;
             continue;
         }
         bool ok = false;
-        const double v = m_resultData.value(j.resultKey).toDouble(&ok);
+        const double v = rv.toDouble(&ok);
         if (!ok || v < j.lower || v > j.upper)
             failed << j.resultKey;
     }
     if (failed.isEmpty()) return true;
-    m_resultData["judgeFailedKeys"] = failed.join(",");
+    setResultData("judgeFailedKeys", failed.join(","));
     return false;
 }
 
