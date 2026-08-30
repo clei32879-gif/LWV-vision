@@ -1120,6 +1120,49 @@ int main(int argc, char* argv[]) {
         delete ll;
     }
 
+    // ---- 18. 延伸点/旋转点: 几何点运算 (§2.4 补齐) ----
+    {
+        ToolContext ctx;
+
+        // 延伸点: 从(100,100)沿90°(竖直向下, 图像Y轴向下)延伸50 → (100,150)
+        ITool* ep = reg.createTool("ExtendPoint");
+        ep->setProperty("startX", "100");
+        ep->setProperty("startY", "100");
+        ep->setProperty("angleDeg", "90");
+        ep->setProperty("length", "50");
+        CHECK(ep->execute(ctx), "延伸点: 执行成功");
+        CHECK(std::fabs(ep->resultData().value("endX").toDouble() - 100.0) < 1e-9, "延伸点: endX=100");
+        CHECK(std::fabs(ep->resultData().value("endY").toDouble() - 150.0) < 1e-9, "延伸点: endY=150");
+        // 沿0°(水平右)延伸25 → (125,100)
+        ep->setProperty("angleDeg", "0");
+        ep->setProperty("length", "25");
+        CHECK(ep->execute(ctx), "延伸点: 水平执行成功");
+        CHECK(std::fabs(ep->resultData().value("endX").toDouble() - 125.0) < 1e-9, "延伸点: 水平endX=125");
+        CHECK(std::fabs(ep->resultData().value("endY").toDouble() - 100.0) < 1e-9, "延伸点: 水平endY=100");
+        delete ep;
+
+        // 旋转点: (10,0)绕原点(0,0)旋转90° → (0,10)
+        ITool* rp = reg.createTool("RotatePoint");
+        rp->setProperty("pointX", "10");
+        rp->setProperty("pointY", "0");
+        rp->setProperty("centerX", "0");
+        rp->setProperty("centerY", "0");
+        rp->setProperty("angleDeg", "90");
+        CHECK(rp->execute(ctx), "旋转点: 执行成功");
+        CHECK(std::fabs(rp->resultData().value("resultX").toDouble() - 0.0) < 1e-9, "旋转点: resultX=0");
+        CHECK(std::fabs(rp->resultData().value("resultY").toDouble() - 10.0) < 1e-9, "旋转点: resultY=10");
+        // 绕中心(100,100)旋转(100,100) → 保持不变
+        rp->setProperty("pointX", "100");
+        rp->setProperty("pointY", "100");
+        rp->setProperty("centerX", "100");
+        rp->setProperty("centerY", "100");
+        rp->setProperty("angleDeg", "45");
+        CHECK(rp->execute(ctx), "旋转点: 中心点执行成功");
+        CHECK(std::fabs(rp->resultData().value("resultX").toDouble() - 100.0) < 1e-9, "旋转点: 中心点resultX=100");
+        CHECK(std::fabs(rp->resultData().value("resultY").toDouble() - 100.0) < 1e-9, "旋转点: 中心点resultY=100");
+        delete rp;
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);
