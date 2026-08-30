@@ -69,6 +69,15 @@ int main(int argc, char* argv[]) {
             if (!engine->classify(img, results, &err)) continue;
             const QString top = results.isEmpty() ? QString() : results[0].first;
             ++total;
+            static bool firstPrinted = false;
+            if (!firstPrinted) {
+                firstPrinted = true;
+                std::printf("样例(%s): top3 =", cls.toLocal8Bit().constData());
+                for (int i = 0; i < results.size() && i < 3; ++i)
+                    std::printf(" %s(%.3f)", results[i].first.toUtf8().constData(),
+                                results[i].second);
+                std::printf("\n");
+            }
             auto& pc = perClass[cls];
             pc.second++;
             if (top == cls) { ++correct; ++pc.first; }

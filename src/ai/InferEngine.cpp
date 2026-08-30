@@ -12,6 +12,8 @@
 #include <cmath>
 #include <algorithm>
 #include <QJsonDocument>
+#include <QFileInfo>
+#include <QFile>
 #include <QJsonObject>
 
 namespace VisionInspector {
@@ -36,15 +38,19 @@ bool InferEngine::loadModel(const QString& onnxPath, QString* err) {
         m_impl->path = onnxPath;
         // 解析输入尺寸 (N,C,H,W)
         Ort::AllocatorWithDefaultOptions alloc;
-        auto shape = m_impl->session->GetInputTypeInfo(0)
+        const auto inShape = m_impl->session->GetInputTypeInfo(0)
                          .GetTensorTypeAndShapeInfo().GetShape();
-        if (shape.size() >= 4) {
-            m_impl->inH = (int)shape[2];
-            m_impl->inW = (int)shape[3];
-            m_kind = OutputKind::Detection;
-        } else if (shape.size() == 2 && shape[1] < 1000) {
-            m_kind = OutputKind::Classification;
+        if (inShape.size() >= 4) {
+            m_impl->inH = (int)inShape[2];
+            m_impl->inW = (int)inShape[3];
         }
+        // 输出类型决定模型种类: [1,4+nc,anchors]=检测; [1,nc]=分类
+        const auto outShape = m_impl->session->GetOutputTypeInfo(0)
+                         .GetTensorTypeAndShapeInfo().GetShape();
+        if (outShape.size() >= 3)
+            m_kind = OutputKind::Detection;
+        else if (outShape.size() <= 2)
+            m_kind = OutputKind::Classification;
         // 类别名: ultralytics导出的metadata "names" (JSON dict)
         m_impl->classNames.clear();
         try {
@@ -59,6 +65,18 @@ bool InferEngine::loadModel(const QString& onnxPath, QString* err) {
                     m_impl->classNames.insert(it.key().toInt(), it.value().toString());
             }
         } catch (...) {}
+        // 元数据缺names时: 读模型旁classes.txt (索引=按名称排序, ultralytics分类同规则)
+        if (m_impl->classNames.isEmpty()) {
+            const QString clsFile = QFileInfo(onnxPath).absolutePath() + "/classes.txt";
+            QFile f(clsFile);
+            if (f.open(QIODevice::ReadOnly)) {
+                int idx = 0;
+                while (!f.atEnd()) {
+                    const QString line = QString::fromUtf8(f.readLine()).trimmed();
+                    if (!line.isEmpty()) m_impl->classNames.insert(idx++, line);
+                }
+            }
+        }
         if (err) err->clear();
         return true;
     } catch (const Ort::Exception& e) {
@@ -221,20 +239,61 @@ bool InferEngine::run(const cv::Mat& bgr, std::vector<float>& output,
 bool InferEngine::classify(const cv::Mat& bgr, QList<QPair<QString, float>>& results,
                            QString* err) {
     results.clear();
+    if (!isLoaded()) { if (err) *err = "模型未加载"; return false; }
+
+    // 与ultralytics一致的分类预处理: 短边等比缩放到输入尺寸 -> 中心裁剪 -> RGB/255
+    const int T = m_impl->inH;   // 方形输入 (224)
+    const double sc = (double)T / std::min(bgr.cols, bgr.rows);
+    const int nw = std::max(T, (int)std::round(bgr.cols * sc));
+    const int nh = std::max(T, (int)std::round(bgr.rows * sc));
+    cv::Mat resized;
+    cv::resize(bgr, resized, cv::Size(nw, nh), 0, 0,
+               sc < 1.0 ? cv::INTER_AREA : cv::INTER_LINEAR);   // 下采样抗锯齿
+    const int cropX = (nw - T) / 2, cropY = (nh - T) / 2;
+    cv::Mat rgb;
+    cv::cvtColor(resized(cv::Rect(cropX, cropY, T, T)), rgb, cv::COLOR_BGR2RGB);
+
+    // HWC->CHW /255
+    std::vector<float> tensor(3 * T * T);
+    for (int c = 0; c < 3; ++c)
+        for (int y = 0; y < T; ++y) {
+            const uchar* row = rgb.ptr<uchar>(y);
+            for (int x = 0; x < T; ++x)
+                tensor[c * T * T + y * T + x] = row[x * 3 + c] / 255.0f;
+        }
+
     std::vector<float> out;
-    std::vector<int64_t> outShape;
-    if (!run(bgr, out, outShape, err)) return false;
+    try {
+        Ort::MemoryInfo mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+        std::vector<int64_t> inShape{1, 3, (int64_t)T, (int64_t)T};
+        Ort::Value inTensor = Ort::Value::CreateTensor<float>(
+            mem, tensor.data(), tensor.size(), inShape.data(), inShape.size());
+        const char* inNames[] = {m_impl->session->GetInputNameAllocated(0, Ort::AllocatorWithDefaultOptions()).get()};
+        const char* outNames[] = {m_impl->session->GetOutputNameAllocated(0, Ort::AllocatorWithDefaultOptions()).get()};
+        auto outs = m_impl->session->Run(Ort::RunOptions{nullptr}, inNames, &inTensor, 1, outNames, 1);
+        const size_t n = outs[0].GetTensorTypeAndShapeInfo().GetElementCount();
+        const float* d = outs[0].GetTensorData<float>();
+        out.assign(d, d + n);
+    } catch (const Ort::Exception& e) {
+        if (err) *err = QString::fromUtf8(e.what());
+        return false;
+    }
     if (out.empty()) { if (err) *err = "分类输出为空"; return false; }
 
-    // softmax
-    double maxV = *std::max_element(out.begin(), out.end());
-    double sum = 0;
-    for (auto& v : out) { v = std::exp(v - maxV); sum += v; }
+    // softmax — 但ultralytics分类导出的输出已是概率(和≈1), 二次softmax会压平分布
+    double sumRaw = 0;
+    for (float v : out) sumRaw += v;
+    if (std::fabs(sumRaw - 1.0) > 0.01) {
+        double maxV = *std::max_element(out.begin(), out.end());
+        double sum = 0;
+        for (auto& v : out) { v = std::exp(v - maxV); sum += v; }
+        for (auto& v : out) v = (float)(v / sum);
+    }
+    // 填充结果 (类别名从模型元数据/classes.txt)
     for (size_t i = 0; i < out.size(); ++i) {
-        const float p = (float)(out[i] / sum);
         const QString name = m_impl->classNames.value((int)i,
                                                       QString("class%1").arg(i));
-        results.append({name, p});
+        results.append({name, out[i]});
     }
     std::sort(results.begin(), results.end(),
               [](const QPair<QString, float>& a, const QPair<QString, float>& b) {

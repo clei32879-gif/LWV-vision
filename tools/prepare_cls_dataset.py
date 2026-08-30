@@ -73,7 +73,11 @@ def main():
         n_cls = len(list((out_dir / "train" / cls).glob("*.jpg"))) if (out_dir / "train" / cls).exists() else 0
         print(f"  {cls}: 训练{n_cls}张")
 
+    # 类别表 (索引=按名称排序, 与ultralytics分类的类别分配一致)
+    classes_file = out_dir / "classes.txt"
+    classes_file.write_text("\n".join(classes) + "\n", encoding="utf-8")
     print(f"完成: 训练{total_train}张, 验证{total_val}张 -> {out_dir}")
+    print(f"类别表: {classes_file}")
     return 0
 
 
