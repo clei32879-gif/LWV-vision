@@ -101,6 +101,22 @@ public:
     }
 };
 
+// ---- 测试辅助: 执行计数器 (验证循环体实际执行次数) ----
+class ToolCounter : public ITool {
+    Q_OBJECT
+public:
+    QString typeName() const override { return "ToolCounter"; }
+    QString displayName() const override { return "计数器"; }
+    ToolCategory category() const override { return ToolCategory::Logic; }
+    PropertyDefList propertyDefs() const override { return {}; }
+    bool execute(ToolContext&) override {
+        ++m_count;
+        setStatus(ToolStatus::OK);
+        return true;
+    }
+    int m_count = 0;
+};
+
 #include "test_engine.moc"
 
 int main(int argc, char* argv[]) {
@@ -115,6 +131,8 @@ int main(int argc, char* argv[]) {
                                   []() { return new ToolSlow(); }});
     reg.registerTool("ToolStress", {"ToolStress", "并发压力", ToolCategory::System,
                                     []() { return new ToolStress(); }});
+    reg.registerTool("ToolCounter", {"ToolCounter", "计数器", ToolCategory::Logic,
+                                     []() { return new ToolCounter(); }});
     CHECK(reg.allMetaData().size() >= 3, "工具注册成功");
 
     FlowEngine engine;
@@ -268,6 +286,109 @@ int main(int argc, char* argv[]) {
         CHECK(snapshotIntact, "结果快照单键值完整(未读半写状态)");
         CHECK(writes.load() > 0, "工作线程高频写入完成");
         delete stress;
+    }
+
+    // ---- 测试7: 循环回跳 (M-23 修复): Loop/LoopEnd 有限循环 ----
+    std::printf("测试7: 循环回跳 Loop/LoopEnd\n");
+    {
+        Flow* lf = new Flow(&engine);
+        lf->setName("循环流程");
+        ITool* loop = reg.createTool("Loop");
+        loop->setInstanceName("循环");
+        loop->setProperty("loopMode", 0);       // 递增 A→B-1
+        loop->setProperty("startValue", 1);
+        loop->setProperty("endValue", 4);
+        auto* cnt = static_cast<ToolCounter*>(reg.createTool("ToolCounter"));
+        cnt->setInstanceName("计数");
+        ITool* lend = reg.createTool("LoopEnd");
+        lend->setInstanceName("循环结束");
+        lf->addTool(loop);
+        lf->addTool(cnt);
+        lf->addTool(lend);
+        engine.addFlow(lf);
+
+        ToolContext ctx7;
+        const bool ok7 = engine.executeOnce(lf, ctx7);
+        CHECK(ok7, "循环流程执行返回OK");
+        CHECK(cnt->m_count == 3, QString("循环体执行3次(实际%1)")
+                                    .arg(cnt->m_count).toLocal8Bit().constData());
+        CHECK(ctx7.getInt("loopIndex", -1) == 3, "循环索引最终=3 (从1到B-1=3)");
+        CHECK(ctx7.getBool("__loop_active", true) == false, "循环结束后活动标志清除");
+
+        engine.removeFlow(lf);
+        lf->setParent(nullptr);
+        lf->deleteLater();
+        QCoreApplication::processEvents();
+    }
+
+    // ---- 测试8: 停止循环 (P0-9 补齐): 无限循环 + 数据条件停止 ----
+    std::printf("测试8: 停止循环 StopLoop (数据满足)\n");
+    {
+        Flow* sf = new Flow(&engine);
+        sf->setName("停止循环流程");
+        ITool* loop = reg.createTool("Loop");
+        loop->setInstanceName("循环");
+        loop->setProperty("loopMode", 2);       // 无限
+        ITool* stop = reg.createTool("StopLoop");
+        stop->setInstanceName("停止");
+        stop->setProperty("stopWhen", 2);       // 数据满足
+        stop->setProperty("sourceDataKey", "loopIndex");
+        stop->setProperty("expression", ">= 3");
+        auto* cnt = static_cast<ToolCounter*>(reg.createTool("ToolCounter"));
+        cnt->setInstanceName("计数");
+        ITool* lend = reg.createTool("LoopEnd");
+        lend->setInstanceName("循环结束");
+        sf->addTool(loop);
+        sf->addTool(stop);
+        sf->addTool(cnt);
+        sf->addTool(lend);
+        engine.addFlow(sf);
+
+        ToolContext ctx8;
+        const bool ok8 = engine.executeOnce(sf, ctx8);
+        CHECK(ok8, "停止循环流程执行返回OK");
+        CHECK(cnt->m_count == 2, QString("StopLoop(loopIndex>=3)触发后跳过计数(实际%1)")
+                                    .arg(cnt->m_count).toLocal8Bit().constData());
+        CHECK(ctx8.getBool("__loop_active", true) == false, "停止后活动标志清除");
+
+        engine.removeFlow(sf);
+        sf->setParent(nullptr);
+        sf->deleteLater();
+        QCoreApplication::processEvents();
+    }
+
+    // ---- 测试9: 停止循环兜底路径: 无条件停止 + 引擎未记录循环结束索引 ----
+    std::printf("测试9: 停止循环 StopLoop (无条件/兜底)\n");
+    {
+        Flow* uf = new Flow(&engine);
+        uf->setName("无条件停止流程");
+        ITool* loop = reg.createTool("Loop");
+        loop->setInstanceName("循环");
+        loop->setProperty("loopMode", 2);       // 无限
+        ITool* stop = reg.createTool("StopLoop");
+        stop->setInstanceName("停止");
+        stop->setProperty("stopWhen", 0);       // 无条件
+        auto* cnt = static_cast<ToolCounter*>(reg.createTool("ToolCounter"));
+        cnt->setInstanceName("计数");
+        ITool* lend = reg.createTool("LoopEnd");
+        lend->setInstanceName("循环结束");
+        uf->addTool(loop);
+        uf->addTool(stop);
+        uf->addTool(cnt);
+        uf->addTool(lend);
+        engine.addFlow(uf);
+
+        ToolContext ctx9;
+        const bool ok9 = engine.executeOnce(uf, ctx9);
+        CHECK(ok9, "无条件停止流程执行返回OK");
+        CHECK(cnt->m_count == 1, QString("无条件停止后循环体仅执行1次(实际%1)")
+                                    .arg(cnt->m_count).toLocal8Bit().constData());
+        CHECK(ctx9.getBool("__loop_active", true) == false, "兜底路径循环状态已清除");
+
+        engine.removeFlow(uf);
+        uf->setParent(nullptr);
+        uf->deleteLater();
+        QCoreApplication::processEvents();
     }
 
     std::printf("\n%s (失败: %d)\n", g_failures == 0 ? "全部通过" : "存在失败", g_failures);

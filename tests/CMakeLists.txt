@@ -17,12 +17,19 @@ add_test(NAME modbus_tcp COMMAND test_modbus)
 
 add_executable(test_engine test_engine.cpp)
 target_link_libraries(test_engine PRIVATE
+    VICore
     VIEngine
+    VIHAL
     VIUtils
     ${OpenCV_LIBS}
     Qt6::Core
     Qt6::Concurrent
 )
+foreach(_plugin ${VI_ALL_PLUGINS})
+    if(TARGET ${_plugin})
+        target_link_libraries(test_engine PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${_plugin}>)
+    endif()
+endforeach()
 add_test(NAME flow_engine COMMAND test_engine)
 
 # 检测结果统计/记录/CSV导出回归

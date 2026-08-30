@@ -241,6 +241,12 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
     context.setGlobalVariables(m_globalVars);
     context.setRunIndex(m_runIndex.fetch_add(1) + 1);
 
+    // 重置流程控制状态 (防上一轮残留, 保证每轮干净)
+    context.setData("__loop_active", false);
+    context.setData("__loop_break", false);
+    context.setData("__flow_ng", false);
+    context.setMessage(0);
+
     bool allOk = true;
 
     VI_LOG_INFO(QString("开始执行流程: %1 (工具数: %2)")
@@ -251,8 +257,17 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
     const QList<ITool*> tools = flow->snapshotTools();
     QList<QPair<QString, bool>> toolStates;   // 各工具执行状态 (供统计/记录)
 
-    for (int i = 0; i < tools.size(); ++i) {
+    // 执行索引 (支持消息驱动的跳转: 循环回跳 message==1 / 跳转 message==3)
+    // 由工具写入 context 的 "__engine_index" 由引擎在此处回写; 工具读它得到自己的流程序号
+    int i = 0;
+    const int maxSteps = 200000;   // 防死循环保护 (正常流程远达不到)
+    int steps = 0;
+
+    while (i >= 0 && i < tools.size() && steps++ < maxSteps) {
         ITool* tool = tools[i];
+
+        // 回写当前索引供工具(Loop/LoopEnd等)感知自身位置
+        context.setData("__engine_index", i);
 
         // 中止检查 (stopRunning后当前工具执行完即退出)
         if (m_abort) {
@@ -264,6 +279,7 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
         // 跳过禁用的工具
         if (!tool->isActive()) {
             emit toolStatusChanged(flow, i, ToolStatus::Disabled);
+            ++i;
             continue;
         }
 
@@ -339,8 +355,38 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
 
         if (!success) {
             allOk = false;
+            context.setData("__flow_ng", true);   // 供 停止循环(流程NG条件) 使用
             // 与CKVision默认一致: NG不中断, 继续执行后续工具
         }
+
+        // 消息驱动的跳转 (M-23 修复): 消费工具写入的消息, 决定下一执行索引
+        //   消息值约定: 0=无 1=循环回跳(到 __loop_start) 2=停止循环(到 __loop_end 之后) 3=无条件跳转(__next_index)
+        const int msg = context.message();
+        if (msg != 0) context.setMessage(0);   // 消费消息, 避免泄漏到后续工具
+        int next = -1;
+        if (msg == 1) {
+            next = context.getInt("__loop_start", -1);
+        } else if (msg == 2) {
+            // 停止循环: 跳到循环结束工具之后 (e+1==size 时即结束本轮)
+            const int e = context.getInt("__loop_end", -1);
+            if (e >= 0 && e < tools.size()) {
+                i = e + 1;
+                continue;
+            }
+            // 未知结束索引 (循环体首次迭代即触发): 顺序继续, 由 LoopEnd 兜底清除循环状态
+        } else if (msg == 3) {
+            next = context.getInt("__next_index", -1);
+        }
+        if (next >= 0 && next < tools.size()) {
+            i = next;
+            continue;
+        }
+        ++i;
+    }
+
+    if (steps >= maxSteps) {
+        VI_LOG_ERROR("流程执行步骤超过保护上限, 疑似死循环, 已强制结束");
+        allOk = false;
     }
 
     // 记录末帧图与叠加层
