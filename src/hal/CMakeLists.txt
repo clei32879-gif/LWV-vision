@@ -15,6 +15,11 @@ target_sources(VIHAL PRIVATE
 
     # PLC driver interface
     IPLCDriver.h
+    IPLCDriver.cpp
+
+    # 信捷 XD Modbus PLC 驱动 (IPLCDriver 实现)
+    ModbusPLCDriver.h
+    ModbusPLCDriver.cpp
 
     # Servo driver interface
     IServoDriver.h

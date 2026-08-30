@@ -272,7 +272,8 @@ void ModbusTcpSlave::handlePdu(QTcpSocket* client, const QByteArray& pdu) {
                 break;
             }
             for (int i = 0; i < count; ++i) {
-                const bool bit = (quint8(pdu[5 + i / 8]) >> (i % 8)) & 1;
+                // 数据从 pdu[6] 开始 (pdu[5]=byteCount)
+                const bool bit = (quint8(pdu[6 + i / 8]) >> (i % 8)) & 1;
                 m_coils[addr + i] = bit;
                 if (addr + i < m_discrete.size()) m_discrete[addr + i] = bit;
             }

@@ -14,6 +14,7 @@
 #include "../../src/hal/ModbusRtuMaster.h"
 #include "../../src/hal/ModbusRtuSlave.h"
 #include "../../src/hal/ModbusIoDriver.h"
+#include "../../src/hal/ModbusPLCDriver.h"
 
 #include <QCoreApplication>
 #include <QTimer>
@@ -198,6 +199,54 @@ int main(int argc, char* argv[]) {
             // 脉冲输出: 同步置ON→延时→复位
             CHECK(io.pulseOutput(0, 80), "IO脉冲输出 ch0 80ms");
             CHECK(slave.coil(50) == false, "脉冲结束后M50自动复位");
+        }
+
+        std::printf("TCP测试8: ModbusPLCDriver 业务契约 (信捷XD5筛选机)\n");
+        {
+            ModbusPLCDriver plc;
+            PLCConnectionParams p;
+            p.commType = PLCCommType::ModbusTCP;
+            p.ipAddress = "127.0.0.1";
+            p.port = port;
+            p.slaveId = 1;
+            CHECK(plc.connect(p), "PLC驱动连接(TCP)");
+            CHECK(plc.isConnected(), "PLC驱动已连接");
+            CHECK(plc.driverName().contains("XD"), "驱动名含XD");
+
+            // 契约: D6命令=41094, HD170 OK产量=41258, HD0 手动速度=41088
+            CHECK(plc.sendCommand(1), "写 D6=1(启动命令)");
+            QThread::msleep(30);
+            CHECK(slave.holding(41094) == 1, "从站D6==1");
+
+            CHECK(plc.setManualSpeed(800), "写 HD0=800 手动速度");
+            QThread::msleep(30);
+            CHECK(slave.holding(41088) == 800, "从站HD0==800");
+
+            // 产量统计写入+回读 (HD170=25)
+            CHECK(plc.writeHoldingRegisters(41258, QVector<quint16>{25}), "写 HD170=25");
+            QThread::msleep(30);
+            CHECK(plc.readOKCount() == 25, "readOKCount()==25");
+            QVector<quint16> hr;
+            CHECK(plc.readHoldingRegisters(41258, 1, hr) && hr.size() == 1 && hr[0] == 25,
+                  "读保持寄存器 HD170==25");
+
+            // 伺服正转线圈 M50
+            CHECK(plc.servoForward(true), "写 M50=ON 伺服正转");
+            QThread::msleep(30);
+            CHECK(slave.coil(50) == true, "从站M50==ON");
+            CHECK(plc.servoForward(false), "写 M50=OFF");
+            QThread::msleep(30);
+            CHECK(slave.coil(50) == false, "从站M50==OFF");
+
+            // OK吹气: M106 置ON→复位
+            CHECK(plc.blowOK(40), "blowOK(40ms)");
+            QThread::msleep(30);
+            CHECK(slave.coil(106) == false, "吹气结束后M106复位");
+
+            // 手动拍照 M121 (相机1)
+            CHECK(plc.manualShot(1), "手动拍照 M121=ON");
+            QThread::msleep(30);
+            CHECK(slave.coil(121) == true, "从站M121==ON");
         }
 
         doneTcp.release();

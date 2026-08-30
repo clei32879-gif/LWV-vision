@@ -1,6 +1,6 @@
 /**
  * @file ModbusIoDriver.cpp
- * @brief Modbus IO 驱动实现 — 经 PLC Modbus 通道替代独立IO卡
+ * @brief Modbus IO 驱动实现
  */
 
 #include "ModbusIoDriver.h"
@@ -18,81 +18,82 @@ ModbusIoDriver::~ModbusIoDriver() {
     disconnect();
 }
 
-void ModbusIoDriver::releaseMaster() {
-    // 连接池由 ModbusTcpMaster/ModbusRtuMaster 静态管理, 这里只置空指针
-    m_tcp = nullptr;
-    m_rtu = nullptr;
-}
-
 bool ModbusIoDriver::parseParams(const QString& params, QString* err) {
-    // 形如 "transport=tcp;host=...;port=502;slaveId=1;outBase=0;coilOut=0;..."
     const QStringList parts = params.split(';', Qt::SkipEmptyParts);
-    for (const QString& p : parts) {
-        const int eq = p.indexOf('=');
+    for (const QString& part : parts) {
+        const int eq = part.indexOf('=');
         if (eq < 0) continue;
-        const QString key = p.left(eq).trimmed();
-        const QString val = p.mid(eq + 1).trimmed();
-        if (key == "transport") m_p.useTcp = (val.compare("tcp", Qt::CaseInsensitive) == 0);
-        else if (key == "host") m_p.host = val;
-        else if (key == "port") m_p.port = quint16(val.toUShort());
-        else if (key == "serialPort" || key == "portname") m_p.serialPort = val;
-        else if (key == "baud" || key == "baudrate") m_p.baudRate = val.toInt();
-        else if (key == "slaveId" || key == "slaveid") m_p.slaveId = val.toInt();
-        else if (key == "coilOut" || key == "coilout") m_p.coilOut = (val.toInt() != 0);
-        else if (key == "outBase" || key == "outbase") m_p.outBase = val.toInt();
-        else if (key == "inBase" || key == "inbase") m_p.inBase = val.toInt();
-        else if (key == "readInputAsCoil") m_p.readInputAsCoil = (val.toInt() != 0);
-        else if (key == "timeoutMs") m_p.timeoutMs = val.toInt();
-        else if (key == "inputCount") m_p.inputCount = val.toInt();
-        else if (key == "outputCount") m_p.outputCount = val.toInt();
-        else if (key == "parity") { /* 忽略, 默认无校验 */ }
+        const QString key = part.left(eq).trimmed();
+        const QString val = part.mid(eq + 1).trimmed();
+
+        if (key == "transport")            m_useTcp = (val.compare("tcp", Qt::CaseInsensitive) == 0);
+        else if (key == "host")            m_host = val;
+        else if (key == "port")            m_port = quint16(val.toUShort());
+        else if (key == "serialPort")      m_serialPort = val;
+        else if (key == "baudRate" || key == "baud") m_baudRate = val.toInt();
+        else if (key == "slaveId")         m_slaveId = val.toInt();
+        else if (key == "useCoil")         m_useCoil = (val.toInt() != 0);
+        else if (key == "outBase")         m_outBase = val.toInt();
+        else if (key == "inBase")          m_inBase = val.toInt();
+        else if (key == "inputCount")      m_inputCount = val.toInt();
+        else if (key == "outputCount")     m_outputCount = val.toInt();
     }
-    if (m_p.inputCount < 0 || m_p.inputCount > 64) { if (err) *err = "inputCount越界"; return false; }
-    if (m_p.outputCount < 0 || m_p.outputCount > 64) { if (err) *err = "outputCount越界"; return false; }
+    if (m_inputCount < 0 || m_inputCount > 64) { if (err) *err = "inputCount越界(0-64)"; return false; }
+    if (m_outputCount < 0 || m_outputCount > 64) { if (err) *err = "outputCount越界(0-64)"; return false; }
     return true;
 }
 
 bool ModbusIoDriver::connect(const QString& params) {
-    QMutexLocker locker(&m_mutex);
-    disconnectInternal();
+    disconnect();
     QString err;
     if (!parseParams(params, &err)) {
-        emit errorOccurred("IO参数错误: " + err);
+        emit errorOccurred(QStringLiteral("IO参数错误: ") + err);
         return false;
     }
 
-    if (m_p.useTcp) {
-        m_tcp = ModbusTcpMaster::acquire(m_p.host, m_p.port, &err);
+    if (m_useTcp) {
+        m_tcp = ModbusTcpMaster::acquire(m_host, m_port, &err);
         if (!m_tcp) {
-            emit errorOccurred("Modbus TCP 连接失败: " + err);
+            emit errorOccurred(QStringLiteral("Modbus TCP 连接失败: ") + err);
             return false;
         }
-        // 无独立TCP连接状态, 以后续读写为准
-        m_connected = true;
+        // 探测一次确保可达 (与 ModbusPLCDriver 一致), 避免"假已连接"
+        QString probeErr;
+        bool probeOk = false;
+        if (m_useCoil) {
+            const QVector<bool> bits = m_tcp->readBits(1, m_outBase, 1, m_slaveId, &probeErr);
+            probeOk = (bits.size() == 1);
+        } else {
+            const QVector<quint16> regs = m_tcp->readRegisters(3, m_outBase, 1, m_slaveId, &probeErr);
+            probeOk = (regs.size() == 1);
+        }
+        if (!probeOk) {
+            m_tcp = nullptr;
+            emit errorOccurred(QStringLiteral("IO目标无响应: ") + probeErr);
+            return false;
+        }
     } else {
         ModbusRtuMaster::SerialParams sp;
-        sp.portName = m_p.serialPort;
-        sp.baudRate = m_p.baudRate;
-        sp.timeoutMs = m_p.timeoutMs;
+        sp.portName = m_serialPort;
+        sp.baudRate = m_baudRate;
+        sp.timeoutMs = 500;
         m_rtu = ModbusRtuMaster::acquire(sp, &err);
         if (!m_rtu || !m_rtu->ensureConnected(&err)) {
             m_rtu = nullptr;
-            emit errorOccurred("Modbus RTU 连接失败: " + err);
+            emit errorOccurred(QStringLiteral("Modbus RTU 连接失败: ") + err);
             return false;
         }
-        m_connected = true;
     }
-    VI_LOG_INFO("ModbusIO 已连接: " + driverName());
+    m_connected = true;
+    VI_LOG_INFO(QStringLiteral("ModbusIO 已连接: %1 (slaveId=%2, outBase=%3)")
+                .arg(m_useTcp ? (m_host + ":" + QString::number(m_port)) : m_serialPort)
+                .arg(m_slaveId).arg(m_outBase));
     return true;
 }
 
 void ModbusIoDriver::disconnect() {
-    QMutexLocker locker(&m_mutex);
-    disconnectInternal();
-}
-
-void ModbusIoDriver::disconnectInternal() {
-    releaseMaster();
+    m_tcp = nullptr;
+    m_rtu = nullptr;
     m_connected = false;
 }
 
@@ -101,18 +102,14 @@ bool ModbusIoDriver::isConnected() const {
 }
 
 bool ModbusIoDriver::readInput(int channel, bool& value) {
-    if (!m_connected || channel < 0 || channel >= m_p.inputCount) return false;
+    if (!m_connected || channel < 0 || channel >= m_inputCount) return false;
     QString err;
+    const int addr = m_inBase + channel;
     QVector<bool> bits;
-    if (m_p.readInputAsCoil) {
-        if (m_tcp) bits = m_tcp->readBits(1, m_p.inBase + channel, 1, m_p.slaveId, &err);
-        else if (m_rtu) bits = m_rtu->readBits(1, m_p.inBase + channel, 1, m_p.slaveId, &err);
-    } else {
-        if (m_tcp) bits = m_tcp->readBits(2, m_p.inBase + channel, 1, m_p.slaveId, &err);
-        else if (m_rtu) bits = m_rtu->readBits(2, m_p.inBase + channel, 1, m_p.slaveId, &err);
-    }
+    if (m_tcp)      bits = m_tcp->readBits(1, addr, 1, m_slaveId, &err);
+    else if (m_rtu) bits = m_rtu->readBits(1, addr, 1, m_slaveId, &err);
     if (bits.size() != 1) {
-        emit errorOccurred("IO读输入失败: " + err);
+        emit errorOccurred(QStringLiteral("读输入失败: ") + err);
         return false;
     }
     value = bits[0];
@@ -122,16 +119,12 @@ bool ModbusIoDriver::readInput(int channel, bool& value) {
 bool ModbusIoDriver::readAllInputs(QVector<bool>& values) {
     if (!m_connected) return false;
     QString err;
+    const int addr = m_inBase;
     QVector<bool> bits;
-    if (m_p.readInputAsCoil) {
-        if (m_tcp) bits = m_tcp->readBits(1, m_p.inBase, m_p.inputCount, m_p.slaveId, &err);
-        else if (m_rtu) bits = m_rtu->readBits(1, m_p.inBase, m_p.inputCount, m_p.slaveId, &err);
-    } else {
-        if (m_tcp) bits = m_tcp->readBits(2, m_p.inBase, m_p.inputCount, m_p.slaveId, &err);
-        else if (m_rtu) bits = m_rtu->readBits(2, m_p.inBase, m_p.inputCount, m_p.slaveId, &err);
-    }
-    if (bits.size() != m_p.inputCount) {
-        emit errorOccurred("IO读全部输入失败: " + err);
+    if (m_tcp)      bits = m_tcp->readBits(1, addr, m_inputCount, m_slaveId, &err);
+    else if (m_rtu) bits = m_rtu->readBits(1, addr, m_inputCount, m_slaveId, &err);
+    if (bits.size() != m_inputCount) {
+        emit errorOccurred(QStringLiteral("读全部输入失败: ") + err);
         return false;
     }
     values = bits;
@@ -139,38 +132,36 @@ bool ModbusIoDriver::readAllInputs(QVector<bool>& values) {
 }
 
 bool ModbusIoDriver::writeOutput(int channel, bool value) {
-    if (!m_connected || channel < 0 || channel >= m_p.outputCount) return false;
+    if (!m_connected || channel < 0 || channel >= m_outputCount) return false;
     QString err;
-    const int addr = m_p.outBase + channel;
+    const int addr = m_outBase + channel;
 
-    if (m_p.coilOut) {
-        bool ok = false;
-        if (m_tcp) ok = m_tcp->writeCoil(addr, value, m_p.slaveId, &err);
-        else if (m_rtu) ok = m_rtu->writeCoil(addr, value, m_p.slaveId, &err);
-        if (!ok) { emit errorOccurred("IO写输出失败: " + err); return false; }
-        return true;
-    }
-
-    // 寄存器模式: 筛选机结果数组 K1=OK K2=NG, 关=0
-    const quint16 v = value ? (channel < 8 ? 1 : 2) : 0;  // 相机通道写K1, 剔除通道写K2(按契约微调)
-    QVector<quint16> one = {v};
     bool ok = false;
-    if (m_tcp) ok = m_tcp->writeRegisters(addr, one, m_p.slaveId, &err);
-    else if (m_rtu) ok = m_rtu->writeRegisters(addr, one, m_p.slaveId, &err);
-    if (!ok) { emit errorOccurred("IO写输出失败: " + err); return false; }
+    if (m_useCoil) {
+        if (m_tcp)      ok = m_tcp->writeCoil(addr, value, m_slaveId, &err);
+        else if (m_rtu) ok = m_rtu->writeCoil(addr, value, m_slaveId, &err);
+    } else {
+        const QVector<quint16> one = {quint16(value ? 1 : 0)};
+        if (m_tcp)      ok = m_tcp->writeRegisters(addr, one, m_slaveId, &err);
+        else if (m_rtu) ok = m_rtu->writeRegisters(addr, one, m_slaveId, &err);
+    }
+    if (!ok) {
+        emit errorOccurred(QStringLiteral("写输出失败: ") + err);
+        return false;
+    }
     return true;
 }
 
 bool ModbusIoDriver::writeAllOutputs(const QVector<bool>& values) {
-    if (!m_connected || values.size() != m_p.outputCount) return false;
-    for (int i = 0; i < values.size(); ++i)
+    if (!m_connected || values.size() != m_outputCount) return false;
+    for (int i = 0; i < values.size(); ++i) {
         if (!writeOutput(i, values[i])) return false;
+    }
     return true;
 }
 
 bool ModbusIoDriver::pulseOutput(int channel, int durationMs) {
-    // 同步脉冲: 置ON → 延时 → 复位。仅在流程工作线程调用(execute在工作线程),
-    // 不依赖事件循环/定时器, 现场时序确定性强。
+    // 脉冲: 置ON → 延时 → 复位。同步阻塞(调用方在工作线程/专用IO线程)。
     if (!writeOutput(channel, true)) return false;
     if (durationMs > 0) QThread::msleep(durationMs);
     return writeOutput(channel, false);

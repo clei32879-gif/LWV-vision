@@ -4,6 +4,8 @@
  */
 
 #include "HardwareManager.h"
+#include "ModbusIoDriver.h"
+#include "ModbusPLCDriver.h"
 #include "../utils/Logger.h"
 
 namespace VisionInspector {
@@ -99,9 +101,17 @@ ICameraDriver* HardwareManager::cameraAt(int index) {
 }
 
 bool HardwareManager::connectPLC(const PLCConnectionParams& params) {
-    // TODO: 创建PLC驱动并连接
-    VI_LOG_WARN("connectPLC 待实现: 需要驱动插件");
-    return false;
+    // PLC 驱动经自研 Modbus 主站实现 (信捷 XD 系列, 见契约与路线图阶段5)
+    disconnectPLC();
+    auto* plc = new ModbusPLCDriver(this);
+    if (!plc->connect(params)) {
+        VI_LOG_ERROR(QStringLiteral("PLC 连接失败: ") + params.ipAddress);
+        delete plc;
+        return false;
+    }
+    m_plc = plc;
+    emit plcConnected();
+    return true;
 }
 
 void HardwareManager::disconnectPLC() {
@@ -124,8 +134,21 @@ void HardwareManager::disconnectServo() {
 }
 
 bool HardwareManager::connectIO(const QString& params) {
-    // TODO
-    return false;
+    // IO 驱动经 Modbus 通道实现 (替代独立IO卡如 N1616):
+    //   - 有 PLC 时直写 PLC M 线圈/结果寄存器 (免硬件 IO 卡)
+    //   - 或配远程IO模块 (ICP DAS ET-7042/I-8057 等, 见选型报告)
+    // 参数示例:
+    //   transport=tcp;host=192.168.1.10;slaveId=1;outBase=106;useCoil=1;inBase=7;inputCount=16;outputCount=16
+    disconnectIO();
+    auto* io = new ModbusIoDriver(this);
+    if (!io->connect(params)) {
+        VI_LOG_ERROR(QStringLiteral("IO驱动连接失败: ") + params);
+        delete io;
+        return false;
+    }
+    m_io = io;
+    VI_LOG_INFO(QStringLiteral("IO驱动已连接: ") + io->driverName());
+    return true;
 }
 
 void HardwareManager::disconnectIO() {

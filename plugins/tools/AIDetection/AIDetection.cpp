@@ -51,6 +51,8 @@ PropertyDefList AIDetection::propertyDefs() const {
         PropertyDef::doubleProp("iouThreshold", "NMS重叠阈值", 0.45, 0.1, 1.0, "检测"),
         PropertyDef::stringProp("goodClasses", "良品类别(逗号分)", "良品", "判定"),
         PropertyDef::doubleProp("minScore", "最低置信度", 0.5, 0.01, 1.0, "判定"),
+        // 缺陷检测场景: 检出(任一检测框)即判定NG; 勾选后忽略goodClasses
+        PropertyDef::boolProp("detectionIsNG", "检出即NG(缺陷检测)", false, "判定"),
     };
 }
 
