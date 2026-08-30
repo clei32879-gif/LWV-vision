@@ -717,7 +717,6 @@ bool YOLOv8Detect::execute(ToolContext& context)
 
         if (count > 0) {
             setResultData("topClass", m->lastDetections[0].classId);
-            setResultData("topClass", m->lastDetections[0].classId);
             setResultData("topConfidence", m->lastDetections[0].confidence);
         }
 
