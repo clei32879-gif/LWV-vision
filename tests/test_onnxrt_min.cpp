@@ -33,6 +33,14 @@ int main(int argc, char* argv[]) {
                 for (auto d : shape) std::printf("%lld ", (long long)d);
                 std::printf("]\n");
             }
+            const size_t nOut = session.GetOutputCount();
+            for (size_t i = 0; i < nOut; ++i) {
+                auto name = session.GetOutputNameAllocated(i, alloc);
+                auto shape = session.GetOutputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape();
+                std::printf("  输出[%zu] %s 形状=[", i, name.get());
+                for (auto d : shape) std::printf("%lld ", (long long)d);
+                std::printf("]\n");
+            }
         }
         return 0;
     } catch (const Ort::Exception& e) {

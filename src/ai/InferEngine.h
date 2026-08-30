@@ -15,10 +15,13 @@
  *   letterbox(114灰边) → BGR→RGB → /255 → CHW
  */
 #pragma once
+#define VI_INFER_V2 1
 
 #include "../utils/Common.h"
 #include <vector>
 #include <QString>
+#include <QList>
+#include <QPair>
 
 #ifdef VI_HAS_ONNXRT
 
@@ -43,11 +46,18 @@ public:
     int inputWidth() const;
     int inputHeight() const;
 
+    /** 模型输出类型 (加载时自动判定) */
+    enum class OutputKind { Unknown, Detection, Classification };
+    OutputKind outputKind() const { return m_kind; }
+
     /** YOLOv8 检测 (输出 [1, 4+nc, anchors] 格式) */
     std::vector<AiDetection> detectYolo(const cv::Mat& bgr,
                                         float confThreshold = 0.25f,
                                         float iouThreshold = 0.45f,
                                         QString* err = nullptr);
+
+    /** 分类推理: softmax概率, 结果按分数降序 [{类别名,分数}...] */
+    bool classify(const cv::Mat& bgr, QList<QPair<QString, float>>& results, QString* err = nullptr);
 
     /** 通用推理: 输入BGR图按模型输入尺寸缩放+归一化(可选letterbox), 返回第一个输出张量 */
     bool run(const cv::Mat& bgr, std::vector<float>& output,
@@ -59,6 +69,7 @@ public:
 private:
     struct Impl;
     std::unique_ptr<Impl> m_impl;
+    OutputKind m_kind = OutputKind::Unknown;
 };
 
 } // namespace VisionInspector

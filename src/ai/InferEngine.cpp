@@ -11,6 +11,8 @@
 #include <QMap>
 #include <cmath>
 #include <algorithm>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 namespace VisionInspector {
 
@@ -19,6 +21,7 @@ struct InferEngine::Impl {
     std::unique_ptr<Ort::Session> session;
     QString path;
     int inW = 0, inH = 0;
+    QMap<int, QString> classNames;   // 类别索引 -> 名称 (分类模型)
 };
 
 InferEngine::InferEngine() : m_impl(std::make_unique<Impl>()) {}
@@ -38,7 +41,24 @@ bool InferEngine::loadModel(const QString& onnxPath, QString* err) {
         if (shape.size() >= 4) {
             m_impl->inH = (int)shape[2];
             m_impl->inW = (int)shape[3];
+            m_kind = OutputKind::Detection;
+        } else if (shape.size() == 2 && shape[1] < 1000) {
+            m_kind = OutputKind::Classification;
         }
+        // 类别名: ultralytics导出的metadata "names" (JSON dict)
+        m_impl->classNames.clear();
+        try {
+            auto meta = m_impl->session->GetModelMetadata();
+            Ort::AllocatorWithDefaultOptions alloc;
+            auto namesStr = meta.LookupCustomMetadataMapAllocated("names", alloc);
+            if (namesStr) {
+                const QJsonDocument doc = QJsonDocument::fromJson(
+                    QString::fromUtf8(namesStr.get()).toUtf8());
+                const QJsonObject obj = doc.object();
+                for (auto it = obj.begin(); it != obj.end(); ++it)
+                    m_impl->classNames.insert(it.key().toInt(), it.value().toString());
+            }
+        } catch (...) {}
         if (err) err->clear();
         return true;
     } catch (const Ort::Exception& e) {
@@ -196,6 +216,31 @@ bool InferEngine::run(const cv::Mat& bgr, std::vector<float>& output,
         if (err) *err = QString::fromUtf8(e.what());
         return false;
     }
+}
+
+bool InferEngine::classify(const cv::Mat& bgr, QList<QPair<QString, float>>& results,
+                           QString* err) {
+    results.clear();
+    std::vector<float> out;
+    std::vector<int64_t> outShape;
+    if (!run(bgr, out, outShape, err)) return false;
+    if (out.empty()) { if (err) *err = "分类输出为空"; return false; }
+
+    // softmax
+    double maxV = *std::max_element(out.begin(), out.end());
+    double sum = 0;
+    for (auto& v : out) { v = std::exp(v - maxV); sum += v; }
+    for (size_t i = 0; i < out.size(); ++i) {
+        const float p = (float)(out[i] / sum);
+        const QString name = m_impl->classNames.value((int)i,
+                                                      QString("class%1").arg(i));
+        results.append({name, p});
+    }
+    std::sort(results.begin(), results.end(),
+              [](const QPair<QString, float>& a, const QPair<QString, float>& b) {
+                  return a.second > b.second;
+              });
+    return true;
 }
 
 // ============================================================

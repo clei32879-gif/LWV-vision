@@ -49,7 +49,8 @@ PropertyDefList AIDetection::propertyDefs() const {
         PropertyDef::stringProp("modelPath", "模型文件(onnx)", "models/yolov8n.onnx", "模型"),
         PropertyDef::doubleProp("confThreshold", "置信度阈值", 0.25, 0.01, 1.0, "检测"),
         PropertyDef::doubleProp("iouThreshold", "NMS重叠阈值", 0.45, 0.1, 1.0, "检测"),
-        PropertyDef::boolProp("detectionIsNG", "检出即NG", true, "判定"),
+        PropertyDef::stringProp("goodClasses", "良品类别(逗号分)", "良品", "判定"),
+        PropertyDef::doubleProp("minScore", "最低置信度", 0.5, 0.01, 1.0, "判定"),
     };
 }
 
@@ -75,6 +76,38 @@ bool AIDetection::execute(ToolContext& context) {
 
     m_boxes.clear();
     m_lastOk = false;
+
+    // ===== 分类模型分支 (输出[1,nc]) =====
+    if (engine->outputKind() == InferEngine::OutputKind::Classification) {
+        QList<QPair<QString, float>> results;
+        if (!engine->classify(*input, results, &err)) {
+            setResultData("error", err);
+            setStatus(ToolStatus::NG);
+            return false;
+        }
+        const float minScore = (float)propertyValue("minScore").toDouble();
+        for (int i = 0; i < results.size() && i < 5; ++i) {
+            setResultData(QString("prob%1_class").arg(i), results[i].first);
+            setResultData(QString("prob%1_score").arg(i), results[i].second);
+        }
+        const QString topClass = results.isEmpty() ? QString() : results[0].first;
+        const float topScore = results.isEmpty() ? 0.f : results[0].second;
+        setResultData("class", topClass);
+        setResultData("score", topScore);
+        // 良品类别列表(逗号分) — top1在列表内=OK, 否则NG
+        const QStringList goodList = propertyValue("goodClasses").toString()
+                                         .split(',', Qt::SkipEmptyParts);
+        const float minS = minScore;
+        bool pass = false;
+        for (const QString& g : goodList)
+            if (topClass.trimmed() == g.trimmed() && topScore >= minS) { pass = true; break; }
+        setResultData("pass", pass);
+        setStatus(pass ? ToolStatus::OK : ToolStatus::NG);
+        m_lastOk = true;
+        return pass;
+    }
+
+    // ===== 检测模型分支 (输出[1,4+nc,anchors]) =====
     const float conf = (float)propertyValue("confThreshold").toDouble();
     const float iou = (float)propertyValue("iouThreshold").toDouble();
     const std::vector<AiDetection> dets = engine->detectYolo(*input, conf, iou, &err);
@@ -116,6 +149,10 @@ std::vector<QVariant> AIDetection::overlays() const {
     return out;
 #else
     if (!m_lastOk) return out;
+    if (m_boxes.empty()) {
+        // 分类模式: 叠加文本(结果键在resultData, 此处从boxes为空判断)
+        return out;
+    }
     for (const auto& b : m_boxes) {
         QVariantMap rect;
         rect["type"] = "rect";

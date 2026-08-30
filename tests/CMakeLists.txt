@@ -84,4 +84,11 @@ if(VI_HAS_ONNXRT)
         endif()
     endforeach()
     add_test(NAME ai_inference COMMAND test_ai)
+
+    # 自训缺陷分类模型验证
+    add_executable(test_cls_model test_cls_model.cpp)
+    vi_link_onnxrt(test_cls_model)
+    target_link_libraries(test_cls_model PRIVATE
+        VIAI VICore VIEngine VIUtils  Qt6::Core Qt6::Gui)
+    add_test(NAME cls_model COMMAND test_cls_model)
 endif()
