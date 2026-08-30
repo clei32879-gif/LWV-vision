@@ -65,16 +65,63 @@ bool BlobAnalysis::execute(ToolContext& context) {
     cv::Mat labels, stats, centroids;
     const int ncomp = cv::connectedComponentsWithStats(binary, labels, stats, centroids,
                                                        (conn == 4) ? 4 : 8, CV_32S);
+    const bool wantEllipse = propertyValue("useEllipse").toBool();
+    const bool wantBBox = propertyValue("useBBox").toBool();
     int blobCount = 0;
     double totalArea = 0;
+    int largestIdx = -1;
+    double largestArea = 0;
     for (int i = 1; i < ncomp; ++i) {   // 0=背景
         const double area = stats.at<int>(i, cv::CC_STAT_AREA);
-        if (area >= minArea) { blobCount++; totalArea += area; }
+        if (area >= minArea) {
+            blobCount++; totalArea += area;
+            if (area > largestArea) { largestArea = area; largestIdx = i; }
+        }
     }
     setResultData("blobCount", blobCount);
     setResultData("totalArea", totalArea);
     setResultData("avgArea", blobCount > 0 ? totalArea / blobCount : 0);
     setResultData("found", blobCount > 0);
+
+    if (largestIdx > 0) {
+        // 主斑面积/质心 (已含ROI偏移)
+        const double cx = centroids.at<double>(largestIdx, 0) + rx;
+        const double cy = centroids.at<double>(largestIdx, 1) + ry;
+        setResultData("mainArea", largestArea);
+        setResultData("mainCenterX", cx);
+        setResultData("mainCenterY", cy);
+        if (wantBBox) {
+            // 最小外接矩形 (含角度, 规范化为 0-180 主轴方向)
+            cv::Mat mask = (labels == largestIdx);
+            std::vector<std::vector<cv::Point>> cs;
+            cv::findContours(mask, cs, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+            if (!cs.empty()) {
+                const cv::RotatedRect rr = cv::minAreaRect(cs[0]);
+                // OpenCV: width>=height, angle∈[-90,0] → 主轴方向角 = angle<0 ? angle+90 : angle
+                double normAngle = rr.angle;
+                if (normAngle < 0) normAngle += 90.0;
+                setResultData("bboxCenterX", rr.center.x + rx);
+                setResultData("bboxCenterY", rr.center.y + ry);
+                setResultData("bboxWidth", std::max(rr.size.width, rr.size.height));
+                setResultData("bboxHeight", std::min(rr.size.width, rr.size.height));
+                setResultData("bboxAngle", normAngle);
+            }
+        }
+        if (wantEllipse) {
+            // 主轴椭圆: 用最小外接矩形尺寸近似长短轴
+            cv::Mat mask = (labels == largestIdx);
+            std::vector<std::vector<cv::Point>> cs;
+            cv::findContours(mask, cs, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+            if (!cs.empty() && cs[0].size() >= 5) {
+                const cv::RotatedRect rr = cv::fitEllipse(cs[0]);
+                setResultData("ellipseCenterX", rr.center.x + rx);
+                setResultData("ellipseCenterY", rr.center.y + ry);
+                setResultData("ellipseMajor", std::max(rr.size.width, rr.size.height));
+                setResultData("ellipseMinor", std::min(rr.size.width, rr.size.height));
+                setResultData("ellipseAngle", rr.angle);
+            }
+        }
+    }
     setStatus(blobCount > 0 ? ToolStatus::OK : ToolStatus::NG);
     return blobCount > 0;
 #else

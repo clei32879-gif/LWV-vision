@@ -16,8 +16,10 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
+#include <opencv2/geometry/2d.hpp>
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <cstdio>
 
 using namespace VisionInspector;
@@ -401,6 +403,104 @@ int main(int argc, char* argv[]) {
         const double conc = ctc2->resultData().value("concentricity").toDouble();
         CHECK(std::fabs(conc) <= 1e-9, "圆到圆同心度=0(同圆心)");
         delete ctc2;
+    }
+
+    // ---- 9. 死属性激活: 旋转/缩放搜索 + Blob特征 + 顶点位置策略 (M-43) ----
+    {
+        // 9a. BlobAnalysis useEllipse/useBBox: 合成椭圆斑
+        {
+            cv::Mat img(120, 160, CV_8UC1, cv::Scalar(0));
+            cv::ellipse(img, cv::Point(80, 60), cv::Size(40, 20), 30.0, 0, 360,
+                        cv::Scalar(255), cv::FILLED);
+            ToolContext ctx;
+            ctx.setCurrentImage(std::make_shared<CvImage>(img));
+            ITool* blob = reg.createTool("BlobAnalysis");
+            blob->setInstanceName("斑点-特征");
+            blob->setProperty("roiType", 0);
+            blob->setProperty("useEllipse", true);
+            blob->setProperty("useBBox", true);
+            blob->setProperty("detectionType", 1);   // 白色目标(合成图为黑底白椭圆)
+            blob->setProperty("threshold", 127);
+            blob->setProperty("autoThreshold", false);
+            blob->setProperty("minArea", 100);
+            CHECK(blob->execute(ctx), "斑点-特征: 执行成功");
+            const double bbw = blob->resultData().value("bboxWidth").toDouble();
+            const double bbAngle = blob->resultData().value("bboxAngle").toDouble();
+            const double maj = blob->resultData().value("ellipseMajor").toDouble();
+            CHECK(std::fabs(bbw - 80.0) < 6.0,
+                  QString("斑点-特征: 外接框长轴%1 期望≈80").arg(bbw).toLocal8Bit().constData());
+            CHECK(std::fabs(bbAngle - 30.0) < 8.0,
+                  QString("斑点-特征: 外接框角度%1 期望≈30").arg(bbAngle).toLocal8Bit().constData());
+            CHECK(std::fabs(maj - 80.0) < 6.0,
+                  QString("斑点-特征: 椭圆长轴%1 期望≈80").arg(maj).toLocal8Bit().constData());
+            delete blob;
+        }
+
+        // 9b. VertexDetection detectPosition 策略: 两角点, 选离ROI中心最远(2)
+        {
+            cv::Mat img(100, 160, CV_8UC1, cv::Scalar(0));
+            cv::rectangle(img, cv::Rect(0, 0, 160, 100), cv::Scalar(255), cv::FILLED);
+            // 两个黑角点(均在扫描区 rw/4..3rw/4 内): 左上(50,30) 右下(100,55)
+            cv::rectangle(img, cv::Rect(50, 30, 20, 20), cv::Scalar(0), cv::FILLED);
+            cv::rectangle(img, cv::Rect(100, 55, 20, 20), cv::Scalar(0), cv::FILLED);
+            ToolContext ctx;
+            ctx.setCurrentImage(std::make_shared<CvImage>(img));
+            ITool* vd = reg.createTool("VertexDetection");
+            vd->setInstanceName("顶点-最远");
+            vd->setProperty("roiType", 1);
+            vd->setProperty("roiCenterX", 80.0);
+            vd->setProperty("roiCenterY", 50.0);
+            vd->setProperty("roiWidth", 160.0);
+            vd->setProperty("roiHeight", 100.0);
+            vd->setProperty("detectPosition", 2);    // 最远(离ROI中心最远的角点)
+            vd->setProperty("gradientThreshold", 40);
+            CHECK(vd->execute(ctx), "顶点-最远: 执行成功");
+            const double px = vd->resultData().value("positionX").toDouble();
+            const double py = vd->resultData().value("positionY").toDouble();
+            // 右下角点(120,75)离ROI中心(80,50)最远: 期望≈(120,75)
+            CHECK(std::hypot(px - 120.0, py - 75.0) < 12.0,
+                  QString("顶点-最远: (%1,%2) 期望≈(120,75)")
+                      .arg(px, 0, 'f', 1).arg(py, 0, 'f', 1).toLocal8Bit().constData());
+            delete vd;
+        }
+
+        // 9c. ShapeMatch 旋转搜索: L形模板(非对称, 旋转可分辨), 目标含旋转30°的L形
+        {
+            // 模板: 白底黑色L形 (厚8, 外廓约40x40) — BINARY_INV后L变白shape被取为轮廓
+            cv::Mat tmpl(80, 80, CV_8UC1, cv::Scalar(255));
+            cv::rectangle(tmpl, cv::Rect(15, 15, 40, 20), cv::Scalar(0), cv::FILLED);  // 横臂
+            cv::rectangle(tmpl, cv::Rect(15, 15, 20, 40), cv::Scalar(0), cv::FILLED);  // 竖臂
+            const QString tmplPath = d.absoluteFilePath("_tmpl_L.png");
+            cv::imwrite(tmplPath.toLocal8Bit().toStdString(), tmpl);
+
+            // 目标: 旋转30°后的L形 (白L形, 轮廓图)
+            cv::Mat tgt(200, 200, CV_8UC1, cv::Scalar(0));
+            cv::rectangle(tgt, cv::Rect(80, 80, 40, 20), cv::Scalar(255), cv::FILLED);
+            cv::rectangle(tgt, cv::Rect(80, 80, 20, 40), cv::Scalar(255), cv::FILLED);
+            cv::Mat rot = cv::getRotationMatrix2D(cv::Point2f(100, 100), 30.0, 1.0);
+            cv::Mat tgtRot;
+            cv::warpAffine(tgt, tgtRot, rot, cv::Size(200, 200), cv::INTER_LINEAR,
+                           cv::BORDER_CONSTANT, cv::Scalar(0));
+
+            ToolContext ctx;
+            ctx.setCurrentImage(std::make_shared<CvImage>(tgtRot));
+            ITool* sm = reg.createTool("ShapeMatch");
+            sm->setInstanceName("形状-旋转");
+            sm->setProperty("templatePath", tmplPath);
+            sm->setProperty("threshold", 0.5);
+            sm->setProperty("angleRange", 40.0);     // 旋转搜索范围覆盖30°
+            sm->setProperty("scaleRange", 0.3);
+            const bool ok = sm->execute(ctx);
+            CHECK(ok, "形状-旋转: 找到匹配");
+            if (ok) {
+                const double ang = sm->resultData().value("matchAngle").toDouble();
+                // 旋转量幅值应≈30° (方向符号随坐标系约定, 这里只验旋转量本身)
+                CHECK(std::fabs(std::fabs(ang) - 30.0) < 12.0,
+                      QString("形状-旋转: 最佳角度%1 期望≈±30").arg(ang).toLocal8Bit().constData());
+            }
+            delete sm;
+            QFile::remove(tmplPath);
+        }
     }
 
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
