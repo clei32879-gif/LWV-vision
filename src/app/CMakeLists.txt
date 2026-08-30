@@ -35,9 +35,11 @@ if(VI_HAS_DVP2)
     target_link_directories(LWVision PRIVATE ${DVP2_LIB_DIR})
 endif()
 
+# GUI 程序: 隐藏控制台窗口 (MinGW/MSVC 通用)
+set_target_properties(LWVision PROPERTIES WIN32_EXECUTABLE TRUE)
+
 if(MSVC)
     target_compile_options(LWVision PRIVATE $<$<CONFIG:Debug>:/Zi>)
-    set_target_properties(LWVision PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
 
 install(TARGETS LWVision RUNTIME DESTINATION bin)
