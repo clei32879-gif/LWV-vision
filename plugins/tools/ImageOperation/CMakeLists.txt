@@ -1,0 +1,6 @@
+﻿add_library(ImageOperation STATIC)
+target_sources(ImageOperation PRIVATE ImageOperation.h ImageOperation.cpp)
+target_link_libraries(ImageOperation PUBLIC VICore VIEngine VIUtils Qt6::Core)
+if(VI_HAS_OPENCV)
+    target_link_libraries(ImageOperation PUBLIC )
+endif()

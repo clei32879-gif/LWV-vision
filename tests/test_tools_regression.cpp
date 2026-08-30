@@ -1427,6 +1427,84 @@ int main(int argc, char* argv[]) {
         delete bc;
     }
 
+    // ---- 测试22: 图像运算 + 存储图像 (P1-11) ----
+    std::printf("测试22: 图像运算/存储图像\n");
+    {
+        // 两张 120x100 灰度图: A=200, B=60 (存入命名槽 imgA/imgB)
+        cv::Mat imgA(100, 120, CV_8UC1, cv::Scalar(200));
+        cv::Mat imgB(100, 120, CV_8UC1, cv::Scalar(60));
+        ToolContext ctx22;
+        ctx22.setCurrentImage(std::make_shared<CvImage>(imgA));
+        ctx22.setImage("imgA", std::make_shared<CvImage>(imgA));
+        ctx22.setImage("imgB", std::make_shared<CvImage>(imgB));
+
+        ITool* io = reg.createTool("ImageOperation");
+        io->setProperty("inputImage", "imgA");
+        io->setProperty("inputImage2", "imgB");
+
+        // 加 (饱和): 200+60=260→255
+        io->setProperty("operation", 0);
+        CHECK(io->execute(ctx22), "图像运算: 加执行");
+        CvImagePtr sum = ctx22.currentImage();
+        CHECK(sum && !sum->empty(), "图像运算: 加有输出图");
+        CHECK(sum->at<uchar>(50, 60) == 255, "图像运算: 加饱和255");
+
+        // 减: 200-60=140
+        io->setProperty("operation", 1);
+        CHECK(io->execute(ctx22), "图像运算: 减执行");
+        CHECK(ctx22.currentImage()->at<uchar>(50, 60) == 140, "图像运算: 减140");
+
+        // 差分: |60-140|=80 (输入2=当前图140)
+        io->setProperty("operation", 2);
+        io->setProperty("inputImage", "imgB");
+        io->setProperty("inputImage2", "Current");
+        CHECK(io->execute(ctx22), "图像运算: 差分执行");
+        CHECK(ctx22.currentImage()->at<uchar>(50, 60) == 80, "图像运算: 差分|60-140|=80");
+
+        // 平均: (200+60)/2=130
+        io->setProperty("inputImage", "imgA");
+        io->setProperty("inputImage2", "imgB");
+        io->setProperty("operation", 8);
+        CHECK(io->execute(ctx22), "图像运算: 平均执行");
+        CHECK(ctx22.currentImage()->at<uchar>(50, 60) == 130, "图像运算: 平均130");
+
+        // 与: 200&60 = 11001000 & 00111100 = 8
+        io->setProperty("operation", 3);
+        CHECK(io->execute(ctx22), "图像运算: 与执行");
+        CHECK(ctx22.currentImage()->at<uchar>(50, 60) == (200 & 60), "图像运算: 与按位");
+
+        // 异或: 200^60
+        io->setProperty("operation", 5);
+        CHECK(io->execute(ctx22), "图像运算: 异或执行");
+        CHECK(ctx22.currentImage()->at<uchar>(50, 60) == (200 ^ 60), "图像运算: 异或按位");
+        CHECK(ctx22.currentImage()->cols == 120 && ctx22.currentImage()->rows == 100,
+              "图像运算: 输出尺寸正确");
+        delete io;
+
+        // 存储图像: PNG 到临时目录, 回读验证
+        const QString saveDir = QDir::temp().filePath("lvw_test_save");
+        QDir().mkpath(saveDir);
+        ctx22.setCurrentImage(std::make_shared<CvImage>(imgA));
+        ITool* si = reg.createTool("SaveImage");
+        si->setProperty("directory", saveDir);
+        si->setProperty("fileName", "t22");
+        si->setProperty("format", 0);  // PNG
+        CHECK(si->execute(ctx22), "存储图像: PNG执行");
+        const QString savedPath = si->resultData().value("filePath").toString();
+        CHECK(si->resultData().value("saved").toBool(), "存储图像: saved=true");
+        CHECK(QFileInfo::exists(savedPath), "存储图像: 文件已生成");
+        cv::Mat back = cv::imread(savedPath.toLocal8Bit().toStdString(), cv::IMREAD_GRAYSCALE);
+        CHECK(!back.empty(), "存储图像: 回读成功");
+        CHECK(back.cols == 120 && back.rows == 100, "存储图像: 回读尺寸一致");
+        CHECK(back.at<uchar>(50, 60) == 200, "存储图像: 回读像素一致");
+        // JPG 质量路径
+        si->setProperty("format", 1);
+        CHECK(si->execute(ctx22), "存储图像: JPG执行");
+        CHECK(QFileInfo::exists(si->resultData().value("filePath").toString()), "存储图像: JPG文件生成");
+        delete si;
+        QDir(saveDir).removeRecursively();
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);

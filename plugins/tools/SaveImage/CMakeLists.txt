@@ -1,0 +1,6 @@
+﻿add_library(SaveImage STATIC)
+target_sources(SaveImage PRIVATE SaveImage.h SaveImage.cpp)
+target_link_libraries(SaveImage PUBLIC VICore VIEngine VIUtils Qt6::Core)
+if(VI_HAS_OPENCV)
+    target_link_libraries(SaveImage PUBLIC )
+endif()
