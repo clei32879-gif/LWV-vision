@@ -41,6 +41,7 @@ set(VI_ALL_PLUGINS
     GrayscaleMatch ShapeMatch ContourMatch
     BarcodeReader QRCodeReader OCR
     DistanceMeasure AngleMeasure Caliper
+    LineIntersect PointToLine
     ImageFilter Threshold Morphology ColorConvert
     ConditionBranch DataJudge Loop Delay
     CaptureImage DataDisplay UpdateView

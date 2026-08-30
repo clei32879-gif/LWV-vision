@@ -210,6 +210,56 @@ int main(int argc, char* argv[]) {
         delete noTool;
     }
 
+    // ---- 5. 几何测量工具 (对齐CKVision"几何对象→几何运算"链) ----
+    {
+        // 两线交点: 线1水平(320,240,0°), 线2垂直(400,240,90°) → 交于(400,240)
+        ITool* li = reg.createTool("LineIntersect");
+        li->setInstanceName("两线交点");
+        li->setProperty("line1CenterX", "320"); li->setProperty("line1CenterY", "240");
+        li->setProperty("line1Angle", "0");
+        li->setProperty("line2CenterX", "400"); li->setProperty("line2CenterY", "240");
+        li->setProperty("line2Angle", "90");
+        ToolContext ctx;
+        CHECK(li->execute(ctx), "两线交点执行成功");
+        const double ix = li->resultData().value("intersectX").toDouble();
+        const double iy = li->resultData().value("intersectY").toDouble();
+        const double ib = li->resultData().value("angleBetween").toDouble();
+        CHECK(std::hypot(ix - 400.0, iy - 240.0) <= 1e-6,
+              QString("两线交点(%.1f,%.1f) 期望(400,240)").arg(ix).arg(iy)
+                  .toLocal8Bit().constData());
+        CHECK(std::fabs(ib - 90.0) <= 1e-6,
+              QString("两线夹角%1° 期望90°").arg(ib).toLocal8Bit().constData());
+        // 平行对照
+        ITool* li2 = reg.createTool("LineIntersect");
+        li2->setInstanceName("两线交点-平行");
+        li2->setProperty("line1CenterX", "0"); li2->setProperty("line1CenterY", "0");
+        li2->setProperty("line1Angle", "45");
+        li2->setProperty("line2CenterX", "0"); li2->setProperty("line2CenterY", "50");
+        li2->setProperty("line2Angle", "45");
+        ToolContext ctx2;
+        li2->execute(ctx2);
+        CHECK(li2->resultData().value("parallel").toBool(), "平行线标记parallel=true");
+        delete li; delete li2;
+
+        // 点到线距离: 点(320,200), 水平线过(320,240,0°) → 距离40, 垂足(320,240)
+        ITool* ptl = reg.createTool("PointToLine");
+        ptl->setInstanceName("点到线");
+        ptl->setProperty("pointX", "320"); ptl->setProperty("pointY", "200");
+        ptl->setProperty("lineCenterX", "320"); ptl->setProperty("lineCenterY", "240");
+        ptl->setProperty("lineAngle", "0");
+        ToolContext ctx3;
+        CHECK(ptl->execute(ctx3), "点到线执行成功");
+        const double dist = ptl->resultData().value("distance").toDouble();
+        const double fxx = ptl->resultData().value("footX").toDouble();
+        const double fyy = ptl->resultData().value("footY").toDouble();
+        CHECK(std::fabs(dist - 40.0) <= 1e-6,
+              QString("点到线距离%1 期望40").arg(dist, 0, 'f', 3).toLocal8Bit().constData());
+        CHECK(std::hypot(fxx - 320.0, fyy - 240.0) <= 1e-6,
+              QString("垂足(%.1f,%.1f) 期望(320,240)").arg(fxx).arg(fyy)
+                  .toLocal8Bit().constData());
+        delete ptl;
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);
