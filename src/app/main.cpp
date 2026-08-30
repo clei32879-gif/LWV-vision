@@ -5,6 +5,7 @@
 
 #include "MainWindow.h"
 #include "../utils/Logger.h"
+#include "../ui/IconHelper.h"
 #include <QApplication>
 #include <QStyleFactory>
 #include <QFile>
@@ -15,6 +16,7 @@ int main(int argc, char* argv[]) {
     app.setApplicationName("LW Vision");
     app.setApplicationVersion("1.0.0");
     app.setOrganizationName("LW Vision");
+    app.setWindowIcon(VisionInspector::IconHelper::appIcon(64));
 
     // 设置应用样式
     app.setStyle(QStyleFactory::create("Fusion"));

@@ -1,4 +1,5 @@
 #include "PropertyDialog.h"
+#include "IconHelper.h"
 #include "widgets/ImageViewWidget.h"
 #include <QVBoxLayout>
 #include <QFormLayout>
@@ -25,6 +26,7 @@ PropertyDialog::PropertyDialog(ITool* tool, const QStringList& availableTools,
     : QDialog(parent), m_tool(tool), m_availableTools(availableTools),
       m_linkableData(linkableData), m_lastImage(lastImage) {
     setWindowTitle(QString("属性编辑 - %1").arg(tool->displayName()));
+    setWindowIcon(IconHelper::categoryIcon(tool->category(), 32));
     setMinimumSize(560, 520);
     buildUI();
 }

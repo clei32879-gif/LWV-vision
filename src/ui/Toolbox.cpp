@@ -1,4 +1,5 @@
 #include "Toolbox.h"
+#include "IconHelper.h"
 #include "../engine/ToolRegistry.h"
 #include <QVBoxLayout>
 #include <QHeaderView>
@@ -68,11 +69,13 @@ void Toolbox::refreshTools() {
         auto* group = new QTreeWidgetItem(m_tree, QStringList{categoryToString(cat)});
         group->setExpanded(true);
         QFont f = group->font(0); f.setBold(true); group->setFont(0, f);
+        group->setIcon(0, IconHelper::categoryIcon(cat, 18));
 
         for (const auto& meta : byCategory[cat]) {
             auto* item = new QTreeWidgetItem(group, QStringList{meta.displayName});
             item->setData(0, Qt::UserRole, meta.typeName);
             item->setToolTip(0, meta.typeName);
+            item->setIcon(0, IconHelper::categoryIcon(cat, 16));
         }
     }
 

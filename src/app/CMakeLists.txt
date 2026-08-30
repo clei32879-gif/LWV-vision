@@ -5,6 +5,7 @@ qt_add_executable(LWVision
     MainWindow.cpp
     AppSettings.h
     AppSettings.cpp
+    resources/app.rc
 )
 
 target_link_libraries(LWVision PRIVATE
@@ -37,6 +38,10 @@ endif()
 
 # GUI 程序: 隐藏控制台窗口 (MinGW/MSVC 通用)
 set_target_properties(LWVision PROPERTIES WIN32_EXECUTABLE TRUE)
+
+# 应用图标资源: 让 windres 能在 resources/ 目录找到 app.ico
+target_include_directories(LWVision PRIVATE
+    $<$<COMPILE_LANGUAGE:RC>:${CMAKE_CURRENT_SOURCE_DIR}/resources>)
 
 if(MSVC)
     target_compile_options(LWVision PRIVATE $<$<CONFIG:Debug>:/Zi>)
