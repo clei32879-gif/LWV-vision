@@ -33,6 +33,8 @@ bool SerialPort::execute(ToolContext& context) {
             setStatus(ToolStatus::OK);
             return true;
         }
+        // H-10: 若残留未释放的旧对象, 先释放再新建
+        if (port) delete port;
         port = new QSerialPort();
 
         int portIdx = propertyValue("portName").toInt();
@@ -71,15 +73,17 @@ bool SerialPort::execute(ToolContext& context) {
             setStatus(ToolStatus::OK);
             return true;
         } else {
-            QString err = port->errorString();
+            const QString err = port->errorString();   // 先拷贝, 再释放 (H-20)
             delete port;
             setResultData("error", QString("串口打开失败: %1").arg(err));
             setStatus(ToolStatus::NG);
             return false;
         }
     } else if (action == 1) {
-        if (port && port->isOpen()) {
-            port->close();
+        if (port) {
+            // H-10: close后必须delete释放, 否则反复开关泄漏
+            if (port->isOpen()) port->close();
+            delete port;
             context.setData("__SerialPort", QVariant());
             setResultData("status", "串口已关闭");
             setStatus(ToolStatus::OK);

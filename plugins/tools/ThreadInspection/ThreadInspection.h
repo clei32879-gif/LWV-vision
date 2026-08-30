@@ -43,6 +43,7 @@ private:
     std::vector<double> m_missingAngles;    // 缺口中心角度(度)
     std::vector<cv::Point2d> m_burrPoints;  // 毛刺点
     std::vector<double> m_damageAngles;     // 烂牙角度(度)
+    double m_slantAngle = 0;                // 斜牙角(度), 供叠加显示
     bool m_lastOk = false;
 #endif
 };

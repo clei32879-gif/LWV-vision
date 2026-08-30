@@ -178,8 +178,11 @@ bool ModbusComm::executeRead(IPLCDriver* plc, ToolContext& context)
                     break;
                 case 1:  // INT32
                     if (i * 2 + 1 < values.size()) {
-                        qint32 val32 = (static_cast<qint32>(values[i * 2]) << 16)
-                                     | static_cast<qint32>(values[i * 2 + 1]);
+                        // H-9修复: 用quint32组合避免有符号左移UB + 符号扩展错误
+                        const quint32 raw = (static_cast<quint32>(values[i * 2]) << 16)
+                                         | static_cast<quint32>(values[i * 2 + 1]);
+                        qint32 val32;
+                        memcpy(&val32, &raw, sizeof(val32));
                         resultList.append(val32);
                     }
                     break;

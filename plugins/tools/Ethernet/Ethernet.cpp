@@ -47,8 +47,9 @@ bool EthernetTool::execute(ToolContext& context) {
                 setStatus(ToolStatus::OK);
                 return true;
             } else {
+                const QString err = socket->errorString();   // 先拷贝, 再释放 (H-20)
                 delete socket;
-                setResultData("error", QString("连接失败: %1").arg(socket->errorString()));
+                setResultData("error", QString("连接失败: %1").arg(err));
                 setStatus(ToolStatus::NG);
                 return false;
             }
@@ -56,6 +57,8 @@ bool EthernetTool::execute(ToolContext& context) {
             // 断开
             if (socket) {
                 socket->disconnectFromHost();
+                socket->waitForDisconnected(1000);
+                delete socket;                              // 释放, 防重连泄漏 (H-20)
                 context.setData("tcpSocket", QVariant());
                 setResultData("status", "已断开");
                 setStatus(ToolStatus::OK);

@@ -60,12 +60,15 @@ bool BlobAnalysis::execute(ToolContext& context) {
         cv::threshold(roiImg, binary, thresh, 255, cv::THRESH_BINARY);
     }
     if (detType == 0) cv::bitwise_not(binary, binary); // 黑色目标
-    std::vector<std::vector<cv::Point>> contours;
-    cv::findContours(binary, contours, cv::RETR_EXTERNAL, (conn == 4) ? cv::CHAIN_APPROX_SIMPLE : cv::CHAIN_APPROX_SIMPLE);
+    // M-19修复: findContours两分支相同导致连通性失效;
+    // 改用connectedComponentsWithStats原生支持4/8连通
+    cv::Mat labels, stats, centroids;
+    const int ncomp = cv::connectedComponentsWithStats(binary, labels, stats, centroids,
+                                                       (conn == 4) ? 4 : 8, CV_32S);
     int blobCount = 0;
     double totalArea = 0;
-    for (const auto& c : contours) {
-        double area = cv::contourArea(c);
+    for (int i = 1; i < ncomp; ++i) {   // 0=背景
+        const double area = stats.at<int>(i, cv::CC_STAT_AREA);
         if (area >= minArea) { blobCount++; totalArea += area; }
     }
     setResultData("blobCount", blobCount);

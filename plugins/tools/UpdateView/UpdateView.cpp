@@ -24,9 +24,10 @@ bool UpdateView::execute(ToolContext& context) {
     }
 
     int viewIdx = propertyValue("viewIndex").toInt();
-    // 将当前图像存入context，供MainWindow读取显示
+    // H-21修复: 原实现 new cv::Mat 存裸指针且无消费者 → 每次执行泄漏;
+    // 改为值语义存命名图像(shared_ptr), 无泄漏
+    context.setImage("updateView", input);
     context.setData("updateView_index", viewIdx);
-    context.setData("updateView_image", QVariant::fromValue((void*)new cv::Mat(*input)));
 
     setResultData("viewIndex", viewIdx);
     setResultData("viewUpdated", true);

@@ -31,21 +31,33 @@ bool TemplateMatch::execute(ToolContext& context) {
 
     int method = propertyValue("method").toInt();
     cv::Mat result;
-    cv::matchTemplate(src, templ, result, method);
-
-    double minVal, maxVal;
-    cv::Point minLoc, maxLoc;
-    cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
+    cv::Point matchLoc;
+    try {
+        cv::matchTemplate(src, templ, result, method);
+        double minVal, maxVal;
+        cv::Point minLoc, maxLoc;
+        cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
+        // H-22修复: SQDIFF/SQDIFF_NORMED(0/1) 最佳匹配是最小值
+        if (method <= 1) matchLoc = minLoc;
+        else matchLoc = maxLoc;
+    } catch (const cv::Exception& e) {
+        // H-22: 模板大于原图等异常不再崩溃(属性对话框试运行也无try/catch)
+        setStatus(ToolStatus::NG);
+        setResultData("error", QString("模板匹配异常: %1").arg(e.what()));
+        return false;
+    }
 
     double threshold = propertyValue("threshold").toDouble();
+    double minVal, maxVal;
+    cv::minMaxLoc(result, &minVal, &maxVal);
     double score = (method <= 1) ? (1.0 - minVal) : maxVal;
     bool found = score >= threshold;
 
     setResultData("score", score);
     setResultData("found", found);
     if (found) {
-        setResultData("matchX", (double)maxLoc.x + templ.cols / 2.0);
-        setResultData("matchY", (double)maxLoc.y + templ.rows / 2.0);
+        setResultData("matchX", (double)matchLoc.x + templ.cols / 2.0);
+        setResultData("matchY", (double)matchLoc.y + templ.rows / 2.0);
     }
     setStatus(found ? ToolStatus::OK : ToolStatus::NG);
     return found;

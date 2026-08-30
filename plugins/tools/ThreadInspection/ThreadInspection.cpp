@@ -303,6 +303,7 @@ bool ThreadInspection::execute(ToolContext& context) {
     m_missingAngles = missingAnglesDeg;
     m_burrPoints = burrPoints;
     m_damageAngles = damageAnglesDeg;
+    m_slantAngle = slantAngle;   // 供叠加显示 (M-20: 此前overlays硬编码0.0)
 
     setResultData("toothCount", toothCount);
     setResultData("expectedTeeth", expectedTeeth);
@@ -387,7 +388,7 @@ std::vector<QVariant> ThreadInspection::overlays() const {
     text["text"] = QString("牙数:%1 缺牙:%2 烂牙:%3 毛刺:%4 斜牙:%5°")
                        .arg(m_toothAngles.size()).arg(m_missingAngles.size())
                        .arg(m_damageAngles.size()).arg(m_burrPoints.size())
-                       .arg(0.0, 0, 'f', 1);
+                       .arg(m_slantAngle, 0, 'f', 1);
     text["color"] = "#ffff00";
     out.push_back(text);
     return out;
