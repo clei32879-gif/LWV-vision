@@ -615,6 +615,102 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // ---- 11. 坐标校准: 多点仿射/透视坐标标定 (对标CKVision坐标校准1/2) ----
+    // 生成已知变换 → 反标定恢复矩阵 + 残差 + 查询点变换验证
+    {
+        // 已知仿射: 旋转30° + 缩放1.2 + 平移(50,-20)
+        const double ang = 30.0 * M_PI / 180.0;
+        const double s = 1.2, tx = 50.0, ty = -20.0;
+        const double a = s * std::cos(ang), b = -s * std::sin(ang);
+        const double d = s * std::sin(ang), e = s * std::cos(ang);
+        // 生成 6 个源点及其目标点
+        const double srcArr[6][2] = {{100, 100}, {200, 150}, {150, 250},
+                                     {300, 200}, {250, 300}, {120, 80}};
+        QString srcText, dstText;
+        for (int i = 0; i < 6; ++i) {
+            const double sx = srcArr[i][0], sy = srcArr[i][1];
+            const double ddx = a * sx + b * sy + tx;
+            const double ddy = d * sx + e * sy + ty;
+            if (i) { srcText += ";"; dstText += ";"; }
+            srcText += QString("%1,%2").arg(sx).arg(sy);
+            dstText += QString("%1,%2").arg(ddx).arg(ddy);
+        }
+        ToolContext ctx;
+        ITool* cc = reg.createTool("CoordinateCalibration");
+        cc->setInstanceName("坐标校准-仿射");
+        cc->setProperty("model", 0);          // 仿射
+        cc->setProperty("srcPoints", srcText);
+        cc->setProperty("dstPoints", dstText);
+        cc->setProperty("queryX", 0.0);
+        cc->setProperty("queryY", 0.0);
+        CHECK(cc->execute(ctx), "坐标校准-仿射: 执行成功");
+        const double rms = cc->resultData().value("rms").toDouble();
+        const double rx = cc->resultData().value("resultX").toDouble();
+        const double ry = cc->resultData().value("resultY").toDouble();
+        // 精确拟合(6点)应零残差
+        CHECK(rms < 0.01, QString("坐标校准-仿射: rms=%.4f<0.01").arg(rms).toLocal8Bit().constData());
+        // 查询点(0,0)变换 = 平移分量 (50,-20)
+        CHECK(std::fabs(rx - tx) < 0.01, QString("坐标校准-仿射: 变换X=%.2f 期望%.1f").arg(rx).arg(tx).toLocal8Bit().constData());
+        CHECK(std::fabs(ry - ty) < 0.01, QString("坐标校准-仿射: 变换Y=%.2f 期望%.1f").arg(ry).arg(ty).toLocal8Bit().constData());
+        // 上下文写入校验
+        const double ctxA = ctx.getDouble("calibration_transform_0", 0);
+        CHECK(std::fabs(ctxA - a) < 0.01, "坐标校准-仿射: 上下文矩阵a一致");
+        // 矩阵[0]应为 a = s·cos30°
+        const QVariantList ml = cc->resultData().value("matrix").toList();
+        CHECK(ml.size() == 6, "坐标校准-仿射: 矩阵2x3");
+        if (ml.size() == 6)
+            CHECK(std::fabs(ml[0].toDouble() - a) < 0.01,
+                  "坐标校准-仿射: 矩阵a分量正确");
+        delete cc;
+
+        // 透视: 已知单应 H (平移+缩放, 非纯仿射用4点)
+        {
+            const double h00 = 1.1, h01 = 0.2, h02 = 30.0;
+            const double h10 = -0.1, h11 = 1.05, h12 = 15.0;
+            const double h20 = 0.0003, h21 = 0.0001, h22 = 1.0;
+            QString srcText2, dstText2;
+            const double src2[5][2] = {{100, 100}, {220, 140}, {160, 260},
+                                       {300, 210}, {80, 90}};
+            for (int i = 0; i < 5; ++i) {
+                const double sx = src2[i][0], sy = src2[i][1];
+                const double w = h20 * sx + h21 * sy + h22;
+                const double dx = (h00 * sx + h01 * sy + h02) / w;
+                const double dy = (h10 * sx + h11 * sy + h12) / w;
+                if (i) { srcText2 += ";"; dstText2 += ";"; }
+                srcText2 += QString("%1,%2").arg(sx).arg(sy);
+                dstText2 += QString("%1,%2").arg(dx, 0, 'f', 6).arg(dy, 0, 'f', 6);
+            }
+            ITool* cc2 = reg.createTool("CoordinateCalibration");
+            cc2->setInstanceName("坐标校准-透视");
+            cc2->setProperty("model", 1);     // 透视
+            cc2->setProperty("srcPoints", srcText2);
+            cc2->setProperty("dstPoints", dstText2);
+            cc2->setProperty("queryX", 100.0);
+            cc2->setProperty("queryY", 100.0);
+            CHECK(cc2->execute(ctx), "坐标校准-透视: 执行成功");
+            const double rms2 = cc2->resultData().value("rms").toDouble();
+            const double px = cc2->resultData().value("resultX").toDouble();
+            const double py = cc2->resultData().value("resultY").toDouble();
+            CHECK(rms2 < 0.01, QString("坐标校准-透视: rms=%.4f<0.01").arg(rms2).toLocal8Bit().constData());
+            // 查询点(100,100)变换应与正算一致
+            const double expW = h20 * 100.0 + h21 * 100.0 + h22;
+            const double expX = (h00 * 100.0 + h01 * 100.0 + h02) / expW;
+            const double expY = (h10 * 100.0 + h11 * 100.0 + h12) / expW;
+            CHECK(std::fabs(px - expX) < 0.01,
+                  QString("坐标校准-透视: 变换X=%.3f 期望%.3f").arg(px).arg(expX).toLocal8Bit().constData());
+            CHECK(std::fabs(py - expY) < 0.01,
+                  QString("坐标校准-透视: 变换Y=%.3f 期望%.3f").arg(py).arg(expY).toLocal8Bit().constData());
+            // 点数不足应NG
+            ITool* cc3 = reg.createTool("CoordinateCalibration");
+            cc3->setProperty("model", 0);
+            cc3->setProperty("srcPoints", "1,1;2,2");   // 仿射需≥3
+            cc3->setProperty("dstPoints", "5,5;6,6");
+            CHECK(!cc3->execute(ctx), "坐标校准: 点数不足应NG");
+            delete cc3;
+            delete cc2;
+        }
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);
