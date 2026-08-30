@@ -42,6 +42,7 @@ add_subdirectory(logic/DataJudge)
 add_subdirectory(logic/Loop)
 add_subdirectory(logic/Delay)
 add_subdirectory(logic/SystemTime)
+add_subdirectory(logic/GetVariable)
 
 # P0 核心工具
 add_subdirectory(tools/CaptureImage)

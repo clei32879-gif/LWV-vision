@@ -837,6 +837,56 @@ int main(int argc, char* argv[]) {
         delete st;
     }
 
+    // ---- 14. 全局变量: SetVariable写入全局 + GetVariable读取 (§2.7 补齐) ----
+    {
+        GlobalVariables gv;
+        ToolContext ctx;
+        ctx.setGlobalVariables(&gv);
+
+        // SetVariable scope=1 写入全局
+        ITool* sv = reg.createTool("SetVariable");
+        sv->setProperty("varName", "stationNo");
+        sv->setProperty("varType", 0);       // 浮点
+        sv->setProperty("doubleValue", 3.0);
+        sv->setProperty("scope", 1);         // 全局变量
+        CHECK(sv->execute(ctx), "设置变量-全局: 执行成功");
+        CHECK(std::fabs(gv.getDouble("stationNo") - 3.0) < 1e-9,
+              "设置变量-全局: 全局变量已写入");
+        CHECK(sv->resultData().value("scope").toInt() == 1, "设置变量-全局: 输出scope=1");
+        delete sv;
+
+        // GetVariable 读取全局
+        ITool* gv2 = reg.createTool("GetVariable");
+        gv2->setProperty("varName", "stationNo");
+        CHECK(gv2->execute(ctx), "获取全局变量: 执行成功");
+        CHECK(std::fabs(gv2->resultData().value("value").toDouble() - 3.0) < 1e-9,
+              "获取全局变量: 值=3.0");
+        CHECK(gv2->resultData().value("found").toBool(), "获取全局变量: found=true");
+        // 不存在的变量 found=false
+        ITool* gv3 = reg.createTool("GetVariable");
+        gv3->setProperty("varName", "notExistVar");
+        CHECK(gv3->execute(ctx), "获取全局变量: 不存在时执行成功");
+        CHECK(!gv3->resultData().value("found").toBool(), "获取全局变量: 不存在found=false");
+        // 空变量名NG
+        ITool* gv4 = reg.createTool("GetVariable");
+        gv4->setProperty("varName", "");
+        CHECK(!gv4->execute(ctx), "获取全局变量: 空变量名NG");
+        delete gv4;
+        delete gv3;
+        delete gv2;
+
+        // SetVariable scope=0 默认写当前流程 context (不污染全局)
+        ITool* sv2 = reg.createTool("SetVariable");
+        sv2->setProperty("varName", "localOnly");
+        sv2->setProperty("varType", 1);      // 整型
+        sv2->setProperty("intValue", 7);
+        sv2->setProperty("scope", 0);
+        CHECK(sv2->execute(ctx), "设置变量-当前流程: 执行成功");
+        CHECK(!gv.has("localOnly"), "设置变量-当前流程: 未写入全局");
+        CHECK(ctx.getDouble("localOnly", -1) == 7.0, "设置变量-当前流程: 写入context");
+        delete sv2;
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);
