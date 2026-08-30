@@ -44,6 +44,8 @@ void ProjectManager::newProject() {
         for (Flow* f : m_engine->flows()) {
             f->clear();
             m_engine->removeFlow(f);
+            // 先脱离 QObject 父子关系再延迟删除, 否则引擎析构时会二次释放 (双重释放崩溃)
+            f->setParent(nullptr);
             f->deleteLater();
         }
     }
@@ -77,6 +79,8 @@ bool ProjectManager::loadProject(const QString& path) {
         for (Flow* f : m_engine->flows()) {
             f->clear();
             m_engine->removeFlow(f);
+            // 先脱离 QObject 父子关系再延迟删除, 避免引擎析构时二次释放
+            f->setParent(nullptr);
             f->deleteLater();
         }
         const QJsonArray flows = json.value("flows").toArray();
@@ -142,8 +146,11 @@ bool ProjectManager::saveProject(const QString& path) {
 
     // 全局变量
     if (m_globals) {
+        // 注意: all() 返回副本(临时QMap), 必须先拷贝再迭代,
+        // 不能直接在临时对象上取 begin()/end() (悬垂迭代器, 正常堆下崩溃/挂死)
+        const QMap<QString, QVariant> allmap = m_globals->all();
         QJsonObject gv;
-        for (auto it = m_globals->all().begin(); it != m_globals->all().end(); ++it)
+        for (auto it = allmap.begin(); it != allmap.end(); ++it)
             gv[it.key()] = QJsonValue::fromVariant(it.value());
         json["globalVariables"] = gv;
     }

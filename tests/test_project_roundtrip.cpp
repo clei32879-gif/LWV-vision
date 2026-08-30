@@ -26,6 +26,7 @@ static int g_failures = 0;
 
 int main(int argc, char* argv[]) {
     QCoreApplication app(argc, argv);
+    setvbuf(stdout, nullptr, _IONBF, 0);   // 无缓冲输出, 保证失败时信息不丢失
     auto& reg = ToolRegistry::instance();
     if (reg.allMetaData().isEmpty()) {
         std::printf("[跳过] 无注册工具(需链插件)\n");
@@ -60,23 +61,24 @@ int main(int argc, char* argv[]) {
         flow->addTool(thread);
     }
     engine.addFlow(flow);
-
-    ITool* threadCheck = flow->toolAt(1);
     CHECK(flow->toolCount() == (thread ? 2 : 1), "构建流程");
 
     // ---- 2. 保存 ----
     QTemporaryDir tmp;
     const QString path = tmp.path() + "/qa.vipj";
-    pm.saveProject(path);
+    CHECK(pm.saveProject(path), "保存项目");
     CHECK(QFile::exists(path), "项目文件已写出");
 
     // 检查JSON含判定
     QFile f(path);
-    f.open(QIODevice::ReadOnly);
-    const QByteArray raw = f.readAll();
-    f.close();
-    CHECK(raw.contains("judgments"), "JSON含判定数据");
-    CHECK(raw.contains("globalVariables") || true, "结构完整");
+    if (f.open(QIODevice::ReadOnly)) {
+        const QByteArray raw = f.readAll();
+        f.close();
+        CHECK(raw.contains("judgments"), "JSON含判定数据");
+        CHECK(raw.contains("globalVariables") || true, "结构完整");
+    } else {
+        CHECK(false, "JSON读取失败");
+    }
 
     // ---- 3. 清空重载 ----
     const int expectedTools = flow->toolCount();   // newProject会清空flow, 先记录
@@ -86,12 +88,6 @@ int main(int argc, char* argv[]) {
     CHECK(engine.flowCount() == 1, "流程数=1");
     Flow* loaded = engine.flowCount() ? engine.flows().first() : nullptr;
     CHECK(loaded && loaded->name() == "主流程", "流程名往返一致");
-    std::printf("  [探针] 加载后=%d个; 各工具名:", loaded ? loaded->toolCount() : -1);
-    if (loaded)
-        for (int i = 0; i < loaded->toolCount(); ++i)
-            std::printf(" %s(%s)", loaded->toolAt(i)->instanceName().toLocal8Bit().constData(),
-                        loaded->toolAt(i)->typeName().toLocal8Bit().constData());
-    std::printf("\n");
     CHECK(loaded && loaded->toolCount() == expectedTools, "工具数往返一致");
     ITool* lf = loaded ? loaded->toolAt(0) : nullptr;
     CHECK(lf && lf->instanceName() == "快速找圆", "实例名往返一致");
