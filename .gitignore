@@ -35,6 +35,13 @@ CMakeLists.txt.user*
 .DS_Store
 Thumbs.db
 
+# ===== 训练数据集与公开数据集(700MB+, 不入库; 脚本可重建) =====
+testdata/cls_dataset/
+testdata/mvtec/
+kaggle_screw.zip
+screw.tar.xz
+runs/
+
 # ===== AI模型权重(pt不入库; onnx预训练模型保留供测试) =====
 *.pt
 onnxruntime.zip
