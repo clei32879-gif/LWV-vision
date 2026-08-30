@@ -44,7 +44,7 @@ set(VI_ALL_PLUGINS
     LineIntersect PointToLine
     CircleToLine CircleToCircle
     ImageFilter Threshold Morphology ColorConvert
-    ConditionBranch DataJudge Loop Delay SystemTime
+    ConditionBranch DataJudge Loop Delay SystemTime GetVariable GenerateText SplitText CompareText
     CaptureImage DataDisplay UpdateView
     Calculator ImageCompare Calibration PositionCorrection
     VertexDetection WidthDetection MultiContourMatch ContourCompare ColorDetection

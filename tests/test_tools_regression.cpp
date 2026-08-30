@@ -989,6 +989,89 @@ int main(int argc, char* argv[]) {
         delete ud3;
     }
 
+    // ---- 16. 文本三件套: 生成/分解/比较文本 (§2.7 补齐) ----
+    {
+        ToolContext ctx;
+        ctx.setData("circle.radius", 128.35);
+        ctx.setData("message", "OK");
+
+        // 生成文本: 模板占位符替换 (直接变量+上下文+全局)
+        ITool* gt = reg.createTool("GenerateText");
+        gt->setProperty("template", "半径={1} 消息={circle.radius}");
+        gt->setProperty("var1", "12.3");
+        CHECK(gt->execute(ctx), "生成文本: 执行成功");
+        CHECK(gt->resultData().value("text").toString() == "半径=12.3 消息=128.35",
+              "生成文本: 直接变量+上下文替换");
+        CHECK(gt->resultData().value("replacedCount").toInt() == 2, "生成文本: 替换2处");
+        delete gt;
+
+        // 生成文本: 全局变量回退 + 缺失键保留
+        ITool* gt2 = reg.createTool("GenerateText");
+        gt2->setProperty("template", "{message}-{missing}");
+        CHECK(gt2->execute(ctx), "生成文本: 执行成功");
+        CHECK(gt2->resultData().value("text").toString() == "OK-{missing}",
+              "生成文本: 上下文替换, 缺失键保留");
+        delete gt2;
+
+        // 分解文本: 逗号分隔
+        ITool* st = reg.createTool("SplitText");
+        st->setProperty("inputText", "A,B,C");
+        st->setProperty("delimiter", 0);       // 逗号
+        st->setProperty("selectIndex", -1);
+        CHECK(st->execute(ctx), "分解文本: 执行成功");
+        CHECK(st->resultData().value("partCount").toInt() == 3, "分解文本: 3段");
+        CHECK(st->resultData().value("part0").toString() == "A", "分解文本: part0=A");
+        CHECK(st->resultData().value("part2").toString() == "C", "分解文本: part2=C");
+        // 取第1段(0基)
+        st->setProperty("selectIndex", 1);
+        CHECK(st->execute(ctx), "分解文本: 执行成功");
+        CHECK(st->resultData().value("selected").toString() == "B", "分解文本: selected=B");
+        delete st;
+
+        // 分解文本: 自定义分隔符
+        ITool* st2 = reg.createTool("SplitText");
+        st2->setProperty("inputText", "1|2|3");
+        st2->setProperty("delimiter", 4);      // 自定义
+        st2->setProperty("customDelimiter", "|");
+        st2->setProperty("selectIndex", 2);
+        CHECK(st2->execute(ctx), "分解文本: 自定义分隔符执行成功");
+        CHECK(st2->resultData().value("selected").toString() == "3", "分解文本: 自定义分隔符selected=3");
+        delete st2;
+
+        // 比较文本: 区分大小写等于
+        ITool* ct = reg.createTool("CompareText");
+        ct->setProperty("textA", "ABC");
+        ct->setProperty("textB", "abc");
+        ct->setProperty("compareMode", 0);     // 等于
+        ct->setProperty("caseSensitive", true);
+        CHECK(ct->execute(ctx), "比较文本: 执行成功");
+        CHECK(!ct->resultData().value("equal").toBool(), "比较文本: 区分大小写不等");
+        CHECK(ct->status() == ToolStatus::NG, "比较文本: 不匹配状态NG");
+        // 不区分大小写
+        ct->setProperty("caseSensitive", false);
+        CHECK(ct->execute(ctx), "比较文本: 执行成功");
+        CHECK(ct->resultData().value("equal").toBool(), "比较文本: 不区分大小写相等");
+        delete ct;
+
+        // 比较文本: 包含 + 正则
+        ITool* ct2 = reg.createTool("CompareText");
+        ct2->setProperty("textA", "Hello World");
+        ct2->setProperty("textB", "World");
+        ct2->setProperty("compareMode", 2);    // 包含
+        CHECK(ct2->execute(ctx), "比较文本: 包含执行成功");
+        CHECK(ct2->resultData().value("matched").toBool(), "比较文本: 包含匹配");
+        ct2->setProperty("compareMode", 5);    // 正则
+        ct2->setProperty("textA", "ABC123XYZ");
+        ct2->setProperty("textB", "^A.*Z$");
+        CHECK(ct2->execute(ctx), "比较文本: 正则执行成功");
+        CHECK(ct2->resultData().value("matched").toBool(), "比较文本: 正则匹配");
+        // 正则不匹配
+        ct2->setProperty("textB", "^A[0-9]+$");
+        CHECK(ct2->execute(ctx), "比较文本: 正则不匹配执行成功");
+        CHECK(!ct2->resultData().value("matched").toBool(), "比较文本: 正则不匹配");
+        delete ct2;
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);
