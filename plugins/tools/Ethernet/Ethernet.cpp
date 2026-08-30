@@ -2,6 +2,7 @@
 #include "../../../src/engine/ToolRegistry.h"
 #include <QTcpSocket>
 #include <QTcpServer>
+#include <QHostAddress>
 
 namespace VisionInspector {
 
@@ -98,10 +99,89 @@ bool EthernetTool::execute(ToolContext& context) {
             return false;
         }
     } else {
-        // 服务器模式（简化实现）
-        setResultData("status", "服务器模式待实现");
-        setStatus(ToolStatus::OK);
-        return true;
+        // 服务器模式: TCP 监听 + 收发(与客户端模式对称)
+        void* srvPtr = context.getData("tcpServer").value<void*>();
+        QTcpServer* server = static_cast<QTcpServer*>(srvPtr);
+
+        if (action == 0) {
+            // 开始监听
+            if (server && server->isListening()) {
+                setResultData("status", "已在监听");
+                setStatus(ToolStatus::OK);
+                return true;
+            }
+            server = new QTcpServer();
+            const QString ip = propertyValue("ipAddress").toString();
+            const int port = propertyValue("port").toInt();
+            const QHostAddress addr =
+                (ip.isEmpty() || ip == "0.0.0.0") ? QHostAddress::Any : QHostAddress(ip);
+            if (server->listen(addr, static_cast<quint16>(port))) {
+                context.setData("tcpServer", QVariant::fromValue((void*)server));
+                setResultData("status", "监听中");
+                setResultData("listenPort", port);
+                setStatus(ToolStatus::OK);
+                return true;
+            }
+            setResultData("error", QString("监听失败: %1").arg(server->errorString()));
+            delete server;
+            setStatus(ToolStatus::NG);
+            return false;
+        }
+
+        if (action == 1) {
+            // 停止监听
+            if (server) {
+                server->close();
+                delete server;
+                context.setData("tcpServer", QVariant());
+                setResultData("status", "已停止监听");
+            } else {
+                setResultData("status", "未在监听");
+            }
+            setStatus(ToolStatus::OK);
+            return true;
+        }
+
+        if (action == 2 || action == 3) {
+            // 发送 / 接收: 需先接入一个客户端
+            if (!server || !server->isListening()) {
+                setResultData("error", "服务器未监听");
+                setStatus(ToolStatus::NG);
+                return false;
+            }
+            if (!server->hasPendingConnections() && !server->waitForNewConnection(3000)) {
+                setResultData("error", "无客户端连接");
+                setStatus(ToolStatus::NG);
+                return false;
+            }
+            QTcpSocket* client = server->nextPendingConnection();
+            if (action == 3) {
+                // 接收
+                if (client->waitForReadyRead(3000)) {
+                    const QByteArray data = client->readAll();
+                    context.setData("receivedData", QString::fromUtf8(data));
+                    setResultData("status", "已接收");
+                    setResultData("receivedData", QString::fromUtf8(data));
+                    setResultData("bytesReceived", data.size());
+                    setStatus(ToolStatus::OK);
+                    delete client;
+                    return true;
+                }
+                setResultData("error", "接收超时");
+                delete client;
+                setStatus(ToolStatus::NG);
+                return false;
+            }
+            // 发送
+            const QString data = propertyValue("sendData").toString();
+            client->write(data.toUtf8());
+            client->waitForBytesWritten(3000);
+            setResultData("status", "已发送");
+            setResultData("bytesSent", data.toUtf8().size());
+            setStatus(ToolStatus::OK);
+            delete client;
+            return true;
+        }
     }
     return false;
 }

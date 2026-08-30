@@ -13,6 +13,7 @@
 #include "../ui/LoginDialog.h"
 #include "../ui/AnnotationDialog.h"
 #include "../ui/TeachWizard.h"
+#include "../ui/UIEditor.h"
 #include "../ui/IconHelper.h"
 #include "../hal/ModbusTcpMaster.h"
 #include "AppSettings.h"
@@ -205,6 +206,7 @@ void MainWindow::createMenus() {
     setMenu->addAction(QString::fromUtf8("\u7cfb\u7edf\u8bbe\u7f6e"), this, &MainWindow::onSystemSettings);
     setMenu->addAction(QString::fromUtf8("\u9879\u76ee\u8bbe\u7f6e"), this, &MainWindow::onProjectSettings);
     setMenu->addAction(QString::fromUtf8("\u5168\u5c40\u53d8\u91cf"), this, &MainWindow::onGlobalVariables);
+    setMenu->addAction(QString::fromUtf8("界面设置(DIY)"), this, &MainWindow::onUISettings);
     setMenu->addSeparator();
     setMenu->addAction(QString::fromUtf8("PLC\u6a21\u62df\u5668..."), this, &MainWindow::onPlcSimulator);
 
@@ -555,7 +557,15 @@ void MainWindow::onProjectSettings() {
 }
 
 void MainWindow::onUISettings() {
-    QMessageBox::information(this, "界面编辑", "待实现");
+    // DIY 界面编辑器: 拖拽控件(图像/数据表/按钮/状态面板/数值显示)自定义运行界面, 支持 JSON 存盘
+    auto* editor = new UIEditor(this);
+    editor->setWindowTitle(QString::fromUtf8("界面设置 — DIY 运行界面编辑器"));
+    editor->setAttribute(Qt::WA_DeleteOnClose);
+    editor->resize(1280, 820);
+    editor->show();
+    editor->raise();
+    editor->activateWindow();
+    m_statusLabel->setText("已打开界面编辑器(DIY)");
 }
 
 void MainWindow::onGlobalVariables() {
