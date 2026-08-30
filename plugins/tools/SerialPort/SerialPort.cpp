@@ -31,38 +31,38 @@ bool SerialPortTool::execute(ToolContext& context) {
         
         port = new QSerialPort();
         
-        // 设置端口名
-        int portIdx = propertyValue("port").toInt();
+        // 设置端口名 (M-25: 索引越界保护)
         QStringList portNames = {"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8"};
+        const int portIdx = qBound(0, propertyValue("port").toInt(), portNames.size() - 1);
         port->setPortName(portNames[portIdx]);
-        
+
         // 设置波特率
-        int baudIdx = propertyValue("baudRate").toInt();
         QList<qint32> baudRates = {9600, 19200, 38400, 57600, 115200};
+        const int baudIdx = qBound(0, propertyValue("baudRate").toInt(), baudRates.size() - 1);
         port->setBaudRate(baudRates[baudIdx]);
-        
+
         // 设置数据位
-        int dataIdx = propertyValue("dataBits").toInt();
         QList<QSerialPort::DataBits> dataBits = {
-            QSerialPort::Data5, QSerialPort::Data6, 
+            QSerialPort::Data5, QSerialPort::Data6,
             QSerialPort::Data7, QSerialPort::Data8
         };
+        const int dataIdx = qBound(0, propertyValue("dataBits").toInt(), dataBits.size() - 1);
         port->setDataBits(dataBits[dataIdx]);
-        
+
         // 设置校验位
-        int parityIdx = propertyValue("parity").toInt();
         QList<QSerialPort::Parity> parities = {
             QSerialPort::NoParity, QSerialPort::EvenParity, QSerialPort::OddParity
         };
+        const int parityIdx = qBound(0, propertyValue("parity").toInt(), parities.size() - 1);
         port->setParity(parities[parityIdx]);
-        
+
         // 设置停止位
-        int stopIdx = propertyValue("stopBits").toInt();
         QList<QSerialPort::StopBits> stopBits = {
             QSerialPort::OneStop, QSerialPort::OneAndHalfStop, QSerialPort::TwoStop
         };
+        const int stopIdx = qBound(0, propertyValue("stopBits").toInt(), stopBits.size() - 1);
         port->setStopBits(stopBits[stopIdx]);
-        
+
         if (port->open(QIODevice::ReadWrite)) {
             context.setData("serialPort", QVariant::fromValue((void*)port));
             setResultData("status", "串口已打开");
@@ -71,15 +71,18 @@ bool SerialPortTool::execute(ToolContext& context) {
             setStatus(ToolStatus::OK);
             return true;
         } else {
+            const QString err = port->errorString();   // H-20: 先拷贝再释放
             delete port;
-            setResultData("error", QString("无法打开串口: %1").arg(port->errorString()));
+            setResultData("error", QString("无法打开串口: %1").arg(err));
             setStatus(ToolStatus::NG);
             return false;
         }
     } else {
         // 关闭串口
-        if (port && port->isOpen()) {
-            port->close();
+        if (port) {
+            // H-10: close后必须delete释放, 否则反复开关泄漏
+            if (port->isOpen()) port->close();
+            delete port;
             context.setData("serialPort", QVariant());
             setResultData("status", "串口已关闭");
             setStatus(ToolStatus::OK);

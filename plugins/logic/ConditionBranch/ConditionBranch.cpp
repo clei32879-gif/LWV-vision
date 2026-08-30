@@ -43,8 +43,9 @@ static bool evaluateSingleCondition(const QString& condition, double value) {
     if (op == "<")   return value < rhs;
     if (op == ">=")  return value >= rhs;
     if (op == "<=")  return value <= rhs;
-    if (op == "==")  return qFuzzyCompare(value, rhs);
-    if (op == "!=")  return !qFuzzyCompare(value, rhs);
+    // M-24修复: qFuzzyCompare(a,0)恒false导致"==0"判断错误 → 改用容差比较
+    if (op == "==")  return std::fabs(value - rhs) < 1e-9;
+    if (op == "!=")  return std::fabs(value - rhs) >= 1e-9;
     return false;
 }
 

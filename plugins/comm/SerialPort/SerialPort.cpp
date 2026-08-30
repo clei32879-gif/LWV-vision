@@ -37,32 +37,33 @@ bool SerialPort::execute(ToolContext& context) {
         if (port) delete port;
         port = new QSerialPort();
 
-        int portIdx = propertyValue("portName").toInt();
         QStringList portNames = {"COM1", "COM2", "COM3", "COM4",
                                 "COM5", "COM6", "COM7", "COM8"};
+        // M-25: JSON加载的枚举索引可能越界 → qBound保护
+        const int portIdx = qBound(0, propertyValue("portName").toInt(), portNames.size() - 1);
         port->setPortName(portNames[portIdx]);
 
-        int baudIdx = propertyValue("baudRate").toInt();
         QList<qint32> baudRates = {9600, 19200, 38400, 57600, 115200};
+        const int baudIdx = qBound(0, propertyValue("baudRate").toInt(), baudRates.size() - 1);
         port->setBaudRate(baudRates[baudIdx]);
 
-        int dataIdx = propertyValue("dataBits").toInt();
         QList<QSerialPort::DataBits> dataBits = {
             QSerialPort::Data5, QSerialPort::Data6,
             QSerialPort::Data7, QSerialPort::Data8
         };
+        const int dataIdx = qBound(0, propertyValue("dataBits").toInt(), dataBits.size() - 1);
         port->setDataBits(dataBits[dataIdx]);
 
-        int stopIdx = propertyValue("stopBits").toInt();
         QList<QSerialPort::StopBits> stopBits = {
             QSerialPort::OneStop, QSerialPort::OneAndHalfStop, QSerialPort::TwoStop
         };
+        const int stopIdx = qBound(0, propertyValue("stopBits").toInt(), stopBits.size() - 1);
         port->setStopBits(stopBits[stopIdx]);
 
-        int parityIdx = propertyValue("parity").toInt();
         QList<QSerialPort::Parity> parities = {
             QSerialPort::NoParity, QSerialPort::EvenParity, QSerialPort::OddParity
         };
+        const int parityIdx = qBound(0, propertyValue("parity").toInt(), parities.size() - 1);
         port->setParity(parities[parityIdx]);
 
         if (port->open(QIODevice::ReadWrite)) {

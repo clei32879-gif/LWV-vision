@@ -66,7 +66,9 @@ bool PlcLink::execute(ToolContext& context) {
         sp.baudRate = propertyValue("baudRate").toInt();
         sp.dataBits = propertyValue("dataBits").toInt();
         sp.stopBits = propertyValue("stopBits").toInt();
-        sp.parity = propertyValue("parity").toString();
+        // M-39修复: parity是枚举索引, 需映射为"无/偶/奇"
+        const int parityIdx = propertyValue("parity").toInt();
+        sp.parity = QStringList{"无", "偶", "奇"}.value(parityIdx, "无");
         sp.timeoutMs = propertyValue("timeoutMs").toInt();
         rtu = ModbusRtuMaster::acquire(sp, &err);
     }
