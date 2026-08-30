@@ -63,6 +63,7 @@ add_subdirectory(tools/ColorDetection)
 # P3 标定和逻辑工具
 add_subdirectory(tools/CoordSystem)
 add_subdirectory(tools/CoordinateCalibration)
+add_subdirectory(tools/HandEyeCalibration)
 add_subdirectory(tools/ImageCorrection)
 add_subdirectory(tools/CalculateVariable)
 add_subdirectory(tools/SetVariable)

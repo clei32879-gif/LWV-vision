@@ -18,6 +18,8 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/geometry/2d.hpp>
+#include <opencv2/geometry/3d.hpp>
+#include <opencv2/calib.hpp>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -709,6 +711,101 @@ int main(int argc, char* argv[]) {
             delete cc3;
             delete cc2;
         }
+    }
+
+    // ---- 12. 手眼标定: calibrateHandEye 求解相机→末端矩阵 X ----
+    // 物理一致合成: 真值 X(cam2gripper) + 固定 C(base→target) + 随机机器人位姿 A(gripper2base),
+    // 由链 A·X·B = C 反推 B(target2cam), 反标定应恢复 X
+    {
+        // 真值 X: 绕Z转30° + 平移(10,-20,50)
+        const double angX = 30.0 * M_PI / 180.0;
+        cv::Mat rvecX = (cv::Mat_<double>(3, 1) << 0, 0, angX);
+        cv::Mat Rg0;
+        cv::Rodrigues(rvecX, Rg0);
+        cv::Mat Xm = cv::Mat::eye(4, 4, CV_64F);
+        Rg0.copyTo(Xm(cv::Rect(0, 0, 3, 3)));
+        Xm.at<double>(0, 3) = 10.0; Xm.at<double>(1, 3) = -20.0; Xm.at<double>(2, 3) = 50.0;
+        cv::Mat Xinv = Xm.inv();
+        // 固定 C = base→target (标定板固定在基座前方)
+        cv::Mat rvecC = (cv::Mat_<double>(3, 1) << 0.1, -0.05, 0.2);
+        cv::Mat RC;
+        cv::Rodrigues(rvecC, RC);
+        cv::Mat Cm = cv::Mat::eye(4, 4, CV_64F);
+        RC.copyTo(Cm(cv::Rect(0, 0, 3, 3)));
+        Cm.at<double>(0, 3) = 100.0; Cm.at<double>(1, 3) = 0.0; Cm.at<double>(2, 3) = 200.0;
+
+        // 8 组机器人位姿 A_i (gripper2base): 大旋转 + 较大平移
+        const double as[8][3] = {
+            {0.8, 0.2, -0.3}, {-0.7, 0.9, 0.4}, {1.1, -0.4, 0.6}, {0.3, -1.0, 0.5},
+            {-0.6, 0.5, -0.9}, {0.9, 0.7, 0.2}, {-1.2, 0.3, -0.4}, {0.5, -0.6, 0.8}};
+        const double at[8][3] = {
+            {300, 50, 220}, {350, 120, 180}, {270, -80, 240}, {330, 140, 200},
+            {290, -60, 230}, {360, 80, 190}, {310, -30, 250}, {340, 60, 210}};
+        QString rBaseText, tBaseText, rCamText, tCamText;
+        for (int i = 0; i < 8; ++i) {
+            cv::Mat rvecA = (cv::Mat_<double>(3, 1) << as[i][0], as[i][1], as[i][2]);
+            cv::Mat R;
+            cv::Rodrigues(rvecA, R);
+            cv::Mat A = cv::Mat::eye(4, 4, CV_64F);
+            R.copyTo(A(cv::Rect(0, 0, 3, 3)));
+            A.at<double>(0, 3) = at[i][0]; A.at<double>(1, 3) = at[i][1]; A.at<double>(2, 3) = at[i][2];
+            // B = Xinv · A⁻¹ · C  (target2cam)
+            const cv::Mat B = Xinv * A.inv() * Cm;
+            cv::Mat rB;
+            cv::Rodrigues(B(cv::Rect(0, 0, 3, 3)), rB);
+            if (i) {
+                rBaseText += ";"; tBaseText += ";"; rCamText += ";"; tCamText += ";";
+            }
+            rBaseText += QString("%1,%2,%3").arg(as[i][0]).arg(as[i][1]).arg(as[i][2]);
+            tBaseText += QString("%1,%2,%3").arg(at[i][0]).arg(at[i][1]).arg(at[i][2]);
+            rCamText += QString("%1,%2,%3").arg(rB.at<double>(0)).arg(rB.at<double>(1)).arg(rB.at<double>(2));
+            tCamText += QString("%1,%2,%3").arg(B.at<double>(0, 3)).arg(B.at<double>(1, 3)).arg(B.at<double>(2, 3));
+        }
+
+        ToolContext ctx;
+        ITool* he = reg.createTool("HandEyeCalibration");
+        he->setInstanceName("手眼标定");
+        he->setProperty("rBase", rBaseText);
+        he->setProperty("tBase", tBaseText);
+        he->setProperty("rCam", rCamText);
+        he->setProperty("tCam", tCamText);
+        he->setProperty("method", 0);     // Tsai
+        CHECK(he->execute(ctx), "手眼标定: 执行成功");
+        if (he->status() == VisionInspector::ToolStatus::OK) {
+            const QVariantList rv = he->resultData().value("handeyeRvec").toList();
+            const QVariantList tv = he->resultData().value("handeyeTvec").toList();
+            CHECK(rv.size() == 3 && tv.size() == 3, "手眼标定: rvec/tvec输出");
+            if (rv.size() == 3 && tv.size() == 3) {
+                // 恢复的旋转向量应≈(0,0,0.5236), 平移≈(10,-20,50)
+                const double r3 = rv[2].toDouble();
+                const double t0 = tv[0].toDouble(), t1 = tv[1].toDouble(), t2 = tv[2].toDouble();
+                CHECK(std::fabs(r3 - angX) < 0.05,
+                      QString("手眼标定: rvec.z=%.3f 期望%.3f").arg(r3).arg(angX).toLocal8Bit().constData());
+                CHECK(std::fabs(rv[0].toDouble()) < 0.05 && std::fabs(rv[1].toDouble()) < 0.05,
+                      "手眼标定: rvec.x/y≈0");
+                CHECK(std::fabs(t0 - 10.0) < 1.0 && std::fabs(t1 + 20.0) < 1.0 && std::fabs(t2 - 50.0) < 1.0,
+                      QString("手眼标定: tvec=(%.1f,%.1f,%.1f) 期望(10,-20,50)")
+                          .arg(t0).arg(t1).arg(t2).toLocal8Bit().constData());
+            }
+            const double rms = he->resultData().value("handeyeRms").toDouble();
+            // 合成数据自洽, 闭环残差应很小
+            CHECK(rms < 0.5, QString("手眼标定: 旋转残差%.3f°<0.5").arg(rms).toLocal8Bit().constData());
+            const int used = he->resultData().value("usedPoses").toInt();
+            CHECK(used == 8, QString("手眼标定: 使用位姿%1").arg(used).toLocal8Bit().constData());
+            // 上下文写入校验
+            const double ctxTx = ctx.getDouble("handeye_tx", 0);
+            CHECK(std::fabs(ctxTx - tv[0].toDouble()) < 1e-6, "手眼标定: 上下文tx一致");
+        }
+        delete he;
+
+        // 点数不足应NG
+        ITool* he2 = reg.createTool("HandEyeCalibration");
+        he2->setProperty("rBase", "0,0,0.1;0,0,0.2");
+        he2->setProperty("tBase", "100,0,0;200,0,0");
+        he2->setProperty("rCam", "0,0,0.1;0,0,0.2");
+        he2->setProperty("tCam", "50,0,0;150,0,0");
+        CHECK(!he2->execute(ctx), "手眼标定: 位姿不足应NG");
+        delete he2;
     }
 
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",

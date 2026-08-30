@@ -48,7 +48,7 @@ set(VI_ALL_PLUGINS
     CaptureImage DataDisplay UpdateView
     Calculator ImageCompare Calibration PositionCorrection
     VertexDetection WidthDetection MultiContourMatch ContourCompare ColorDetection
-    CoordSystem CoordinateCalibration ImageCorrection CalculateVariable SetVariable
+    CoordSystem CoordinateCalibration HandEyeCalibration ImageCorrection CalculateVariable SetVariable
     SerialPortTool EthernetTool ModbusRead ModbusWrite PlcLink
     EndCorrection
 )
