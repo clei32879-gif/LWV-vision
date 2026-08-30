@@ -74,6 +74,20 @@ bool EdgeDetection::execute(ToolContext& context) {
         profile.push_back(count > 0 ? sum / count : 0);
     }
 
+    // M-42: filterHalfWidth 参与平滑(移动平均), 此前读取后未使用
+    if (filterWidth > 1 && (int)profile.size() > filterWidth * 2) {
+        std::vector<double> smoothed(profile.size());
+        for (size_t i = 0; i < profile.size(); ++i) {
+            double s = 0; int n = 0;
+            int lo = (int)i - filterWidth, hi = (int)i + filterWidth;
+            if (lo < 0) lo = 0;
+            if (hi >= (int)profile.size()) hi = (int)profile.size() - 1;
+            for (int k = lo; k <= hi; ++k) { s += profile[k]; ++n; }
+            smoothed[i] = n > 0 ? s / n : profile[i];
+        }
+        profile = std::move(smoothed);
+    }
+
     // 计算梯度
     std::vector<double> gradient(profile.size());
     for (size_t i = 1; i < profile.size() - 1; ++i) {
@@ -97,8 +111,17 @@ bool EdgeDetection::execute(ToolContext& context) {
     EdgePoint selectedEdge = {0, 0, 0};
     bool found = false;
     if (!edges.empty()) {
-        if (position == 0) { selectedEdge = edges.front(); found = true; }
-        else if (position == 1) { selectedEdge = edges.front(); found = true; }
+        if (position == 4) {   // 全部: 输出全部边缘点列表 (M-42)
+            QVariantList all;
+            for (const auto& e : edges) {
+                // 显式包QVariant强制嵌套: 直接append(QVariantList)会命中QList::append(QList<T>)重载拍平
+                all.append(QVariant(QVariantList{e.x, e.y, e.grad}));
+            }
+            setResultData("edgePoints", all);
+            selectedEdge = edges.front();
+            found = true;
+        }
+        else if (position == 0 || position == 1) { selectedEdge = edges.front(); found = true; }
         else if (position == 2) { selectedEdge = edges.back(); found = true; }
         else if (position == 3) {
             double maxGrad = 0;
@@ -107,7 +130,7 @@ bool EdgeDetection::execute(ToolContext& context) {
             }
             found = true;
         }
-        else { selectedEdge = edges.front(); found = true; } // 全部，取第一个
+        else { selectedEdge = edges.front(); found = true; }
     }
 
     setResultData("edgeCount", (int)edges.size());

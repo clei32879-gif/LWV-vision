@@ -260,6 +260,56 @@ int main(int argc, char* argv[]) {
         delete ptl;
     }
 
+    // ---- 6. EdgeDetection "全部"边缘输出 + 位置选择 (M-42) ----
+    {
+        // 合成阶跃图: 左黑右白, 边界在 x=320 (竖直亮-暗边缘)
+        cv::Mat img(100, 640, CV_8UC1, cv::Scalar(20));
+        cv::rectangle(img, cv::Rect(320, 0, 320, 100), cv::Scalar(220), cv::FILLED);
+
+        ToolContext ctx;
+        ctx.setCurrentImage(std::make_shared<CvImage>(img));
+
+        // "全部"模式: 应输出 edgePoints 列表且不为空
+        ITool* edAll = reg.createTool("EdgeDetection");
+        edAll->setInstanceName("边缘-全部");
+        edAll->setProperty("roiType", 1);           // 矩形
+        edAll->setProperty("roiCenterX", 320.0);
+        edAll->setProperty("roiCenterY", 50.0);
+        edAll->setProperty("roiWidth", 300.0);
+        edAll->setProperty("roiHeight", 40.0);
+        edAll->setProperty("edgePosition", 4);      // 全部
+        edAll->setProperty("gradientThreshold", 30);
+        edAll->setProperty("filterHalfWidth", 2);   // M-42: 平滑参数应生效
+        CHECK(edAll->execute(ctx), "边缘-全部: 执行成功");
+        const auto all = edAll->resultData().value("edgePoints").toList();
+        CHECK(!all.isEmpty(), "边缘-全部: edgePoints 列表非空");
+        if (!all.isEmpty()) {
+            // edgePoints 为嵌套 {x,y,grad} 三元组
+            const QVariantList first = all.first().toList();
+            CHECK(first.size() == 3, "边缘-全部: 三元组含3元素");
+            const double ex = first.value(0).toDouble();
+            CHECK(std::fabs(ex - 320.0) <= 3.0,
+                  QString("边缘-全部: 首边缘x=%.1f 期望≈320").arg(ex).toLocal8Bit().constData());
+        }
+        delete edAll;
+
+        // "最强"模式: 应选最强梯度边缘 (黑→白在x=320附近)
+        ITool* edMax = reg.createTool("EdgeDetection");
+        edMax->setInstanceName("边缘-最强");
+        edMax->setProperty("roiType", 1);
+        edMax->setProperty("roiCenterX", 320.0);
+        edMax->setProperty("roiCenterY", 50.0);
+        edMax->setProperty("roiWidth", 300.0);
+        edMax->setProperty("roiHeight", 40.0);
+        edMax->setProperty("edgePosition", 3);      // 最强
+        edMax->setProperty("gradientThreshold", 30);
+        CHECK(edMax->execute(ctx), "边缘-最强: 执行成功");
+        const double mx = edMax->resultData().value("positionX").toDouble();
+        CHECK(std::fabs(mx - 320.0) <= 3.0,
+              QString("边缘-最强: x=%.1f 期望≈320").arg(mx).toLocal8Bit().constData());
+        delete edMax;
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);
