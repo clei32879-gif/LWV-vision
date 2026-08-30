@@ -42,6 +42,7 @@ set(VI_ALL_PLUGINS
     BarcodeReader QRCodeReader OCR
     DistanceMeasure AngleMeasure Caliper
     LineIntersect PointToLine
+    CircleToLine CircleToCircle
     ImageFilter Threshold Morphology ColorConvert
     ConditionBranch DataJudge Loop Delay
     CaptureImage DataDisplay UpdateView

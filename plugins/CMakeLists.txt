@@ -27,6 +27,8 @@ add_subdirectory(tools/AngleMeasure)
 add_subdirectory(tools/Caliper)
 add_subdirectory(tools/LineIntersect)
 add_subdirectory(tools/PointToLine)
+add_subdirectory(tools/CircleToLine)
+add_subdirectory(tools/CircleToCircle)
 
 # 图像处理工具
 add_subdirectory(tools/ImageFilter)

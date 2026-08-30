@@ -349,6 +349,60 @@ int main(int argc, char* argv[]) {
         CHECK(boards.size() >= 2, "棋盘格测试资产≥2张(正交+旋转)");
     }
 
+    // ---- 8. 几何组合测量: 圆到线距离 / 圆到圆距离 (CKVision"线到圆/圆到圆") ----
+    {
+        // 圆到线: 圆心(320,200), 水平线过(320,240,0°) → 距离40, 垂足(320,200)
+        ITool* ctl = reg.createTool("CircleToLine");
+        ctl->setInstanceName("圆到线");
+        ctl->setProperty("circleCenterX", "320"); ctl->setProperty("circleCenterY", "200");
+        ctl->setProperty("lineCenterX", "320");   ctl->setProperty("lineCenterY", "240");
+        ctl->setProperty("lineAngle", "0");
+        ToolContext ctxCL;
+        CHECK(ctl->execute(ctxCL), "圆到线: 执行成功");
+        const double cld = ctl->resultData().value("distance").toDouble();
+        const double clfx = ctl->resultData().value("footX").toDouble();
+        const double clfy = ctl->resultData().value("footY").toDouble();
+        CHECK(std::fabs(cld - 40.0) <= 1e-6,
+              QString("圆到线距离%1 期望40").arg(cld, 0, 'f', 3).toLocal8Bit().constData());
+        CHECK(std::hypot(clfx - 320.0, clfy - 240.0) <= 1e-6,
+              QString("圆到线垂足(%.1f,%.1f) 期望(320,240)").arg(clfx).arg(clfy)
+                  .toLocal8Bit().constData());
+        delete ctl;
+
+        // 圆到圆: 圆1(100,100,r=50), 圆2(160,100,r=30) → 圆心距60, 间隙-20(相交)
+        ITool* ctc = reg.createTool("CircleToCircle");
+        ctc->setInstanceName("圆到圆");
+        ctc->setProperty("circle1CenterX", "100"); ctc->setProperty("circle1CenterY", "100");
+        ctc->setProperty("circle1Radius", "50");
+        ctc->setProperty("circle2CenterX", "160"); ctc->setProperty("circle2CenterY", "100");
+        ctc->setProperty("circle2Radius", "30");
+        ToolContext ctxCC;
+        CHECK(ctc->execute(ctxCC), "圆到圆: 执行成功");
+        const double cd = ctc->resultData().value("centerDistance").toDouble();
+        const double gap = ctc->resultData().value("gap").toDouble();
+        const QString rel = ctc->resultData().value("relation").toString();
+        CHECK(std::fabs(cd - 60.0) <= 1e-6,
+              QString("圆到圆圆心距%1 期望60").arg(cd, 0, 'f', 3).toLocal8Bit().constData());
+        CHECK(std::fabs(gap - (-20.0)) <= 1e-6,
+              QString("圆到圆间隙%1 期望-20").arg(gap, 0, 'f', 3).toLocal8Bit().constData());
+        CHECK(rel == QStringLiteral("相交"), QString("圆到圆关系%1 期望相交").arg(rel)
+                                                 .toLocal8Bit().constData());
+        delete ctc;
+
+        // 圆到圆 同心度: 圆心距即同心度
+        ITool* ctc2 = reg.createTool("CircleToCircle");
+        ctc2->setInstanceName("圆到圆-同心");
+        ctc2->setProperty("circle1CenterX", "320"); ctc2->setProperty("circle1CenterY", "240");
+        ctc2->setProperty("circle1Radius", "100");
+        ctc2->setProperty("circle2CenterX", "320"); ctc2->setProperty("circle2CenterY", "240");
+        ctc2->setProperty("circle2Radius", "50");
+        ToolContext ctxCC2;
+        ctc2->execute(ctxCC2);
+        const double conc = ctc2->resultData().value("concentricity").toDouble();
+        CHECK(std::fabs(conc) <= 1e-9, "圆到圆同心度=0(同圆心)");
+        delete ctc2;
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);
