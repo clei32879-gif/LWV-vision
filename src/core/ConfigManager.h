@@ -11,6 +11,7 @@
 #pragma once
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QVariant>
 #include <QVariantMap>
 #include <QJsonObject>
@@ -24,6 +25,9 @@ class ConfigManager : public QObject {
 public:
     explicit ConfigManager(QObject* parent = nullptr);
     ~ConfigManager() override;
+
+    /** 全局单例 (进程内唯一配置实例) */
+    static ConfigManager& instance();
 
     // ======== 配置路径 ========
 
@@ -103,6 +107,14 @@ public:
 
     int windowHeight() const;
     void setWindowHeight(int height);
+
+    /** 相机/工位数量 (默认 8, 对应主界面 8 路 CCD) */
+    int cameraCount() const;
+    void setCameraCount(int n);
+
+    /** 工位名称清单 (逗号分隔配置; 缺省自动生成 CCD1..CCDN) */
+    QStringList stationNames() const;
+    void setStationNames(const QStringList& names);
 
 signals:
     /** 配置项变化 */

@@ -506,4 +506,44 @@ void ConfigManager::setWindowHeight(int height)
     set("window.height", height);
 }
 
+ConfigManager& ConfigManager::instance()
+{
+    static ConfigManager inst;
+    return inst;
+}
+
+int ConfigManager::cameraCount() const
+{
+    const int n = get("camera.count", 8).toInt();
+    return n < 1 ? 8 : n;
+}
+
+void ConfigManager::setCameraCount(int n)
+{
+    set("camera.count", n < 1 ? 8 : n);
+}
+
+QStringList ConfigManager::stationNames() const
+{
+    QStringList names;
+    const QString raw = get("camera.stationNames", "").toString().trimmed();
+    if (!raw.isEmpty()) {
+        const QStringList parts = raw.split(',', Qt::SkipEmptyParts);
+        for (QString s : parts) {
+            s = s.trimmed();
+            if (!s.isEmpty())
+                names << s;
+        }
+    }
+    const int n = cameraCount();
+    for (int i = names.size(); i < n; ++i)
+        names << QString("CCD%1").arg(i + 1);
+    return names;
+}
+
+void ConfigManager::setStationNames(const QStringList& names)
+{
+    set("camera.stationNames", names.join(','));
+}
+
 } // namespace VisionInspector

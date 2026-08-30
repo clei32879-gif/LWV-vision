@@ -5,6 +5,7 @@
 #include "TeachWizard.h"
 #include "../ai/InferEngine.h"
 #include "../utils/Logger.h"
+#include "../core/ConfigManager.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -24,12 +25,6 @@
 #endif
 
 namespace VisionInspector {
-
-namespace {
-const QStringList kStations = {
-    QStringLiteral("上视"), QStringLiteral("下视"),
-    QStringLiteral("侧视"), QStringLiteral("45°斜视")};
-}
 
 TeachWizard::TeachWizard(ICameraDriver* camera, QWidget* parent)
     : QDialog(parent), m_camera(camera)
@@ -61,7 +56,7 @@ void TeachWizard::setupUi() {
     auto* topBar = new QHBoxLayout();
     topBar->addWidget(new QLabel(QStringLiteral("工位:"), this));
     m_stationCombo = new QComboBox(this);
-    m_stationCombo->addItems(kStations);
+    m_stationCombo->addItems(ConfigManager::instance().stationNames());
     m_stationCombo->setMinimumWidth(120);
     topBar->addWidget(m_stationCombo);
     topBar->addStretch();

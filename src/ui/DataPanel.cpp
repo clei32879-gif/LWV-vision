@@ -1,4 +1,5 @@
 #include "DataPanel.h"
+#include "../core/ConfigManager.h"
 #include <QVBoxLayout>
 #include <QHeaderView>
 
@@ -21,10 +22,11 @@ DataPanel::DataPanel(QWidget* parent) : QWidget(parent) {
     // 不用交替行颜色，手动统一背景
     m_table->setAlternatingRowColors(false);
 
-    m_table->setRowCount(8);
-    for (int i = 0; i < 8; ++i) {
+    const QStringList stations = ConfigManager::instance().stationNames();
+    m_table->setRowCount(stations.size());
+    for (int i = 0; i < stations.size(); ++i) {
         for (int j = 0; j < 8; ++j) {
-            auto* item = new QTableWidgetItem(j == 0 ? QString("CCD%1").arg(i + 1) : "--");
+            auto* item = new QTableWidgetItem(j == 0 ? stations.at(i) : "--");
             item->setTextAlignment(Qt::AlignCenter);
             // 统一深色背景 + 浅色文字，不分单双行
             item->setBackground(QColor(30, 30, 30));

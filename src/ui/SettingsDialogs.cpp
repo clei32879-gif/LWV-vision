@@ -5,6 +5,7 @@
 
 #include "SettingsDialogs.h"
 #include "../core/GlobalVariables.h"
+#include "../core/ConfigManager.h"
 #include "../utils/Logger.h"
 
 #include <QVBoxLayout>
@@ -55,6 +56,15 @@ SystemSettingsDialog::SystemSettingsDialog(QWidget* parent)
     m_autoSaveNG = new QCheckBox(QStringLiteral("NG图像自动保存 (含检测标注, 保存到图像目录/ng/)"), this);
     form->addRow(m_autoSaveNG);
 
+    m_cameraCount = new QSpinBox(this);
+    m_cameraCount->setRange(1, 16);
+    form->addRow(QStringLiteral("相机/工位数量(重启生效):"), m_cameraCount);
+
+    m_stationNames = new QLineEdit(this);
+    m_stationNames->setPlaceholderText(
+        QStringLiteral("逗号分隔; 留空=自动CCD1..CCDN. 例: 上视,下视,侧视1,侧视2,左斜视,右斜视,顶视,底视"));
+    form->addRow(QStringLiteral("工位名称:"), m_stationNames);
+
     // 读取当前配置
     QSettings s("VisionInspector", "VisionInspector");
     m_autoSaveNG->setChecked(s.value("autoSaveNGImages", false).toBool());
@@ -62,6 +72,9 @@ SystemSettingsDialog::SystemSettingsDialog(QWidget* parent)
         QCoreApplication::applicationDirPath() + "/images").toString());
     const int level = s.value("logLevel", int(LogLevel::Info)).toInt();
     m_logLevel->setCurrentIndex(qMax(0, m_logLevel->findData(level)));
+
+    m_cameraCount->setValue(ConfigManager::instance().cameraCount());
+    m_stationNames->setText(ConfigManager::instance().get("camera.stationNames", "").toString());
 
     auto* buttons = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -76,6 +89,11 @@ void SystemSettingsDialog::onAccept() {
     s.setValue("autoSaveNGImages", m_autoSaveNG->isChecked());
     s.setValue("logLevel", m_logLevel->currentData().toInt());
     Logger::instance().setLevel(LogLevel(m_logLevel->currentData().toInt()));
+
+    ConfigManager::instance().setCameraCount(m_cameraCount->value());
+    const QStringList names = m_stationNames->text().split(',', Qt::SkipEmptyParts);
+    ConfigManager::instance().setStationNames(names);
+
     accept();
 }
 

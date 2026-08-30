@@ -11,6 +11,7 @@
 #include <QPushButton>
 #include <QPlainTextEdit>
 #include <QCheckBox>
+#include <QSpinBox>
 
 namespace VisionInspector {
 
@@ -32,6 +33,8 @@ private:
     QLineEdit* m_imageDir = nullptr;
     QComboBox* m_language = nullptr;
     QCheckBox* m_autoSaveNG = nullptr;
+    QSpinBox* m_cameraCount = nullptr;
+    QLineEdit* m_stationNames = nullptr;
 };
 
 // ============================================================

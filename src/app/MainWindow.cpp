@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "../utils/Logger.h"
 #include "../engine/ToolRegistry.h"
+#include "../core/ConfigManager.h"
 #include "../ui/DisplayArea.h"
 #include "../ui/FlowEditor.h"
 #include "../ui/Toolbox.h"
@@ -143,7 +144,10 @@ void MainWindow::setupUI() {
     m_toolbox = new Toolbox(this);
     m_flowEditor = new FlowEditor(this);
     m_multiView = new MultiViewWidget(this);
-    m_multiView->setLayout(2, 4);
+    const int camN = ConfigManager::instance().cameraCount();
+    const int camCols = camN > 4 ? 4 : camN;
+    const int camRows = (camN + camCols - 1) / camCols;
+    m_multiView->setLayout(camRows, camCols);
     
     m_mainSplitter = new QSplitter(Qt::Horizontal, this);
     m_mainSplitter->setHandleWidth(6);
@@ -214,7 +218,7 @@ void MainWindow::createMenus() {
     annoMenu->addAction(QString::fromUtf8("\u7f3a\u9677\u6807\u6ce8\u5de5\u5177..."), this, &MainWindow::onAnnotationTool);
 
     QMenu* aiMenu = menuBar()->addMenu(QString::fromUtf8("AI(&I)"));
-    aiMenu->addAction(QString::fromUtf8("\u6559\u5bfc\u5411\u5bfc(\u4e0a\u89c6/\u4e0b\u89c6/\u4fa7\u89c6/45\u00b0\u659c\u89c6)..."), this, &MainWindow::onTeachWizard);
+    aiMenu->addAction(QString::fromUtf8("教导向导(多工位AI缺陷检测)..."), this, &MainWindow::onTeachWizard);
 
     QMenu* camMenu = menuBar()->addMenu(QString::fromUtf8("\u76f8\u673a(&C)"));
     camMenu->addAction(QString::fromUtf8("\u626b\u63cf\u76f8\u673a"), this, &MainWindow::onScanCameras);
