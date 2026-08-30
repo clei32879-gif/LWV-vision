@@ -47,9 +47,9 @@ bool ImageOperation::execute(ToolContext& context) {
 
     cv::Mat a, b;
     if (input1->channels() > 1) cv::cvtColor(*input1, a, cv::COLOR_BGR2GRAY);
-    else a = *input1;
+    else a = input1->clone();   // 克隆: 后续 convertTo/resize 就地修改不得污染源图
     if (input2->channels() > 1) cv::cvtColor(*input2, b, cv::COLOR_BGR2GRAY);
-    else b = *input2;
+    else b = input2->clone();
 
     // ROI 裁剪 (对图像1; 图像2按其尺寸对齐)
     m_roi.centerX = propertyValue("roiCenterX").toDouble();
