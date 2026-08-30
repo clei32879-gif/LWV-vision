@@ -1632,6 +1632,90 @@ int main(int argc, char* argv[]) {
         delete ct;
     }
 
+    // ===================================================================
+    // 测试24: 像素统计 / 检测间距 / 扫描边缘 (P1-12)
+    // ===================================================================
+    {
+        std::printf("\n测试24: 像素统计/检测间距/扫描边缘\n");
+        // 测试图: 60x80 灰度, x[20,50) 区域白(255), 其余黑(0)
+        cv::Mat psImg(80, 60, CV_8UC1, cv::Scalar(0));
+        cv::rectangle(psImg, cv::Rect(20, 0, 30, 80), cv::Scalar(255), -1);
+        ToolContext ctx24;
+        ctx24.setCurrentImage(std::make_shared<CvImage>(psImg));
+
+        // --- 像素统计: 全图统计 ---
+        ITool* ps = reg.createTool("PixelStatistics");
+        ps->setProperty("roiType", 0);   // 无ROI = 全图
+        ps->setProperty("lowThreshold", 100);
+        ps->setProperty("highThreshold", 255);
+        CHECK(ps->execute(ctx24), "像素统计: 执行");
+        const auto& psR = ps->resultData();
+        const double whiteCount = psR.value("whiteCount").toDouble();
+        const double whiteRatio = psR.value("whiteRatio").toDouble();
+        CHECK(whiteCount == 2400.0, "像素统计: 白像素数=2400");   // 30*80
+        CHECK(whiteRatio > 0.499 && whiteRatio < 0.501, "像素统计: 比率≈0.5");
+        CHECK(psR.value("mean").toDouble() > 80, "像素统计: 均值>80");
+        CHECK(psR.value("min").toDouble() == 0, "像素统计: 最小值=0");
+        CHECK(psR.value("max").toDouble() == 255, "像素统计: 最大值=255");
+
+        // 像素统计: 带 ROI 裁剪 (x[10,50], y[10,30] → 40x20 子图, 白区 x[20,50)=30列*20行=600)
+        ps->setProperty("roiType", 1);
+        ps->setProperty("roiCenterX", 30);
+        ps->setProperty("roiCenterY", 20);
+        ps->setProperty("roiWidth", 40);
+        ps->setProperty("roiHeight", 20);
+        CHECK(ps->execute(ctx24), "像素统计: ROI裁剪执行");
+        CHECK(ps->resultData().value("whiteCount").toDouble() == 600.0, "像素统计: ROI白像素=600");
+        delete ps;
+
+        // --- 检测间距: 沿 x 方向扫描穿过白条 ---
+        ITool* es = reg.createTool("EdgeSpacing");
+        es->setProperty("roiCenterX", 30);
+        es->setProperty("roiCenterY", 40);
+        es->setProperty("roiWidth", 60);
+        es->setProperty("roiHeight", 5);
+        es->setProperty("roiAngle", 0);
+        es->setProperty("edgePolarity", 0);    // 任意
+        es->setProperty("gradientThreshold", 15);
+        es->setProperty("filterHalfWidth", 1);
+        es->setProperty("edgePosition", 0);    // 起始
+        CHECK(es->execute(ctx24), "检测间距: 执行");
+        const auto& esR = es->resultData();
+        CHECK(esR.value("gapCount").toInt() >= 1, "检测间距: 间距数>=1");
+        const double mainW = esR.value("mainWidth").toDouble();
+        CHECK(mainW > 25 && mainW < 35, "检测间距: 主间距≈30");   // 白条宽30
+
+        // 最宽模式
+        es->setProperty("edgePosition", 2);
+        CHECK(es->execute(ctx24), "检测间距: 最宽执行");
+        CHECK(es->resultData().value("mainWidth").toDouble() > 25, "检测间距: 最宽间距>25");
+        delete es;
+
+        // --- 扫描边缘: 起始模式 ---
+        ITool* se = reg.createTool("ScanEdge");
+        se->setProperty("roiCenterX", 30);
+        se->setProperty("roiCenterY", 40);
+        se->setProperty("roiWidth", 60);
+        se->setProperty("roiHeight", 5);
+        se->setProperty("roiAngle", 0);
+        se->setProperty("edgePolarity", 0);
+        se->setProperty("gradientThreshold", 15);
+        se->setProperty("filterHalfWidth", 1);
+        se->setProperty("edgePosition", 0);    // 起始
+        se->setProperty("scanCount", 1);
+        CHECK(se->execute(ctx24), "扫描边缘: 执行");
+        const auto& seR = se->resultData();
+        CHECK(seR.value("edgeCount").toInt() >= 2, "扫描边缘: 边缘数>=2");
+        const double mainX = seR.value("mainX").toDouble();
+        CHECK(mainX > 15 && mainX < 25, "扫描边缘: 主边缘X≈20");
+
+        // 最强模式
+        se->setProperty("edgePosition", 2);
+        CHECK(se->execute(ctx24), "扫描边缘: 最强执行");
+        CHECK(se->resultData().value("mainStrength").toDouble() > 10, "扫描边缘: 最强梯度>10");
+        delete se;
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);

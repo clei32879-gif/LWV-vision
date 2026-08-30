@@ -37,10 +37,10 @@ option(VI_BUILD_PLUGINS "Build plugins" ON)
 # 全部插件目标清单 (app与tests共用; 插件静态注册必须WHOLE_ARCHIVE链接)
 set(VI_ALL_PLUGINS
     AIDetection YOLOv8Detect ThreadInspection BlobAnalysis BlobClassify EdgeCircleFind BrightnessCheck CircleDetection EdgeDetection
-    ImageProcess ImageOperation SaveImage ImageMerge CropTransform LineDetection TemplateMatch
+    ImageProcess ImageOperation SaveImage ImageMerge CropTransform LineDetection TemplateMatch PixelStatistics
     GrayscaleMatch ShapeMatch ContourMatch
     BarcodeReader QRCodeReader OCR
-    DistanceMeasure AngleMeasure Caliper
+    DistanceMeasure AngleMeasure Caliper EdgeSpacing ScanEdge
     LineIntersect LineToLine ExtendPoint RotatePoint PointToLine
     CircleToLine CircleToCircle
     ImageFilter Threshold Morphology ColorConvert
