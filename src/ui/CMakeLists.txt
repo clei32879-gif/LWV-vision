@@ -3,6 +3,9 @@
 qt_add_library(VIUI STATIC)
 
 target_sources(VIUI PRIVATE
+    # 图标资源 (桌面素材转换: 工具/分类/应用logo)
+    resources/icons.qrc
+
     # 菜单栏
     MenuBar.h
     MenuBar.cpp

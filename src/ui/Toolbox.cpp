@@ -75,7 +75,8 @@ void Toolbox::refreshTools() {
             auto* item = new QTreeWidgetItem(group, QStringList{meta.displayName});
             item->setData(0, Qt::UserRole, meta.typeName);
             item->setToolTip(0, meta.typeName);
-            item->setIcon(0, IconHelper::categoryIcon(cat, 16));
+            // 优先使用该工具的专属素材图标, 无素材时内部回退分类图标
+            item->setIcon(0, IconHelper::toolIcon(meta.typeName, meta.category, 16));
         }
     }
 

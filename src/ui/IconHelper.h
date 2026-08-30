@@ -1,4 +1,4 @@
-/** @file IconHelper.h - 图标生成辅助工具 */
+/** @file IconHelper.h - 图标辅助工具 (素材优先, 代码绘制兜底) */
 #pragma once
 #include <QIcon>
 #include <QPixmap>
@@ -7,15 +7,148 @@
 #include <QPolygon>
 #include <QLinearGradient>
 #include <QBrush>
+#include <QHash>
 #include <cmath>
 #include "../utils/Common.h"
+
+// VIUI 是静态库: qrc(icons.qrc) 编译出的资源初始化函数 qInitResources_icons()
+// 是全局符号(由 rcc 生成, 非命名空间)。Q_INIT_RESOURCE 在命名空间内展开会产生
+// 命名空间限定调用, 与 rcc 全局定义不匹配 → 链接失败。故在此全局作用域显式
+// extern 声明并注册(引用计数幂等, 多次调用安全)。
+int qInitResources_icons();
+inline void lwInitIconsResource() { qInitResources_icons(); }
 
 namespace VisionInspector {
 
 class IconHelper {
 public:
-    // 应用图标: 蓝色圆盘 + 眼睛(虹膜/瞳孔/高光) + 取景框四角
+    // ============================================================
+    // 素材图标加载 (src/ui/resources/icons/, 经 icons.qrc 编译进资源)
+    // 素材由设计稿提供 (桌面"图标素材"文件夹, 白底JPG转透明PNG, 128x128)
+    // ============================================================
+
+    // 按素材文件名加载图标 (name 不含扩展名), 失败返回空 QIcon
+    static QIcon assetIcon(const QString& name, int size = 128) {
+        // VIUI 是静态库: qrc 编译出的资源初始化函数必须显式调用一次,
+        // 否则 :/icons/... 资源未注册, 加载始终为空。
+        // lwInitIconsResource 内部有引用计数, 多次调用安全。
+        lwInitIconsResource();
+        QPixmap pm(QStringLiteral(":/icons/%1.png").arg(name));
+        if (pm.isNull()) return QIcon();
+        if (pm.width() != size && pm.width() > 0)
+            pm = pm.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        return QIcon(pm);
+    }
+
+    // ============================================================
+    // 应用图标: 素材 logo, 缺失回退代码绘制(蓝眼睛)
+    // ============================================================
     static QIcon appIcon(int size = 64) {
+        QIcon asset = assetIcon(QStringLiteral("lw_logo"), size);
+        if (!asset.isNull()) return asset;
+        return appIconFallback(size);
+    }
+
+    // ============================================================
+    // 工具分类图标: 优先"分类-<名称>.png", 缺失回退代码绘制
+    // ============================================================
+    static QIcon categoryIcon(ToolCategory cat, int size = 24) {
+        const QString assetName = categoryAssetName(cat);
+        if (!assetName.isEmpty()) {
+            QIcon asset = assetIcon(assetName, size);
+            if (!asset.isNull()) return asset;
+        }
+        return categoryIconFallback(cat, size);
+    }
+
+    // ============================================================
+    // 工具图标: 按工具类型名映射到素材, 无专属素材时回退分类图标(永不空)
+    // ============================================================
+    static QIcon toolIcon(const QString& typeName, ToolCategory cat, int size = 16) {
+        const QString assetName = toolAssetName(typeName);
+        if (!assetName.isEmpty()) {
+            QIcon asset = assetIcon(assetName, size);
+            if (!asset.isNull()) return asset;
+        }
+        return categoryIcon(cat, size);
+    }
+
+private:
+    // 分类 -> 素材文件名 (与 resources/icons/cat_*.png 对应)
+    static QString categoryAssetName(ToolCategory cat) {
+        switch (cat) {
+            case ToolCategory::Camera:        return QStringLiteral("cat_camera");
+            case ToolCategory::ImageProcess:  return QStringLiteral("cat_image_process");
+            case ToolCategory::Calibration:   return QStringLiteral("cat_calibration");
+            case ToolCategory::Detection:     return QStringLiteral("cat_detection");
+            case ToolCategory::Geometry:      return QStringLiteral("cat_geometry");
+            case ToolCategory::Communication: return QStringLiteral("cat_communication");
+            case ToolCategory::Logic:         return QStringLiteral("cat_logic");
+            case ToolCategory::System:        return QStringLiteral("cat_system");
+            case ToolCategory::ThreeD:        return QStringLiteral("cat_3d");
+            case ToolCategory::Special:       return QStringLiteral("cat_special");
+        }
+        return QString();
+    }
+
+    // 工具类型名 -> 素材文件名 (与 resources/icons/ 内工具图标对应)
+    static QString toolAssetName(const QString& typeName) {
+        static const QHash<QString, QString> map = {
+            {QStringLiteral("AIDetection"),         QStringLiteral("ai_detect")},
+            {QStringLiteral("YOLOv8Detect"),        QStringLiteral("yolov8_detect")},
+            {QStringLiteral("ThreadInspection"),    QStringLiteral("thread_inspection")},
+            {QStringLiteral("BlobAnalysis"),        QStringLiteral("blob_analysis")},
+            {QStringLiteral("EdgeCircleFind"),      QStringLiteral("fast_circle")},
+            {QStringLiteral("BrightnessCheck"),     QStringLiteral("brightness_check")},
+            {QStringLiteral("CircleDetection"),     QStringLiteral("circle_detect")},
+            {QStringLiteral("EdgeDetection"),       QStringLiteral("edge_detect")},
+            {QStringLiteral("LineDetection"),       QStringLiteral("line_detect")},
+            {QStringLiteral("TemplateMatch"),       QStringLiteral("template_match")},
+            {QStringLiteral("GrayscaleMatch"),      QStringLiteral("grayscale_match")},
+            {QStringLiteral("ShapeMatch"),          QStringLiteral("shape_match")},
+            {QStringLiteral("ContourMatch"),        QStringLiteral("contour_match")},
+            {QStringLiteral("BarcodeReader"),       QStringLiteral("barcode")},
+            {QStringLiteral("QRCodeReader"),        QStringLiteral("qr_read")},
+            {QStringLiteral("OCR"),                 QStringLiteral("ocr")},
+            {QStringLiteral("DistanceMeasure"),     QStringLiteral("distance_measure")},
+            {QStringLiteral("AngleMeasure"),        QStringLiteral("angle_measure")},
+            {QStringLiteral("Caliper"),             QStringLiteral("caliper")},
+            {QStringLiteral("ImageFilter"),         QStringLiteral("image_filter")},
+            {QStringLiteral("Threshold"),           QStringLiteral("threshold")},
+            {QStringLiteral("Morphology"),          QStringLiteral("morphology")},
+            {QStringLiteral("ColorConvert"),        QStringLiteral("color_convert")},
+            {QStringLiteral("ColorDetection"),      QStringLiteral("color_detect")},
+            {QStringLiteral("ConditionBranch"),     QStringLiteral("condition_branch")},
+            {QStringLiteral("DataJudge"),           QStringLiteral("data_judge")},
+            {QStringLiteral("Loop"),                QStringLiteral("loop")},
+            {QStringLiteral("Delay"),               QStringLiteral("delay")},
+            {QStringLiteral("CaptureImage"),        QStringLiteral("capture_image")},
+            {QStringLiteral("DataDisplay"),         QStringLiteral("data_display")},
+            {QStringLiteral("UpdateView"),          QStringLiteral("update_view")},
+            {QStringLiteral("Calculator"),          QStringLiteral("calculator")},
+            {QStringLiteral("ImageCompare"),        QStringLiteral("image_compare")},
+            {QStringLiteral("Calibration"),         QStringLiteral("calibration")},
+            {QStringLiteral("PositionCorrection"),  QStringLiteral("position_correction")},
+            {QStringLiteral("VertexDetection"),     QStringLiteral("vertex_detect")},
+            {QStringLiteral("WidthDetection"),      QStringLiteral("width_detect")},
+            {QStringLiteral("MultiContourMatch"),   QStringLiteral("multi_contour_match")},
+            {QStringLiteral("ContourCompare"),      QStringLiteral("contour_compare")},
+            {QStringLiteral("CoordSystem"),         QStringLiteral("coord_system")},
+            {QStringLiteral("ImageCorrection"),     QStringLiteral("image_correction")},
+            {QStringLiteral("CalculateVariable"),   QStringLiteral("calculate_variable")},
+            {QStringLiteral("SetVariable"),         QStringLiteral("set_variable")},
+            {QStringLiteral("SerialPortTool"),      QStringLiteral("serial_port")},
+            {QStringLiteral("EthernetTool"),        QStringLiteral("ethernet")},
+            {QStringLiteral("ModbusRead"),          QStringLiteral("mb_read")},
+            {QStringLiteral("ModbusWrite"),         QStringLiteral("mb_write")},
+        };
+        return map.value(typeName);
+    }
+
+    // ============================================================
+    // 代码绘制兜底 (素材缺失时使用, 与原实现一致)
+    // ============================================================
+    static QIcon appIconFallback(int size) {
         QPixmap pm(size, size);
         pm.fill(Qt::transparent);
         QPainter p(&pm);
@@ -61,8 +194,8 @@ public:
         return QIcon(pm);
     }
 
-    // 工具分类图标: 每类一个配色 + 图形
-    static QIcon categoryIcon(ToolCategory cat, int size = 24) {
+    // 工具分类图标 (代码绘制兜底): 每类一个配色 + 图形
+    static QIcon categoryIconFallback(ToolCategory cat, int size = 24) {
         QPixmap pm(size, size);
         pm.fill(Qt::transparent);
         QPainter p(&pm);
@@ -178,6 +311,10 @@ public:
         return QIcon(pm);
     }
 
+public:
+    // ============================================================
+    // 工具栏通用操作图标 (代码绘制; 素材未提供, 与原有外观一致)
+    // ============================================================
     // 相机图标（蓝色相机形状）
     static QIcon cameraIcon(int size = 24) {
         QPixmap pixmap(size, size);

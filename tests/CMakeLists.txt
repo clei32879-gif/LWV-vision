@@ -128,3 +128,23 @@ if(VI_HAS_ONNXRT)
         VIAI VICore VIEngine VIUtils ${OpenCV_LIBS} Qt6::Core Qt6::Gui)
     add_test(NAME teach_flow COMMAND test_teach_flow)
 endif()
+
+# 图标加载回归: 遍历全部工具/分类, 验证素材图标非空 (链VIUI获取编译进的icons.qrc)
+add_executable(test_icons test_icons.cpp)
+target_link_libraries(test_icons PRIVATE
+    VIUI
+    VICore
+    VIEngine
+    VIHAL
+    VIUtils
+    ${OpenCV_LIBS}
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+)
+foreach(_plugin ${VI_ALL_PLUGINS})
+    if(TARGET ${_plugin})
+        target_link_libraries(test_icons PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${_plugin}>)
+    endif()
+endforeach()
+add_test(NAME icons COMMAND test_icons)
