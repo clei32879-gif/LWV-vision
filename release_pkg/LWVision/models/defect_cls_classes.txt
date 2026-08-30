@@ -1,3 +1,9 @@
+MVTec_manipulated_front
+MVTec_scratch_head
+MVTec_scratch_neck
+MVTec_thread_side
+MVTec_thread_top
+MVTec良品
 发黑
 头上有疤
 头麻
