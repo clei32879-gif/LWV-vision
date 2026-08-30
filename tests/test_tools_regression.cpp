@@ -808,6 +808,35 @@ int main(int argc, char* argv[]) {
         delete he2;
     }
 
+    // ---- 13. 系统时间: 时间戳 + 耗时计时 (对标 CKVision 计算时间/系统时间) ----
+    {
+        ToolContext ctx;
+        ITool* st = reg.createTool("SystemTime");
+        st->setInstanceName("系统时间");
+        // 模式0 时间戳: 当前时间合理(unix毫秒>1.7e12即2023年后) + 日期时间非空
+        st->setProperty("mode", 0);
+        CHECK(st->execute(ctx), "系统时间-时间戳: 执行成功");
+        const qint64 unixMs = st->resultData().value("unixMs").toLongLong();
+        CHECK(unixMs > 1700000000000LL,
+              QString("系统时间-时间戳: unixMs=%1合理").arg(unixMs).toLocal8Bit().constData());
+        CHECK(!st->resultData().value("datetime").toString().isEmpty(), "系统时间-时间戳: datetime非空");
+
+        // 模式1 耗时计时: 多次执行 elapsedMs 递增 + runCount 递增
+        st->setProperty("mode", 1);
+        CHECK(st->execute(ctx), "系统时间-耗时: 第1次执行成功");
+        const double e1 = st->resultData().value("elapsedMs").toDouble();
+        CHECK(e1 >= 0.0, QString("系统时间-耗时: 首帧elapsedMs=%1≥0").arg(e1).toLocal8Bit().constData());
+        const int rc1 = st->resultData().value("runCount").toInt();
+        CHECK(rc1 == 1, QString("系统时间-耗时: runCount=%1").arg(rc1).toLocal8Bit().constData());
+        // 第二次执行后 elapsedMs 应增大(单调非减), runCount=2
+        CHECK(st->execute(ctx), "系统时间-耗时: 第2次执行成功");
+        const double e2 = st->resultData().value("elapsedMs").toDouble();
+        const int rc2 = st->resultData().value("runCount").toInt();
+        CHECK(rc2 == 2, QString("系统时间-耗时: runCount=%1").arg(rc2).toLocal8Bit().constData());
+        CHECK(e2 >= e1, QString("系统时间-耗时: elapsedMs单调(%1→%2)").arg(e1).arg(e2).toLocal8Bit().constData());
+        delete st;
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);
