@@ -8,6 +8,7 @@
 #include "../hal/ICameraDriver.h"
 #include <QElapsedTimer>
 #include <QThread>
+#include <QDateTime>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QRegularExpression>
 
@@ -97,13 +98,18 @@ void Flow::insertTool(int index, ITool* tool) {
 
 void Flow::removeTool(int index) {
     QMutexLocker locker(&m_mutex);
-    if (index >= 0 && index < m_tools.size())
-        m_tools.removeAt(index);
+    if (index >= 0 && index < m_tools.size()) {
+        ITool* tool = m_tools.takeAt(index);
+        // Flow 拥有工具 (H-1): 移除即删除; 调用方须确保工作线程已停
+        delete tool;
+    }
 }
 
 void Flow::removeTool(ITool* tool) {
+    if (!tool) return;
     QMutexLocker locker(&m_mutex);
     m_tools.removeAll(tool);
+    delete tool;
 }
 
 void Flow::moveTool(int from, int to) {
@@ -168,6 +174,8 @@ void Flow::fromJson(const QJsonObject& json) {
 FlowEngine::FlowEngine(QObject* parent)
     : QObject(parent)
 {
+    // 跨线程 queued 信号注册 (工作线程emit ToolStatus需已注册, 否则被静默丢弃)
+    qRegisterMetaType<ToolStatus>("ToolStatus");
 }
 
 void FlowEngine::addFlow(Flow* flow) {
@@ -364,7 +372,9 @@ void FlowEngine::executeOnceAsync(Flow* flow) {
         VI_LOG_WARN("流程正在执行中, 忽略本次执行请求");
         return;
     }
-    (void)QtConcurrent::run([this, flow]() {
+    // 保存句柄供 shutdownAndWait 等待; 执行互斥防止与连续运行并发 doExecute
+    m_onceFuture = QtConcurrent::run([this, flow]() {
+        QMutexLocker execLock(&m_execMutex);
         ToolContext context;
         doExecute(flow, context);
         m_executing = false;
@@ -377,6 +387,7 @@ bool FlowEngine::executeOnce(Flow* flow, ToolContext& context) {
         VI_LOG_WARN("流程正在执行中, 忽略同步执行请求");
         return false;
     }
+    QMutexLocker execLock(&m_execMutex);
     bool ok = doExecute(flow, context);
     m_executing = false;
     return ok;
@@ -393,14 +404,22 @@ void FlowEngine::startRunning(Flow* flow) {
     emit runStateChanged(true);
     VI_LOG_INFO("开始连续运行: " + (flow ? flow->name() : QString("默认流程")));
 
-    (void)QtConcurrent::run([this, flow]() { runLoop(flow); });
+    m_runFuture = QtConcurrent::run([this, flow]() { runLoop(flow); });
 }
 
 void FlowEngine::runLoop(Flow* flow) {
     while (m_running && !m_stopPending && !m_abort) {
         m_executing = true;
         ToolContext context;
-        doExecute(flow, context);
+        {
+            // 与单次执行互斥, 避免同轮 doExecute 并发改工具属性/结果
+            QMutexLocker execLock(&m_execMutex);
+            if (m_abort || m_stopPending || !m_running) {
+                m_executing = false;
+                break;
+            }
+            doExecute(flow, context);
+        }
         m_executing = false;
 
         if (m_abort || m_stopPending || !m_running) break;
@@ -429,6 +448,25 @@ void FlowEngine::stopRunning(bool force) {
         m_running = false;
         VI_LOG_INFO("请求普通停止 (执行完本轮流程后停止)");
     }
+}
+
+void FlowEngine::shutdownAndWait(int timeoutMs) {
+    // 置中止标志: 单次执行 + 连续运行都在工具间隙检查 m_abort, 尽快退出
+    m_abort = true;
+    m_running = false;
+    m_stopPending = false;
+
+    // 等待工作线程结束 (关窗/重建项目前必须, 否则释放资源时 use-after-free)
+    QFuture<void> once = m_onceFuture;
+    QFuture<void> run = m_runFuture;
+    const qint64 deadline = QDateTime::currentMSecsSinceEpoch() + timeoutMs;
+    while ((!once.isFinished() || !run.isFinished()) &&
+           QDateTime::currentMSecsSinceEpoch() < deadline) {
+        QThread::msleep(20);
+    }
+
+    m_abort = false;
+    VI_LOG_INFO("引擎已停止并等待工作线程结束");
 }
 
 } // namespace VisionInspector

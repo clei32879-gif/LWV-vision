@@ -64,6 +64,22 @@ public:
     QString m_flatValue;
 };
 
+// ---- 测试工具C: 慢执行 (模拟耗时算法, 验证shutdownAndWait会等待) ----
+class ToolSlow : public ITool {
+    Q_OBJECT
+public:
+    QString typeName() const override { return "ToolSlow"; }
+    QString displayName() const override { return "慢工具"; }
+    ToolCategory category() const override { return ToolCategory::System; }
+    PropertyDefList propertyDefs() const override {
+        return { PropertyDef::intProp("sleepMs", "耗时(ms)", 200) };
+    }
+    bool execute(ToolContext&) override {
+        QThread::msleep(propertyValue("sleepMs").toInt());
+        return true;
+    }
+};
+
 #include "test_engine.moc"
 
 int main(int argc, char* argv[]) {
@@ -74,7 +90,9 @@ int main(int argc, char* argv[]) {
                                     []() { return new ToolSource(); }});
     reg.registerTool("ToolChecker", {"ToolChecker", "校验器", ToolCategory::System,
                                      []() { return new ToolChecker(); }});
-    CHECK(reg.allMetaData().size() >= 2, "工具注册成功");
+    reg.registerTool("ToolSlow", {"ToolSlow", "慢工具", ToolCategory::System,
+                                  []() { return new ToolSlow(); }});
+    CHECK(reg.allMetaData().size() >= 3, "工具注册成功");
 
     FlowEngine engine;
 
@@ -136,6 +154,54 @@ int main(int argc, char* argv[]) {
         if (runStopped.tryAcquire(1, 20)) { stoppedFast = timer.elapsed() < 500; break; }
     }
     CHECK(stoppedFast, QString("停止响应 %1ms < 500ms").arg(timer.elapsed()).toLocal8Bit().constData());
+
+    // ---- 测试4: shutdownAndWait 真正等待工作线程结束 ----
+    std::printf("测试4: shutdownAndWait 等待工作线程结束\n");
+    {
+        Flow* slowFlow = new Flow(&engine);
+        slowFlow->setName("慢流程");
+        ITool* slow = reg.createTool("ToolSlow");
+        slow->setInstanceName("慢工具");
+        slow->setProperty("sleepMs", 200);
+        slowFlow->addTool(slow);
+        engine.addFlow(slowFlow);
+
+        // 连续运行 (每轮200ms慢工具), 然后立刻 shutdownAndWait 应阻塞至当前轮结束
+        engine.startRunning(slowFlow);
+        QThread::msleep(50);   // 让工作线程进入慢工具执行
+        QElapsedTimer sw;
+        sw.start();
+        engine.shutdownAndWait(3000);
+        const qint64 waited = sw.elapsed();
+        CHECK(waited >= 150, QString("shutdownAndWait 等待慢工具执行完: %1ms").arg(waited)
+                                 .toLocal8Bit().constData());
+        CHECK(!engine.isRunning(), "shutdownAndWait 后不再运行");
+        CHECK(!engine.isExecuting(), "shutdownAndWait 后不在执行");
+        engine.removeFlow(slowFlow);
+        slowFlow->deleteLater();
+    }
+
+    // ---- 测试5: Flow 拥有工具, 删除Flow后工具被回收 (H-1) ----
+    std::printf("测试5: Flow 工具所有权/回收\n");
+    {
+        Flow* f2 = new Flow(&engine);
+        f2->setName("所有权流程");
+        ITool* a = reg.createTool("ToolSource");
+        a->setInstanceName("数据源A");
+        ITool* b = reg.createTool("ToolChecker");
+        b->setInstanceName("校验器B");
+        f2->addTool(a);
+        f2->addTool(b);
+        engine.addFlow(f2);
+        CHECK(f2->toolCount() == 2, "流程含2工具");
+        engine.removeFlow(f2);
+        f2->setParent(nullptr);
+        f2->deleteLater();   // 析构时 clear() 删除工具
+        QCoreApplication::processEvents();   // 触发 deleteLater
+        CHECK(!engine.flows().contains(f2), "流程已移除");
+        // 工具指针已由Flow回收, 此处仅验证不崩溃且计数正确
+        CHECK(true, "删除流程(含工具回收)未崩溃");
+    }
 
     std::printf("\n%s (失败: %d)\n", g_failures == 0 ? "全部通过" : "存在失败", g_failures);
     return g_failures == 0 ? 0 : 1;

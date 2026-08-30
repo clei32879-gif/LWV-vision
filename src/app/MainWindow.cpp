@@ -391,7 +391,8 @@ void MainWindow::onToolAdded(const QString& typeName) {
     if (m_flowEngine->flowCount() > 0) {
         flow = m_flowEngine->flows().first();
     } else {
-        flow = new Flow(this);
+        // H-6: 所有权统一归引擎 (与 ProjectManager 一致), 避免关窗双重释放
+        flow = new Flow(m_flowEngine);
         flow->setName("主流程");
         m_flowEngine->addFlow(flow);
     }
@@ -864,8 +865,31 @@ void MainWindow::saveSettings() {
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
+    // 1) 先停流程线程并等待结束, 再释放硬件/连接池 (防工作线程 use-after-free)
+    if (m_flowEngine) {
+        if (m_flowEngine->isRunning() || m_flowEngine->isExecuting()) {
+            m_flowEngine->stopRunning(true);
+            m_flowEngine->shutdownAndWait(3000);
+        }
+    }
+
+    // 2) 未保存提示 (工业软件防配置丢失)
+    if (m_projectMgr && m_projectMgr->isModified()) {
+        const auto ret = QMessageBox::warning(
+            this, QStringLiteral("未保存的修改"),
+            QStringLiteral("当前项目有未保存的修改，是否保存？"),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+            QMessageBox::Save);
+        if (ret == QMessageBox::Cancel) {
+            event->ignore();
+            return;
+        }
+        if (ret == QMessageBox::Save) onSaveProject();
+    }
+
+    // 3) 释放资源
     if (m_camera) m_camera->closeCamera();
-    ModbusTcpMaster::releaseAll();   // 断开所有Modbus连接
+    ModbusTcpMaster::releaseAll();   // 断开所有Modbus连接 (工作线程已停, 安全)
     saveSettings();
     event->accept();
 }

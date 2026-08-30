@@ -196,3 +196,6 @@ inline QImage cvMatToQImage(const CvImage& mat) {
 #endif
 
 } // namespace VisionInspector
+
+// ToolStatus 跨线程信号参数注册 (工作线程emit queued信号必需, 否则被Qt静默丢弃)
+Q_DECLARE_METATYPE(VisionInspector::ToolStatus)

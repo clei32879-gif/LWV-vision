@@ -41,6 +41,8 @@ void ProjectManager::newProject() {
     m_modified = false;
 
     if (m_engine) {
+        // H-2: 先停引擎并等待工作线程结束, 再删除流程/工具 (防 use-after-free)
+        m_engine->shutdownAndWait(3000);
         for (Flow* f : m_engine->flows()) {
             f->clear();
             m_engine->removeFlow(f);
@@ -74,10 +76,10 @@ bool ProjectManager::loadProject(const QString& path) {
     m_projectName = json.value("projectName").toString("Untitled");
     m_projectNote = json.value("projectNote").toString();
 
-    // 重建流程与工具
+    // 重建流程与工具 (H-2: 先停引擎等待工作线程结束, 再删旧流程/工具)
     if (m_engine) {
+        m_engine->shutdownAndWait(3000);
         for (Flow* f : m_engine->flows()) {
-            f->clear();
             m_engine->removeFlow(f);
             // 先脱离 QObject 父子关系再延迟删除, 避免引擎析构时二次释放
             f->setParent(nullptr);

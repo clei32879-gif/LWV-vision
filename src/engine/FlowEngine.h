@@ -28,6 +28,7 @@
 #include <QPair>
 #include <QString>
 #include <QMutex>
+#include <QFuture>
 #include <atomic>
 #include <memory>
 #include <functional>
@@ -42,6 +43,8 @@ class Flow : public QObject {
 
 public:
     Flow(QObject* parent = nullptr) : QObject(parent) {}
+    /** 拥有工具: 析构时删除全部工具 (调用方须先停引擎, 见 shutdownAndWait) */
+    ~Flow() override { clear(); }
 
     // 流程信息
     QString name() const { return m_name; }
@@ -140,6 +143,13 @@ public:
     /** 是否连续运行中 */
     bool isRunning() const { return m_running; }
 
+    /**
+     * 彻底停止并等待所有工作线程结束 (关窗/重建项目前调用, 防use-after-free)
+     * 置中止标志 → 等待单次执行与连续运行任务全部结束(最多 timeoutMs)。
+     * 之后调用方即可安全释放相机/Modbus连接池等资源。
+     */
+    void shutdownAndWait(int timeoutMs = 5000);
+
     /** 是否有流程正在执行 (单次或连续运行的某一轮) */
     bool isExecuting() const { return m_executing; }
 
@@ -187,6 +197,12 @@ private:
     void runLoop(Flow* flow);
 
     QList<Flow*> m_flows;
+
+    // 执行互斥: 单次执行与连续运行不可并发 doExecute 同一 Flow (H-3)
+    QMutex m_execMutex;
+    // 工作线程句柄 (关窗/重建前 shutdownAndWait 等待结束)
+    QFuture<void> m_onceFuture;
+    QFuture<void> m_runFuture;
 
     std::atomic_bool m_running{false};    // 连续运行中
     std::atomic_bool m_executing{false};  // 某轮执行中
