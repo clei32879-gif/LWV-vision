@@ -1072,6 +1072,54 @@ int main(int argc, char* argv[]) {
         delete ct2;
     }
 
+    // ---- 17. 线到线: 平行线间距 / 垂直距离 / 平行判定 (§2.4 补齐) ----
+    {
+        ToolContext ctx;
+        ITool* ll = reg.createTool("LineToLine");
+
+        // 平行水平线: y=100 与 y=150, 间距50
+        ll->setProperty("line1CenterX", "100");
+        ll->setProperty("line1CenterY", "100");
+        ll->setProperty("line1Angle", "0");
+        ll->setProperty("line2CenterX", "200");
+        ll->setProperty("line2CenterY", "150");
+        ll->setProperty("line2Angle", "0");
+        CHECK(ll->execute(ctx), "线到线: 平行线执行成功");
+        CHECK(std::fabs(ll->resultData().value("distance").toDouble() - 50.0) < 1e-6,
+              "线到线: 平行线间距50");
+        CHECK(ll->resultData().value("parallel").toBool(), "线到线: 平行判定true");
+        CHECK(std::fabs(ll->resultData().value("angleBetween").toDouble()) < 1e-6,
+              "线到线: 夹角0");
+
+        // 垂直相交: 线1水平过(100,100), 线2竖直过(300,300) → 线1中心到线2距离200, 夹角90
+        ll->setProperty("line1CenterX", "100");
+        ll->setProperty("line1CenterY", "100");
+        ll->setProperty("line1Angle", "0");
+        ll->setProperty("line2CenterX", "300");
+        ll->setProperty("line2CenterY", "300");
+        ll->setProperty("line2Angle", "90");
+        CHECK(ll->execute(ctx), "线到线: 垂直执行成功");
+        CHECK(std::fabs(ll->resultData().value("distance").toDouble() - 200.0) < 1e-6,
+              "线到线: 线1中心到竖直线2距离200");
+        CHECK(!ll->resultData().value("parallel").toBool(), "线到线: 垂直非平行");
+        CHECK(std::fabs(ll->resultData().value("angleBetween").toDouble() - 90.0) < 1e-6,
+              "线到线: 夹角90");
+
+        // 45°斜线: 线1水平过(0,0), 线2 45°过(10,0) (即 y=x-10) → 线1中心(0,0)到线2垂距10/sqrt2≈7.07
+        ll->setProperty("line1CenterX", "0");
+        ll->setProperty("line1CenterY", "0");
+        ll->setProperty("line1Angle", "0");
+        ll->setProperty("line2CenterX", "10");
+        ll->setProperty("line2CenterY", "0");
+        ll->setProperty("line2Angle", "45");
+        CHECK(ll->execute(ctx), "线到线: 斜线执行成功");
+        CHECK(std::fabs(ll->resultData().value("distance").toDouble() - 10.0 / std::sqrt(2.0)) < 1e-6,
+              "线到线: 斜线垂距7.07");
+        CHECK(std::fabs(ll->resultData().value("angleBetween").toDouble() - 45.0) < 1e-6,
+              "线到线: 夹角45");
+        delete ll;
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);
