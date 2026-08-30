@@ -1505,6 +1505,133 @@ int main(int argc, char* argv[]) {
         QDir(saveDir).removeRecursively();
     }
 
+    // ---- 测试23: 图像合并 + 裁剪变换 (P1-11) ----
+    std::printf("测试23: 图像合并/裁剪变换\n");
+    {
+        // 两张 60x40 灰度图: A=200, B=60
+        cv::Mat imgA(40, 60, CV_8UC1, cv::Scalar(200));
+        cv::Mat imgB(40, 60, CV_8UC1, cv::Scalar(60));
+        ToolContext ctx23;
+        ctx23.setCurrentImage(std::make_shared<CvImage>(imgA));
+        ctx23.setImage("imgA", std::make_shared<CvImage>(imgA));
+        ctx23.setImage("imgB", std::make_shared<CvImage>(imgB));
+
+        // 图像合并: 水平拼接 → 120x40
+        ITool* mg = reg.createTool("ImageMerge");
+        mg->setProperty("inputImage", "imgA");
+        mg->setProperty("inputImage2", "imgB");
+        mg->setProperty("direction", 0);
+        CHECK(mg->execute(ctx23), "图像合并: 水平执行");
+        CHECK(ctx23.currentImage()->cols == 120 && ctx23.currentImage()->rows == 40,
+              "图像合并: 水平尺寸120x40");
+        CHECK(ctx23.currentImage()->at<cv::Vec3b>(10, 10)[0] == 200, "图像合并: 左半像素200");
+        CHECK(ctx23.currentImage()->at<cv::Vec3b>(10, 70)[0] == 60, "图像合并: 右半像素60");
+
+        // 垂直拼接 → 60x80
+        mg->setProperty("direction", 1);
+        CHECK(mg->execute(ctx23), "图像合并: 垂直执行");
+        CHECK(ctx23.currentImage()->cols == 60 && ctx23.currentImage()->rows == 80,
+              "图像合并: 垂直尺寸60x80");
+        CHECK(ctx23.currentImage()->at<cv::Vec3b>(10, 10)[0] == 200, "图像合并: 上半像素200");
+        CHECK(ctx23.currentImage()->at<cv::Vec3b>(50, 10)[0] == 60, "图像合并: 下半像素60");
+
+        // 网格 1x2 → 120x40
+        mg->setProperty("direction", 2);
+        mg->setProperty("rows", 1);
+        mg->setProperty("cols", 2);
+        CHECK(mg->execute(ctx23), "图像合并: 网格执行");
+        CHECK(ctx23.currentImage()->cols == 120 && ctx23.currentImage()->rows == 40,
+              "图像合并: 网格尺寸120x40");
+
+        // 水平重叠 10 → 110x40
+        mg->setProperty("direction", 0);
+        mg->setProperty("horizontalOverlap", 10);
+        CHECK(mg->execute(ctx23), "图像合并: 重叠执行");
+        CHECK(ctx23.currentImage()->cols == 110 && ctx23.currentImage()->rows == 40,
+              "图像合并: 重叠尺寸110x40");
+        mg->setProperty("horizontalOverlap", 0);
+        delete mg;
+
+        // 裁剪变换: 白块矩形测试图 (白色区域 x[10,19] y[10,19])
+        cv::Mat cropSrc(40, 60, CV_8UC1, cv::Scalar(0));
+        cv::rectangle(cropSrc, cv::Rect(10, 10, 10, 10), cv::Scalar(255), -1);
+        ToolContext ctxC;
+        ctxC.setCurrentImage(std::make_shared<CvImage>(cropSrc));
+
+        ITool* ct = reg.createTool("CropTransform");
+        ct->setProperty("roiType", 0);   // 无ROI
+
+        // 水平镜像: x -> 59-x, 白块到 x[40,49]
+        ct->setProperty("transform", 1);
+        ct->setProperty("horizontalMirror", true);
+        ct->setProperty("verticalMirror", false);
+        CHECK(ct->execute(ctxC), "裁剪变换: 水平镜像执行");
+        CHECK(ctxC.currentImage()->cols == 60 && ctxC.currentImage()->rows == 40,
+              "裁剪变换: 镜像尺寸不变");
+        CHECK(ctxC.currentImage()->at<uchar>(15, 45) == 255, "裁剪变换: 水平镜像白块位置");
+        CHECK(ctxC.currentImage()->at<uchar>(15, 5) == 0, "裁剪变换: 水平镜像原位置为黑");
+
+        // 垂直镜像: y -> 39-y, 白块到 y[20,29]
+        ctxC.setCurrentImage(std::make_shared<CvImage>(cropSrc));
+        ct->setProperty("horizontalMirror", false);
+        ct->setProperty("verticalMirror", true);
+        CHECK(ct->execute(ctxC), "裁剪变换: 垂直镜像执行");
+        CHECK(ctxC.currentImage()->at<uchar>(25, 15) == 255, "裁剪变换: 垂直镜像白块位置");
+
+        // 旋转180°: x->59-x, y->39-y, 白块回 x[40,49] y[20,29]
+        ctxC.setCurrentImage(std::make_shared<CvImage>(cropSrc));
+        ct->setProperty("horizontalMirror", false);
+        ct->setProperty("verticalMirror", false);
+        ct->setProperty("transform", 2);
+        ct->setProperty("rotateDir", 1);
+        CHECK(ct->execute(ctxC), "裁剪变换: 旋转180执行");
+        CHECK(ctxC.currentImage()->cols == 60 && ctxC.currentImage()->rows == 40,
+              "裁剪变换: 旋转180尺寸不变");
+        CHECK(ctxC.currentImage()->at<uchar>(25, 45) == 255, "裁剪变换: 旋转180白块位置");
+
+        // 旋转90°顺时针: 60x40 → 40x60, 白块到 y[10,19] x[20,29]
+        ctxC.setCurrentImage(std::make_shared<CvImage>(cropSrc));
+        ct->setProperty("transform", 2);
+        ct->setProperty("rotateDir", 0);
+        CHECK(ct->execute(ctxC), "裁剪变换: 旋转90执行");
+        CHECK(ctxC.currentImage()->cols == 40 && ctxC.currentImage()->rows == 60,
+              "裁剪变换: 旋转90尺寸互换");
+        CHECK(ctxC.currentImage()->at<uchar>(15, 25) == 255, "裁剪变换: 旋转90白块位置");
+
+        // 缩放 2x: 60x40 → 120x80, 白块 x[20,39] y[20,39]
+        ctxC.setCurrentImage(std::make_shared<CvImage>(cropSrc));
+        ct->setProperty("transform", 3);
+        ct->setProperty("scale", 2.0);
+        CHECK(ct->execute(ctxC), "裁剪变换: 缩放执行");
+        CHECK(ctxC.currentImage()->cols == 120 && ctxC.currentImage()->rows == 80,
+              "裁剪变换: 缩放尺寸120x80");
+        CHECK(ctxC.currentImage()->at<uchar>(30, 30) == 255, "裁剪变换: 缩放白块位置");
+
+        // 平移 (10,10): 白块 x[20,29] y[20,29]
+        ctxC.setCurrentImage(std::make_shared<CvImage>(cropSrc));
+        ct->setProperty("transform", 4);
+        ct->setProperty("translateX", 10);
+        ct->setProperty("translateY", 10);
+        CHECK(ct->execute(ctxC), "裁剪变换: 平移执行");
+        CHECK(ctxC.currentImage()->cols == 60 && ctxC.currentImage()->rows == 40,
+              "裁剪变换: 平移尺寸不变");
+        CHECK(ctxC.currentImage()->at<uchar>(25, 25) == 255, "裁剪变换: 平移白块位置");
+        CHECK(ctxC.currentImage()->at<uchar>(0, 0) == 0, "裁剪变换: 平移左上为黑");
+
+        // ROI 裁剪: 中心(30,20) 宽40高30 → 40x30 区域
+        ctxC.setCurrentImage(std::make_shared<CvImage>(cropSrc));
+        ct->setProperty("transform", 0);
+        ct->setProperty("roiType", 1);
+        ct->setProperty("roiCenterX", 30);
+        ct->setProperty("roiCenterY", 20);
+        ct->setProperty("roiWidth", 40);
+        ct->setProperty("roiHeight", 30);
+        CHECK(ct->execute(ctxC), "裁剪变换: ROI裁剪执行");
+        CHECK(ctxC.currentImage()->cols == 40 && ctxC.currentImage()->rows == 30,
+              "裁剪变换: ROI尺寸40x30");
+        delete ct;
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);

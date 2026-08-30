@@ -1,0 +1,6 @@
+﻿add_library(CropTransform STATIC)
+target_sources(CropTransform PRIVATE CropTransform.h CropTransform.cpp)
+target_link_libraries(CropTransform PUBLIC VICore VIEngine VIUtils Qt6::Core)
+if(VI_HAS_OPENCV)
+    target_link_libraries(CropTransform PUBLIC )
+endif()

@@ -1,0 +1,6 @@
+﻿add_library(ImageMerge STATIC)
+target_sources(ImageMerge PRIVATE ImageMerge.h ImageMerge.cpp)
+target_link_libraries(ImageMerge PUBLIC VICore VIEngine VIUtils Qt6::Core)
+if(VI_HAS_OPENCV)
+    target_link_libraries(ImageMerge PUBLIC )
+endif()
