@@ -43,6 +43,11 @@ public:
     /** 图像+叠加层合成为一张QImage (保存带标注图用) */
     QImage renderAnnotated() const;
 
+    /** 标注模式: 鼠标拖拽画矩形(图像坐标), 右键删除最近框 */
+    void setAnnotationMode(bool on);
+    void setAnnotations(const QList<QRectF>& rects);
+    const QList<QRectF>& annotations() const { return m_annotations; }
+
     /** 视图坐标 → 图像坐标 */
     QPointF viewToImage(const QPointF& viewPos) const;
     /** 图像坐标 → 视图坐标 */
@@ -51,6 +56,10 @@ public:
 signals:
     /** 鼠标在图像上的坐标变化(状态栏显示用) */
     void cursorImagePos(const QPointF& pos);
+    /** 标注模式下新建了一个矩形 */
+    void annotationCreated(const QRectF& rect);
+    /** 标注模式下右键删除了一个矩形 */
+    void annotationDeleted(int index);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -67,6 +76,10 @@ private:
 
     QImage m_image;
     QVariantList m_overlays;
+    bool m_annotating = false;           // 标注模式
+    QList<QRectF> m_annotations;         // 标注矩形(图像坐标)
+    QRectF m_drawingRect;                // 正在拖拽的矩形
+    bool m_drawing = false;
     qreal m_scale = 1.0;
     QPointF m_offset{0, 0};          // 图像原点在控件中的位置
     bool m_dragging = false;

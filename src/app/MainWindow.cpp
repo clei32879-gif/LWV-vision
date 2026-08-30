@@ -11,6 +11,7 @@
 #include "../ui/PlcSimulatorDialog.h"
 #include "../ui/SettingsDialogs.h"
 #include "../ui/LoginDialog.h"
+#include "../ui/AnnotationDialog.h"
 #include "../ui/IconHelper.h"
 #include "../hal/ModbusTcpMaster.h"
 #include "AppSettings.h"
@@ -205,6 +206,9 @@ void MainWindow::createMenus() {
     setMenu->addAction(QString::fromUtf8("\u5168\u5c40\u53d8\u91cf"), this, &MainWindow::onGlobalVariables);
     setMenu->addSeparator();
     setMenu->addAction(QString::fromUtf8("PLC\u6a21\u62df\u5668..."), this, &MainWindow::onPlcSimulator);
+
+    QMenu* annoMenu = menuBar()->addMenu(QString::fromUtf8("\u6807\u6ce8(&A)"));
+    annoMenu->addAction(QString::fromUtf8("\u7f3a\u9677\u6807\u6ce8\u5de5\u5177..."), this, &MainWindow::onAnnotationTool);
 
     QMenu* camMenu = menuBar()->addMenu(QString::fromUtf8("\u76f8\u673a(&C)"));
     camMenu->addAction(QString::fromUtf8("\u626b\u63cf\u76f8\u673a"), this, &MainWindow::onScanCameras);
@@ -553,6 +557,14 @@ void MainWindow::onUISettings() {
 void MainWindow::onGlobalVariables() {
     GlobalVariablesDialog dlg(m_globalVars, this);
     dlg.exec();
+}
+
+void MainWindow::onAnnotationTool() {
+    auto* dlg = new AnnotationDialog(this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->show();
+    dlg->raise();
+    dlg->activateWindow();
 }
 
 void MainWindow::onPlcSimulator() {

@@ -45,6 +45,10 @@ target_sources(VIUI PRIVATE
     LoginDialog.h
     LoginDialog.cpp
 
+    # 标注工具 (YOLO训练集, 阶段4)
+    AnnotationDialog.h
+    AnnotationDialog.cpp
+
     # 界面编辑器 (DIY)
     UIEditor.h
     UIEditor.cpp

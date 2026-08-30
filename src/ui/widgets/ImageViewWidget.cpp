@@ -96,6 +96,18 @@ void ImageViewWidget::paintEvent(QPaintEvent*) {
         painter.setBrush(Qt::NoBrush);
         drawOverlayShape(painter, shape);
     }
+    // 标注模式: 画标注矩形(黄色) + 正在拖拽的矩形(青色)
+    if (m_annotating) {
+        painter.setPen(QPen(QColor(255, 220, 0), penW * 1.5));
+        painter.setBrush(QColor(255, 220, 0, 30));
+        for (const QRectF& r : m_annotations)
+            painter.drawRect(r);
+        if (m_drawing) {
+            painter.setPen(QPen(QColor(0, 220, 255), penW * 2));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRect(m_drawingRect);
+        }
+    }
     painter.restore();
 }
 
@@ -168,6 +180,18 @@ void ImageViewWidget::drawOverlayShape(QPainter& painter, const QVariantMap& s) 
     }
 }
 
+void ImageViewWidget::setAnnotationMode(bool on) {
+    m_annotating = on;
+    if (on) setCursor(Qt::CrossCursor);
+    else setCursor(Qt::ArrowCursor);
+    update();
+}
+
+void ImageViewWidget::setAnnotations(const QList<QRectF>& rects) {
+    m_annotations = rects;
+    update();
+}
+
 void ImageViewWidget::wheelEvent(QWheelEvent* event) {
     // 以鼠标位置为中心缩放
     const QPointF before = viewToImage(event->position());
@@ -179,6 +203,27 @@ void ImageViewWidget::wheelEvent(QWheelEvent* event) {
 }
 
 void ImageViewWidget::mousePressEvent(QMouseEvent* event) {
+    if (m_annotating) {
+        const QPointF imgPos = viewToImage(event->position());
+        if (event->button() == Qt::LeftButton) {
+            m_drawing = true;
+            m_drawingRect = QRectF(imgPos, imgPos);
+        } else if (event->button() == Qt::RightButton) {
+            // 删除最近的标注框
+            int best = -1; double bestD = 1e18;
+            for (int i = 0; i < m_annotations.size(); ++i) {
+                const QPointF c = m_annotations[i].center();
+                const double d = std::hypot(c.x() - imgPos.x(), c.y() - imgPos.y());
+                if (d < bestD) { bestD = d; best = i; }
+            }
+            if (best >= 0 && bestD < 60) {
+                m_annotations.removeAt(best);
+                update();
+                emit annotationDeleted(best);
+            }
+        }
+        return;
+    }
     if (event->button() == Qt::LeftButton) {
         m_dragging = true;
         m_lastMouse = event->pos();
@@ -188,6 +233,11 @@ void ImageViewWidget::mousePressEvent(QMouseEvent* event) {
 
 void ImageViewWidget::mouseMoveEvent(QMouseEvent* event) {
     emit cursorImagePos(viewToImage(event->position()));
+    if (m_annotating && m_drawing) {
+        m_drawingRect.setBottomRight(viewToImage(event->position()));
+        update();
+        return;
+    }
     if (!m_dragging) return;
     m_offset += QPointF(event->pos() - m_lastMouse);
     m_lastMouse = event->pos();
@@ -195,6 +245,16 @@ void ImageViewWidget::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void ImageViewWidget::mouseReleaseEvent(QMouseEvent* event) {
+    if (m_annotating && m_drawing && event->button() == Qt::LeftButton) {
+        m_drawing = false;
+        QRectF r = m_drawingRect.normalized();
+        if (r.width() > 4 && r.height() > 4) {
+            m_annotations.append(r);
+            emit annotationCreated(r);
+        }
+        update();
+        return;
+    }
     if (event->button() == Qt::LeftButton) {
         m_dragging = false;
         setCursor(Qt::ArrowCursor);
