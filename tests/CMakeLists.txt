@@ -10,6 +10,7 @@ target_link_libraries(test_modbus PRIVATE
     ${OpenCV_LIBS}
     Qt6::Core
     Qt6::Network
+    Qt6::SerialPort
     Qt6::Concurrent
 )
 add_test(NAME modbus_tcp COMMAND test_modbus)

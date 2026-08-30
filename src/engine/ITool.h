@@ -177,6 +177,7 @@ public:
             QStringLiteral("ModbusComm"),
             QStringLiteral("ModbusRead"),
             QStringLiteral("ModbusWrite"),
+            QStringLiteral("PlcLink"),
             QStringLiteral("DataDisplay"),
             QStringLiteral("UpdateView"),
         };

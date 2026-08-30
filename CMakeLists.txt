@@ -47,7 +47,7 @@ set(VI_ALL_PLUGINS
     Calculator ImageCompare Calibration PositionCorrection
     VertexDetection WidthDetection MultiContourMatch ContourCompare ColorDetection
     CoordSystem ImageCorrection CalculateVariable SetVariable
-    SerialPortTool EthernetTool ModbusRead ModbusWrite
+    SerialPortTool EthernetTool ModbusRead ModbusWrite PlcLink
     EndCorrection
 )
 

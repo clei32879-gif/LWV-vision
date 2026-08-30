@@ -31,6 +31,16 @@ target_sources(VIHAL PRIVATE
     ModbusTcpMaster.cpp
     ModbusTcpSlave.h
     ModbusTcpSlave.cpp
+
+    # Modbus RTU 主站与从站模拟器 (串口RS232/485, 自研, 仅依赖Qt SerialPort)
+    ModbusRtuMaster.h
+    ModbusRtuMaster.cpp
+    ModbusRtuSlave.h
+    ModbusRtuSlave.cpp
+
+    # Modbus IO 驱动 (IIODriver 实现, 替代独立IO卡经PLC/远程IO读写)
+    ModbusIoDriver.h
+    ModbusIoDriver.cpp
 )
 
 target_link_libraries(VIHAL PUBLIC

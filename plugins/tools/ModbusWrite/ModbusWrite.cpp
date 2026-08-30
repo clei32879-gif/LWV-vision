@@ -1,6 +1,6 @@
 /**
  * @file ModbusWrite.cpp
- * @brief Modbus写数据工具 — 通过自研Modbus TCP主站写PLC
+ * @brief Modbus写数据工具 — 通过自研Modbus主站(TCP/RTU)写PLC
  *
  * 典型用途: 检测完成后写OK/NG信号给PLC触发吹气。
  * 写入值支持 "$(工具名.键)" 引用 (值为字符串属性, 引擎自动解析)。
@@ -8,14 +8,21 @@
 #include "ModbusWrite.h"
 #include "../../../src/engine/ToolRegistry.h"
 #include "../../../src/hal/ModbusTcpMaster.h"
+#include "../../../src/hal/ModbusRtuMaster.h"
 #include <QRegularExpression>
 
 namespace VisionInspector {
 
 PropertyDefList ModbusWrite::propertyDefs() const {
     return {
+        PropertyDef::enumProp("commMode", "通讯方式", {"Modbus TCP", "Modbus RTU(串口)"}, 0, "连接"),
         PropertyDef::stringProp("host", "PLC地址", "127.0.0.1", "连接"),
         PropertyDef::intProp("port", "端口", 502, 1, 65535, "连接"),
+        PropertyDef::stringProp("serialPort", "串口号", "COM1", "连接"),
+        PropertyDef::intProp("baudRate", "波特率", 9600, 0, 100000000, "连接"),
+        PropertyDef::intProp("dataBits", "数据位", 8, 5, 8, "连接"),
+        PropertyDef::intProp("stopBits", "停止位", 1, 1, 2, "连接"),
+        PropertyDef::enumProp("parity", "校验", {"无", "偶", "奇"}, 0, "连接"),
         PropertyDef::intProp("slaveId", "从站地址", 1, 1, 247, "连接"),
         PropertyDef::enumProp("dataType", "写入类型", {"保持寄存器", "线圈"}, 0, "写入"),
         PropertyDef::intProp("startAddress", "起始地址(0起)", 0, 0, 65535, "写入"),
@@ -28,8 +35,7 @@ bool ModbusWrite::execute(ToolContext& context) {
     const int dataType = propertyValue("dataType").toInt();
     const int startAddr = propertyValue("startAddress").toInt();
     const int slaveId = propertyValue("slaveId").toInt();
-    const QString host = propertyValue("host").toString();
-    const quint16 port = quint16(propertyValue("port").toInt());
+    const int commMode = propertyValue("commMode").toInt();
     QString valueStr = propertyValue("writeValue").toString().trimmed();
 
     // 兜底解析引用 (单工具调试场景引擎已解析过; 这里再兜一次)
@@ -49,7 +55,21 @@ bool ModbusWrite::execute(ToolContext& context) {
     }
 
     QString err;
-    auto* master = ModbusTcpMaster::acquire(host, port, &err);
+    ModbusTcpMaster* tcpMaster = nullptr;
+    ModbusRtuMaster* rtuMaster = nullptr;
+    if (commMode == 0) {
+        const QString host = propertyValue("host").toString();
+        const quint16 port = quint16(propertyValue("port").toInt());
+        tcpMaster = ModbusTcpMaster::acquire(host, port, &err);
+    } else {
+        ModbusRtuMaster::SerialParams sp;
+        sp.portName = propertyValue("serialPort").toString();
+        sp.baudRate = propertyValue("baudRate").toInt();
+        sp.dataBits = propertyValue("dataBits").toInt();
+        sp.stopBits = propertyValue("stopBits").toInt();
+        sp.parity = propertyValue("parity").toString();
+        rtuMaster = ModbusRtuMaster::acquire(sp, &err);
+    }
     bool ok = false;
 
     if (dataType == 0) {
@@ -72,15 +92,18 @@ bool ModbusWrite::execute(ToolContext& context) {
             values.append(quint16(v));
         }
         ok = values.size() == 1
-                 ? master->writeRegister(startAddr, values[0], slaveId, &err)
-                 : master->writeRegisters(startAddr, values, slaveId, &err);
+                 ? (tcpMaster ? tcpMaster->writeRegister(startAddr, values[0], slaveId, &err)
+                              : rtuMaster->writeRegister(startAddr, values[0], slaveId, &err))
+                 : (tcpMaster ? tcpMaster->writeRegisters(startAddr, values, slaveId, &err)
+                              : rtuMaster->writeRegisters(startAddr, values, slaveId, &err));
         if (ok) setResultData("written", values[0]);
         setResultData("count", ok ? values.size() : 0);
     } else {
         // 线圈: 值为 0/1/off/on
         const QString low = valueStr.toLower();
         const bool on = (low == "1" || low == "on" || low == "true");
-        ok = master->writeCoil(startAddr, on, slaveId, &err);
+        ok = tcpMaster ? tcpMaster->writeCoil(startAddr, on, slaveId, &err)
+                       : rtuMaster->writeCoil(startAddr, on, slaveId, &err);
         if (ok) setResultData("written", on ? 1 : 0);
         setResultData("count", ok ? 1 : 0);
     }

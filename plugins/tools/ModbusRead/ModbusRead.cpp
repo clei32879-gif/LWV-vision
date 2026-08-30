@@ -12,13 +12,20 @@
 #include "ModbusRead.h"
 #include "../../../src/engine/ToolRegistry.h"
 #include "../../../src/hal/ModbusTcpMaster.h"
+#include "../../../src/hal/ModbusRtuMaster.h"
 
 namespace VisionInspector {
 
 PropertyDefList ModbusRead::propertyDefs() const {
     return {
+        PropertyDef::enumProp("commMode", "通讯方式", {"Modbus TCP", "Modbus RTU(串口)"}, 0, "连接"),
         PropertyDef::stringProp("host", "PLC地址", "127.0.0.1", "连接"),
         PropertyDef::intProp("port", "端口", 502, 1, 65535, "连接"),
+        PropertyDef::stringProp("serialPort", "串口号", "COM1", "连接"),
+        PropertyDef::intProp("baudRate", "波特率", 9600, 0, 100000000, "连接"),
+        PropertyDef::intProp("dataBits", "数据位", 8, 5, 8, "连接"),
+        PropertyDef::intProp("stopBits", "停止位", 1, 1, 2, "连接"),
+        PropertyDef::enumProp("parity", "校验", {"无", "偶", "奇"}, 0, "连接"),
         PropertyDef::intProp("slaveId", "从站地址", 1, 1, 247, "连接"),
         PropertyDef::enumProp("dataType", "数据类型",
             {"保持寄存器(4x)", "输入寄存器(3x)", "线圈(0x)", "离散输入(1x)"}, 0),
@@ -34,30 +41,43 @@ bool ModbusRead::execute(ToolContext& context) {
     const int quantity = propertyValue("quantity").toInt();
     const int slaveId = propertyValue("slaveId").toInt();
     const QString resultKey = propertyValue("resultKey").toString();
-    const QString host = propertyValue("host").toString();
-    const quint16 port = quint16(propertyValue("port").toInt());
+    const int commMode = propertyValue("commMode").toInt();
 
     QString err;
-    auto* master = ModbusTcpMaster::acquire(host, port, &err);
+    QVector<quint16> regs;
+    QVector<bool> bits;
+    bool isBits = (dataType >= 2);
+
+    if (commMode == 0) {
+        // Modbus TCP
+        const QString host = propertyValue("host").toString();
+        const quint16 port = quint16(propertyValue("port").toInt());
+        auto* master = ModbusTcpMaster::acquire(host, port, &err);
+        if (isBits) {
+            bits = master->readBits(dataType == 2 ? 1 : 2, startAddr, quantity, slaveId, &err);
+        } else {
+            regs = master->readRegisters(dataType == 0 ? 3 : 4, startAddr, quantity, slaveId, &err);
+        }
+    } else {
+        // Modbus RTU (串口)
+        ModbusRtuMaster::SerialParams sp;
+        sp.portName = propertyValue("serialPort").toString();
+        sp.baudRate = propertyValue("baudRate").toInt();
+        sp.dataBits = propertyValue("dataBits").toInt();
+        sp.stopBits = propertyValue("stopBits").toInt();
+        sp.parity = propertyValue("parity").toString();
+        auto* master = ModbusRtuMaster::acquire(sp, &err);
+        if (isBits) {
+            bits = master->readBits(dataType == 2 ? 1 : 2, startAddr, quantity, slaveId, &err);
+        } else {
+            regs = master->readRegisters(dataType == 0 ? 3 : 4, startAddr, quantity, slaveId, &err);
+        }
+    }
 
     QStringList valuesText;
     bool ok = false;
 
-    if (dataType <= 1) {
-        // 寄存器读 (功能码3/4)
-        const QVector<quint16> regs =
-            master->readRegisters(dataType == 0 ? 3 : 4, startAddr, quantity, slaveId, &err);
-        ok = !regs.isEmpty();
-        for (int i = 0; i < regs.size(); ++i) {
-            valuesText << QString::number(regs[i]);
-            setResultData(QString("value%1").arg(i), regs[i]);
-        }
-        if (ok) setResultData("value0", regs[0]);
-        setResultData("quantity", ok ? regs.size() : 0);
-    } else {
-        // 位读 (功能码1/2)
-        const QVector<bool> bits =
-            master->readBits(dataType == 2 ? 1 : 2, startAddr, quantity, slaveId, &err);
+    if (isBits) {
         ok = !bits.isEmpty();
         for (int i = 0; i < bits.size(); ++i) {
             valuesText << (bits[i] ? "1" : "0");
@@ -65,6 +85,14 @@ bool ModbusRead::execute(ToolContext& context) {
         }
         if (ok) setResultData("value0", bits[0] ? 1 : 0);
         setResultData("quantity", ok ? bits.size() : 0);
+    } else {
+        ok = !regs.isEmpty();
+        for (int i = 0; i < regs.size(); ++i) {
+            valuesText << QString::number(regs[i]);
+            setResultData(QString("value%1").arg(i), regs[i]);
+        }
+        if (ok) setResultData("value0", regs[0]);
+        setResultData("quantity", ok ? regs.size() : 0);
     }
 
     if (!ok) {

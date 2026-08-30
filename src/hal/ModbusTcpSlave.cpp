@@ -13,7 +13,8 @@ namespace VisionInspector {
 namespace {
 constexpr quint16 kProtoId = 0;
 constexpr quint8 kMaxRegisters = 125;
-constexpr int kRegAreaSize = 4096;
+// 寄存器区大小: 覆盖信捷XD5契约地址(最高约49416), 用65536整区
+constexpr int kRegAreaSize = 65536;
 }
 
 ModbusTcpSlave::ModbusTcpSlave(QObject* parent)

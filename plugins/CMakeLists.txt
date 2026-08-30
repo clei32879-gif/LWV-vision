@@ -68,6 +68,7 @@ add_subdirectory(tools/SerialPort)
 add_subdirectory(tools/Ethernet)
 add_subdirectory(tools/ModbusRead)
 add_subdirectory(tools/ModbusWrite)
+add_subdirectory(tools/PlcLink)
 
 # 通讯驱动
 add_subdirectory(comm/ModbusComm)
