@@ -24,6 +24,8 @@
 #include <QDir>
 #include <QFile>
 #include <cstdio>
+#include <cmath>
+#include <algorithm>
 
 using namespace VisionInspector;
 
@@ -885,6 +887,106 @@ int main(int argc, char* argv[]) {
         CHECK(!gv.has("localOnly"), "设置变量-当前流程: 未写入全局");
         CHECK(ctx.getDouble("localOnly", -1) == 7.0, "设置变量-当前流程: 写入context");
         delete sv2;
+    }
+
+    // ---- 15. 图像去畸变: 合成畸变点阵 → 去畸变 → 点阵恢复 (§3.3 闭环) ----
+    {
+        ToolContext ctx;
+        const int W = 640, H = 480;
+        const double fx = 800.0, fy = 800.0, cx = 320.0, cy = 240.0;
+        const double k1 = 0.4, k2 = 0.05, p1 = 0.01, p2 = -0.02, k3 = 0.0;
+
+        // 理想点阵: 网格点中心
+        std::vector<cv::Point2d> dots;
+        for (int y = 120; y <= 380; y += 100)
+            for (int x = 120; x <= 520; x += 100)
+                dots.push_back(cv::Point2d(x, y));
+
+        // 解析前向畸变: 把理想点中心按畸变模型投影到畸变像素位置
+        //   xd = xn*(1+k1 r2+k2 r4+k3 r6) + 2p1 xn yn + p2(r2+2xn^2)
+        //   yd = yn*(1+k1 r2+k2 r4+k3 r6) + p1(r2+2yn^2) + 2p2 xn yn
+        cv::Mat distorted(H, W, CV_8UC1, cv::Scalar(0));
+        int moved = 0;
+        for (const auto& d : dots) {
+            const double xn = (d.x - cx) / fx, yn = (d.y - cy) / fy;
+            const double r2 = xn * xn + yn * yn, r4 = r2 * r2, r6 = r4 * r2;
+            const double radial = 1 + k1 * r2 + k2 * r4 + k3 * r6;
+            const double xd = xn * radial + 2 * p1 * xn * yn + p2 * (r2 + 2 * xn * xn);
+            const double yd = yn * radial + p1 * (r2 + 2 * yn * yn) + 2 * p2 * xn * yn;
+            const double u = fx * xd + cx, v = fy * yd + cy;
+            cv::circle(distorted, cv::Point2d(u, v), 5, cv::Scalar(255), -1);
+            // 统计被明显推离理想位置的点 (畸变生效: 角点/边缘点位移应显著)
+            if (std::hypot(u - d.x, v - d.y) > 3.0) ++moved;
+        }
+        CHECK(moved >= 2,
+              QString("图像去畸变: 畸变生效(%1/15点位移>3px)").arg(moved).toLocal8Bit().constData());
+
+        // 手动内参路径去畸变
+        ctx.setCurrentImage(std::make_shared<CvImage>(distorted));
+        ITool* ud = reg.createTool("ImageUndistort");
+        ud->setProperty("useContextCalib", false);
+        ud->setProperty("fx", fx);  ud->setProperty("fy", fy);
+        ud->setProperty("cx", cx);  ud->setProperty("cy", cy);
+        ud->setProperty("k1", k1);  ud->setProperty("k2", k2);
+        ud->setProperty("p1", p1);  ud->setProperty("p2", p2);
+        ud->setProperty("k3", k3);
+        CHECK(ud->execute(ctx), "图像去畸变-手动: 执行成功");
+        CHECK(ud->resultData().value("undistorted").toBool(), "图像去畸变-手动: undistorted=true");
+        CHECK(ud->resultData().value("source").toInt() == 1, "图像去畸变-手动: source=1(手动)");
+        CvImagePtr out = ctx.currentImage();
+        CHECK(out && !out->empty(), "图像去畸变-手动: 有输出图像");
+
+        // 点阵恢复: 每个理想中心±8px窗口内最大灰度>200 (去畸变后点回到原位)
+        int recovered = 0;
+        for (const auto& d : dots) {
+            double mx = 0;
+            for (int dy = -8; dy <= 8; ++dy)
+                for (int dx = -8; dx <= 8; ++dx) {
+                    const int px = (int)std::lround(d.x) + dx, py = (int)std::lround(d.y) + dy;
+                    if (px >= 0 && px < W && py >= 0 && py < H)
+                        mx = std::max(mx, (double)out->at<uchar>(py, px));
+                }
+            if (mx > 200) ++recovered;
+        }
+        CHECK(recovered >= (int)dots.size() - 1,
+              QString("图像去畸变-手动: 点阵恢复%1/%2").arg(recovered).arg(dots.size()).toLocal8Bit().constData());
+        delete ud;
+
+        // 上下文标定结果路径 (写入 calibration_camera_* 模拟相机标定输出)
+        ToolContext ctx2;
+        ctx2.setCurrentImage(std::make_shared<CvImage>(distorted));
+        ctx2.setData("calibration_camera_fx", fx);
+        ctx2.setData("calibration_camera_fy", fy);
+        ctx2.setData("calibration_camera_cx", cx);
+        ctx2.setData("calibration_camera_cy", cy);
+        ctx2.setData("calibration_camera_dist", QVariantList{k1, k2, p1, p2, k3});
+        ctx2.setData("calibration_reprojection_error", 0.3);
+        ITool* ud2 = reg.createTool("ImageUndistort");
+        ud2->setProperty("useContextCalib", true);
+        CHECK(ud2->execute(ctx2), "图像去畸变-标定: 执行成功");
+        CHECK(ud2->resultData().value("source").toInt() == 0, "图像去畸变-标定: source=0(上下文)");
+        CHECK(ud2->resultData().value("reprojError").toDouble() == 0.3, "图像去畸变-标定: 透传重投影误差");
+        int recovered2 = 0;
+        CvImagePtr out2 = ctx2.currentImage();
+        for (const auto& d : dots) {
+            double mx = 0;
+            for (int dy = -8; dy <= 8; ++dy)
+                for (int dx = -8; dx <= 8; ++dx) {
+                    const int px = (int)std::lround(d.x) + dx, py = (int)std::lround(d.y) + dy;
+                    if (px >= 0 && px < W && py >= 0 && py < H)
+                        mx = std::max(mx, (double)out2->at<uchar>(py, px));
+                }
+            if (mx > 200) ++recovered2;
+        }
+        CHECK(recovered2 >= (int)dots.size() - 1,
+              QString("图像去畸变-标定: 点阵恢复%1/%2").arg(recovered2).arg(dots.size()).toLocal8Bit().constData());
+        delete ud2;
+
+        // 无图像输入NG
+        ToolContext ctx3;
+        ITool* ud3 = reg.createTool("ImageUndistort");
+        CHECK(!ud3->execute(ctx3), "图像去畸变: 无输入图像NG");
+        delete ud3;
     }
 
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
