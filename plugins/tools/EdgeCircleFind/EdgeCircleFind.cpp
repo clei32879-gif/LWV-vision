@@ -11,14 +11,88 @@
  */
 #include "EdgeCircleFind.h"
 #include "../../../src/engine/ToolRegistry.h"
+#include "../../../src/engine/SubpixEdge.h"
 #ifdef VI_HAS_OPENCV
 #include <opencv2/imgproc.hpp>
 #include <opencv2/ximgproc.hpp>
 #endif
 #include <cmath>
+#include <algorithm>
 #include <QVariantMap>
 
 namespace VisionInspector {
+
+namespace {
+/** Hough 圆检测 + 卡尺亚像素细化 (回退定位: 应对毛刺/缺牙破坏外缘连续性) */
+bool findCircleHoughFallback(const cv::Mat& gray,
+                             const cv::Point2d& searchCenter, double searchRange,
+                             double minR, double maxR, double expectR,
+                             int gradThreshold,
+                             cv::Point2d& outCenter, double& outRadius) {
+    // 1) HOUGH_GRADIENT_ALT 整图投票找圆 (鲁棒于断弧/毛刺)
+    cv::Mat blurred;
+    cv::GaussianBlur(gray, blurred, cv::Size(5, 5), 0);
+    std::vector<cv::Vec3f> circles;
+    const double dp = 1.5;
+    const double minDist = std::max(2.0 * minR, 20.0);
+    const double param1 = std::max(60.0, gradThreshold * 1.5);   // Canny 高阈值
+    const double param2 = 0.45;                                  // ALT: 圆"完美度"阈值(0~1)
+    cv::HoughCircles(blurred, circles, cv::HOUGH_GRADIENT_ALT, dp, minDist,
+                     param1, param2, minR, maxR);
+    if (circles.empty()) return false;
+
+    // 2) 按与 EdgeDrawing 相同的评分选最优: 靠近搜索中心 + 半径匹配期望
+    struct Cand { cv::Point2d c; double r; double score; };
+    std::vector<Cand> cands;
+    for (const auto& v : circles) {
+        const cv::Point2d c(v[0], v[1]);
+        const double r = v[2];
+        if (r < minR || r > maxR) continue;
+        const double dist = std::hypot(c.x - searchCenter.x, c.y - searchCenter.y);
+        if (searchRange > 0 && dist > searchRange) continue;
+        double score = dist;
+        if (expectR > 0) score += std::fabs(r - expectR) * 2.0;
+        cands.push_back({c, r, score});
+    }
+    if (cands.empty()) return false;
+    std::sort(cands.begin(), cands.end(),
+              [](const Cand& a, const Cand& b) { return a.score < b.score; });
+    const Cand& best = cands.front();
+
+    // 3) 卡尺亚像素细化: 从 Hough 圆心向外发射径向卡尺, 在期望半径邻域找亚像素边,
+    //    鲁棒圆拟合剔除毛刺外点 → 输出亚像素精度圆心/半径
+    const int rays = 72;
+    const double band = std::clamp(best.r * 0.20, 8.0, 40.0);   // 扫描带宽
+    ScanOptions opt;
+    opt.polarity = 0;
+    opt.gradThreshold = std::max(8, gradThreshold * 3 / 4);
+    opt.filterHalfWidth = 2;
+    std::vector<cv::Point2d> edgePts;
+    for (int i = 0; i < rays; ++i) {
+        const double a = 2.0 * CV_PI * i / rays;
+        const cv::Point2d dir(std::cos(a), std::sin(a));
+        const cv::Point2d p0(best.c.x + dir.x * (best.r - band),
+                             best.c.y + dir.y * (best.r - band));
+        const cv::Point2d p1(best.c.x + dir.x * (best.r + band),
+                             best.c.y + dir.y * (best.r + band));
+        SubpixEdgePoint ep;
+        if (findEdgeSubpix(gray, p0, p1, opt, ep))
+            edgePts.push_back(ep.pos);
+    }
+    if ((int)edgePts.size() >= 6) {
+        cv::Point2d c; double r = 0, rms = 0;
+        if (fitCircleRobust(edgePts, c, r, rms) && r >= minR && r <= maxR) {
+            outCenter = c;
+            outRadius = r;
+            return true;
+        }
+    }
+    // 细化失败则退回 Hough 结果
+    outCenter = best.c;
+    outRadius = best.r;
+    return true;
+}
+} // anonymous namespace
 
 PropertyDefList EdgeCircleFind::propertyDefs() const {
     return {
@@ -29,6 +103,7 @@ PropertyDefList EdgeCircleFind::propertyDefs() const {
         PropertyDef::doubleProp("maxRadius", "最大半径", 500, 1, 5000, "搜索"),
         PropertyDef::doubleProp("expectedRadius", "期望半径(0=任意)", 0, 0, 5000, "搜索"),
         PropertyDef::intProp("gradientThreshold", "梯度阈值", 30, 8, 255, "检测"),
+        PropertyDef::enumProp("fallbackMethod", "回退定位", {"禁用", "Hough圆检测"}, 1, "检测"),
     };
 }
 
@@ -83,6 +158,22 @@ bool EdgeCircleFind::execute(ToolContext& context) {
         cands.push_back({cv::Point2d(e[0], e[1]), r, score});
     }
     if (cands.empty()) {
+        // 回退定位: EdgeDrawing 因毛刺/缺牙破坏外缘连续性而未输出整圆弧时,
+        // 用 Hough 圆检测重新定位 + 卡尺亚像素细化。
+        const int fb = propertyValue("fallbackMethod").toInt();
+        if (fb > 0 && findCircleHoughFallback(src, searchCenter, searchRange,
+                                              minR, maxR, expectR,
+                                              propertyValue("gradientThreshold").toInt(),
+                                              m_lastCenter, m_lastRadius)) {
+            m_lastOk = true;
+            setResultData("centerX", m_lastCenter.x);
+            setResultData("centerY", m_lastCenter.y);
+            setResultData("radius", m_lastRadius);
+            setResultData("score", 0.0);
+            setResultData("method", "hough");
+            setStatus(ToolStatus::OK);
+            return true;
+        }
         setStatus(ToolStatus::NG);
         setResultData("error", "未找到符合条件的圆");
         return false;
@@ -108,6 +199,7 @@ bool EdgeCircleFind::execute(ToolContext& context) {
     setResultData("centerY", best.c.y);
     setResultData("radius", radius);
     setResultData("score", best.score);
+    setResultData("method", "ed");
     setStatus(ToolStatus::OK);
     return true;
 #endif

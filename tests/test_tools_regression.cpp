@@ -3,10 +3,9 @@
  * @brief 检测工具回归测试 — 用 testdata 合成图库验证工具链
  *
  * 测试内容:
- *   1. 快速找圆(EdgeDrawing): 测试图找到工件圆 (半径110±6)
+ *   1. 快速找圆(EdgeDrawing): 测试图找到工件圆 (半径110±6); 毛刺图走 Hough 卡尺回退定位
  *   2. 检测圆形(亚像素): 用快速找圆结果作ROI中心(数据流链式), 半径110±3
  *   3. 检测直线(亚像素): 合成斜线图, 角度误差<0.5°
- * 已知局限: 毛刺(NG_BURR)破坏外缘整圆弧时快速找圆会失败(阶段3加回退定位改进)
  *
  * 前置: 先执行 generate_testdata 目标生成 build/release/bin/testdata/virtual_camera/
  */
@@ -45,7 +44,7 @@ int main(int argc, char* argv[]) {
 
     auto& reg = ToolRegistry::instance();
 
-    int circleFinds = 0, subpixOk = 0, burrLimitation = 0;
+    int circleFinds = 0, subpixOk = 0;
     double worstRadiusErr = 0;
 
     for (const QString& name : images) {
@@ -104,9 +103,6 @@ int main(int argc, char* argv[]) {
                     .toLocal8Bit().constData());
             }
             delete circleTool;
-        } else if (name.startsWith("NG_BURR")) {
-            // 已知局限: 毛刺破坏外缘整圆弧, 整圆搜索失败 (阶段3加回退定位改进)
-            ++burrLimitation;
         } else {
             CHECK(false, QString("%1: 快速找圆失败 err=%2 candidates=%3")
                 .arg(name, finder->resultData().value("error").toString(),
@@ -145,8 +141,8 @@ int main(int argc, char* argv[]) {
         delete lineTool;
     }
 
-    std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d(毛刺局限%d) | 亚像素%d/%d | 最差半径误差%.2fpx\n",
-                g_checks, g_failures, circleFinds, images.size(), burrLimitation,
+    std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
+                g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);
     return g_failures == 0 ? 0 : 1;
 }
