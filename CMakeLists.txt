@@ -168,10 +168,17 @@ add_subdirectory(src/engine)
 add_subdirectory(src/hal)
 add_subdirectory(src/utils)
 add_subdirectory(src/ui)
-add_subdirectory(src/app)
 if(VI_HAS_ONNXRT)
 add_subdirectory(src/ai)
 endif()
+# 顺序说明: 插件必须先于主程序 src/app 配置。src/app 里
+# foreach(VI_ALL_PLUGINS) 用 if(TARGET ...) 做 WHOLE_ARCHIVE 链接,
+# 若插件(add_subdirectory(plugins))在主程序之后才配置, if(TARGET) 全为假,
+# 插件静态初始化(VI_REGISTER_TOOL)不会被链接进 LWVision.exe → 工具列表为空。
+if(VI_BUILD_PLUGINS)
+    add_subdirectory(plugins)
+endif()
+add_subdirectory(src/app)
 add_subdirectory(tools)
 
 # 测试图片生成: 编译后自动在bin目录生成虚拟相机回放图
@@ -181,10 +188,6 @@ add_custom_target(generate_testdata
     DEPENDS testdata_gen
     COMMENT "生成虚拟相机测试图片..."
 )
-
-if(VI_BUILD_PLUGINS)
-    add_subdirectory(plugins)
-endif()
 
 if(VI_BUILD_TESTS)
     enable_testing()
