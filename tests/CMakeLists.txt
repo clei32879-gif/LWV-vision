@@ -103,6 +103,13 @@ if(VI_HAS_ONNXRT)
         VIAI VICore VIEngine VIUtils  Qt6::Core Qt6::Gui)
     add_test(NAME cls_model COMMAND test_cls_model)
 
+    # 发布包环境 AI 真实推理验证 (质检2: 分类+检测, 读发布包 models/testdata)
+    add_executable(test_pkg_infer test_pkg_infer.cpp)
+    vi_link_onnxrt(test_pkg_infer)
+    target_link_libraries(test_pkg_infer PRIVATE
+        VIAI VICore VIEngine VIUtils ${OpenCV_LIBS} Qt6::Core Qt6::Gui)
+    add_test(NAME pkg_infer COMMAND test_pkg_infer)
+
     # 教导向导端到端QA (真实训练, 较慢)
     add_executable(test_teach_flow test_teach_flow.cpp)
     vi_link_onnxrt(test_teach_flow)
