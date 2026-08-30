@@ -16,9 +16,10 @@
 #ifdef VI_HAS_OPENCV
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
+#include <opencv2/geometry.hpp>
 
 // ONNX Runtime C++ API
-#ifdef VI_HAS_ONNXRUNTIME
+#ifdef VI_HAS_ONNXRT
 #include <onnxruntime_cxx_api.h>
 #endif
 
@@ -94,10 +95,10 @@ struct YOLOv8Detect::YOLOv8Impl {
             sessionOptions.SetGraphOptimizationLevel(
                 GraphOptimizationLevel::ORT_ENABLE_ALL);
 
-            // 加载模型
-            std::string modelPathUtf8 = modelPath.toStdString();
+            // 加载模型 (ORT 1.18: 路径用 wstring, 命名用 Allocated 接口)
+            const std::wstring modelPathW = modelPath.toStdWString();
             session = std::make_unique<Ort::Session>(
-                env, modelPathUtf8.c_str(), sessionOptions);
+                env, modelPathW.c_str(), sessionOptions);
 
             // 获取分配器
             Ort::AllocatorWithDefaultOptions allocator;
@@ -106,18 +107,16 @@ struct YOLOv8Detect::YOLOv8Impl {
             inputNames.clear();
             size_t numInputNodes = session->GetInputCount();
             for (size_t i = 0; i < numInputNodes; ++i) {
-                char* name = session->GetInputName(i, allocator);
-                inputNames.push_back(name);
-                allocator.Free(name);
+                auto name = session->GetInputNameAllocated(i, allocator);
+                inputNames.push_back(name.get());
             }
 
             // 读取输出节点名
             outputNames.clear();
             size_t numOutputNodes = session->GetOutputCount();
             for (size_t i = 0; i < numOutputNodes; ++i) {
-                char* name = session->GetOutputName(i, allocator);
-                outputNames.push_back(name);
-                allocator.Free(name);
+                auto name = session->GetOutputNameAllocated(i, allocator);
+                outputNames.push_back(name.get());
             }
 
             isSegmentModel = (modelType == "segment") || (numOutputNodes >= 2);
@@ -583,7 +582,7 @@ void YOLOv8Detect::fromJson(const QJsonObject& json)
 
 bool YOLOv8Detect::execute(ToolContext& context)
 {
-#if defined(VI_HAS_OPENCV) && defined(VI_HAS_ONNXRUNTIME)
+#if defined(VI_HAS_OPENCV) && defined(VI_HAS_ONNXRT)
     m->lastDetections.clear();
     setStatus(ToolStatus::Running);
 

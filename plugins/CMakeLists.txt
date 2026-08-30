@@ -3,6 +3,7 @@
 # 检测识别工具
 if(VI_HAS_ONNXRT)
 add_subdirectory(tools/AIDetection)
+add_subdirectory(tools/YOLOv8Detect)
 endif()
 add_subdirectory(tools/ThreadInspection)
 add_subdirectory(tools/BlobAnalysis)
