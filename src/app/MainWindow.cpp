@@ -137,7 +137,7 @@ MainWindow::MainWindow(QWidget* parent)
     // 用户权限: 角色变化时启用/禁用编辑功能
     connect(m_userMgr, &UserManager::roleChanged, this, &MainWindow::applyUserRole);
 
-    setWindowTitle("LW Vision v1.0.0 - 立维视觉");
+    setWindowTitle("LW Vision v1.0.0");
     resize(1400, 900);
     VI_LOG_INFO("MainWindow created");
 }
@@ -205,7 +205,7 @@ void MainWindow::setupUI() {
     connect(m_flowEditor, &FlowEditor::toolDropped, this, &MainWindow::onToolAdded);
     connect(m_flowEditor, &FlowEditor::toolEditProperties, this, &MainWindow::onEditToolProperties);
     
-    setWindowTitle("LW Vision v1.0.0 - 立维视觉");
+    setWindowTitle("LW Vision v1.0.0");
     resize(1400, 900);
 
     // 延迟设置分割器尺寸，确保布局已完成
@@ -274,7 +274,7 @@ void MainWindow::onAbout() {
     cvVer = QString::fromLatin1(CV_VERSION);
 #endif
     const QString html = QStringLiteral(
-        "<h3 style='margin-bottom:2px;'>LW Vision 立维视觉</h3>"
+        "<h3 style='margin-bottom:2px;'>LW Vision</h3>"
         "<p style='margin-top:2px;'>通用工业机器视觉检测平台<br/>"
         "传统视觉算法 + AI 深度学习相结合</p>"
         "<hr/>"
@@ -285,7 +285,7 @@ void MainWindow::onAbout() {
         "视觉算法库：OpenCV %3<br/>"
         "AI 推理引擎：ONNX Runtime 1.18.1（CPU）"
         "</p>"
-        "<p style='color:#888;'>立维视觉 · 学习研究用途</p>")
+        "<p style='color:#888;'>LW Vision · 学习研究用途</p>")
         .arg(versionString())
         .arg(QStringLiteral(QT_VERSION_STR))
         .arg(cvVer);

@@ -1,6 +1,6 @@
 /**
  * @file main.cpp
- * @brief LW Vision 立维视觉 - 程序入口
+ * @brief LW Vision - 程序入口
  */
 
 #include "MainWindow.h"
@@ -14,7 +14,7 @@ int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
     app.setApplicationName("LW Vision");
     app.setApplicationVersion("1.0.0");
-    app.setOrganizationName("立维视觉");
+    app.setOrganizationName("LW Vision");
 
     // 设置应用样式
     app.setStyle(QStyleFactory::create("Fusion"));
@@ -190,7 +190,7 @@ int main(int argc, char* argv[]) {
     // 初始化日志系统
     VisionInspector::Logger::instance().init();
 
-    VI_LOG_INFO("=== LW Vision 立维视觉 启动 ===");
+    VI_LOG_INFO("=== LW Vision 启动 ===");
     VI_LOG_INFO(QString("Qt 版本: %1").arg(QT_VERSION_STR));
 #ifdef VI_HAS_OPENCV
     VI_LOG_INFO(QString("OpenCV 版本: %1").arg(CV_VERSION));
@@ -200,7 +200,7 @@ int main(int argc, char* argv[]) {
 
     // 创建主窗口
     VisionInspector::MainWindow window;
-    window.setWindowTitle("LW Vision v1.0.0 - 立维视觉");
+    window.setWindowTitle("LW Vision v1.0.0");
     window.show();
 
     VI_LOG_INFO("主窗口已显示");

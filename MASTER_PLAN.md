@@ -1,4 +1,4 @@
-# LW Vision 立维视觉 — 总体开发计划
+# LW Vision — 总体开发计划
 
 ## 目标
 对标 OpenIVS / XVision，全流程工业视觉检测软件，Windows 10/11 工控机部署。

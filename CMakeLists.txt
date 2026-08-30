@@ -198,7 +198,7 @@ endif()
 # Build Info
 # ============================================================
 message(STATUS "")
-message(STATUS "========== LW Vision 立维视觉 Build Config ==========")
+message(STATUS "========== LW Vision Build Config ==========")
 message(STATUS "  Version:        ${PROJECT_VERSION}")
 message(STATUS "  C++ Standard:   ${CMAKE_CXX_STANDARD}")
 message(STATUS "  Qt Version:     ${Qt6_VERSION}")

@@ -4,7 +4,7 @@
 
 ## 项目速览
 
-- **产品**：LW Vision 立维视觉 — 通用工业视觉检测平台（对标 CKVisionBuilder / OpenIVS / DLCV.AI）
+- **产品**：LW Vision — 通用工业视觉检测平台（对标 CKVisionBuilder / OpenIVS / DLCV.AI）
 - **技术栈**：C++17 + Qt 6（MinGW）+ OpenCV 5.0（项目内 MinGW 编译版）+ CMake，仅 Windows
 - **代码命名空间**：`VisionInspector`（历史原因，勿改）；可执行文件/产品名：`LWVision`
 
