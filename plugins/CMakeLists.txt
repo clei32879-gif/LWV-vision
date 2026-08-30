@@ -1,6 +1,9 @@
 # 插件目录 - 只包含能编译的插件
 
 # 检测识别工具
+if(VI_HAS_ONNXRT)
+add_subdirectory(tools/AIDetection)
+endif()
 add_subdirectory(tools/ThreadInspection)
 add_subdirectory(tools/BlobAnalysis)
 add_subdirectory(tools/EdgeCircleFind)

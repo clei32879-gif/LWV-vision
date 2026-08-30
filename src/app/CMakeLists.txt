@@ -20,8 +20,13 @@ target_link_libraries(LWVision PRIVATE
 )
 
 # Force whole-archive for plugin libs so static initializers (VI_REGISTER_TOOL) run
+if(VI_HAS_ONNXRT)
+    target_link_libraries(LWVision PRIVATE VIAI)
+endif()
 foreach(_plugin ${VI_ALL_PLUGINS})
-    target_link_libraries(LWVision PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${_plugin}>)
+    if(TARGET ${_plugin})
+        target_link_libraries(LWVision PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${_plugin}>)
+    endif()
 endforeach()
 
 # Link DVP2 SDK

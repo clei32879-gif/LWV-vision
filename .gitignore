@@ -35,6 +35,12 @@ CMakeLists.txt.user*
 .DS_Store
 Thumbs.db
 
+# ===== AI模型权重(pt不入库; onnx预训练模型保留供测试) =====
+*.pt
+onnxruntime.zip
+thirdparty/onnxruntime/lib/*.pdb
+*.pdb
+
 # ===== 日志与临时文件 =====
 stdout.txt
 stderr.txt

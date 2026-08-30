@@ -36,7 +36,7 @@ option(VI_BUILD_PLUGINS "Build plugins" ON)
 
 # 全部插件目标清单 (app与tests共用; 插件静态注册必须WHOLE_ARCHIVE链接)
 set(VI_ALL_PLUGINS
-    BlobAnalysis ThreadInspection EdgeCircleFind BrightnessCheck CircleDetection EdgeDetection
+    AIDetection ThreadInspection BlobAnalysis EdgeCircleFind BrightnessCheck CircleDetection EdgeDetection
     ImageProcess LineDetection TemplateMatch
     GrayscaleMatch ShapeMatch ContourMatch
     BarcodeReader QRCodeReader OCR
@@ -64,6 +64,9 @@ add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
 set(OpenCV_DIR "${CMAKE_SOURCE_DIR}/thirdparty/opencv/build")
 set(OpenCV_INCLUDE_DIRS "${OpenCV_DIR}/include")
 set(OpenCV_LIBRARY_DIRS "${OpenCV_DIR}/lib")
+
+# ONNX Runtime (AI推理, 可选)
+include(${CMAKE_SOURCE_DIR}/cmake/FindOnnxRuntime.cmake)
 
 # ============================================================
 # DVP2 SDK (度申相机，可选；未安装时以模拟模式编译)
@@ -166,6 +169,9 @@ add_subdirectory(src/hal)
 add_subdirectory(src/utils)
 add_subdirectory(src/ui)
 add_subdirectory(src/app)
+if(VI_HAS_ONNXRT)
+add_subdirectory(src/ai)
+endif()
 add_subdirectory(tools)
 
 # 测试图片生成: 编译后自动在bin目录生成虚拟相机回放图

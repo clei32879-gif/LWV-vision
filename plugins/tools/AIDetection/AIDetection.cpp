@@ -1,0 +1,143 @@
+/**
+ * @file AIDetection.cpp
+ * @brief AI检测工具节点 — ONNX模型推理 (YOLOv8检测)
+ *
+ * 工作方式:
+ *   1. 按模型路径加载 (全局缓存, 多节点共享一次加载)
+ *   2. letterbox预处理 → 推理 → 解码+NMS
+ *   3. 检出目标即NG(默认, 可配), 结果键 det0_class/score/x/y/w/h...
+ * 模型路径解析: 绝对路径 → appDir相对 → 工作目录相对
+ */
+#include "AIDetection.h"
+#include "../../../src/engine/ToolRegistry.h"
+#ifdef VI_HAS_ONNXRT
+#include "../../../src/ai/InferEngine.h"
+#endif
+#include <QCoreApplication>
+#include <QFileInfo>
+#include <QVariantMap>
+
+namespace VisionInspector {
+
+// COCO 80类名 (预训练模型; 自训缺陷模型在模型旁放classes.txt可覆盖)
+static const char* kCocoNames[] = {
+    "person","bicycle","car","motorcycle","airplane","bus","train","truck","boat",
+    "traffic light","fire hydrant","stop sign","parking meter","bench","bird","cat",
+    "dog","horse","sheep","cow","elephant","bear","zebra","giraffe","backpack",
+    "umbrella","handbag","tie","suitcase","frisbee","skis","snowboard","sports ball",
+    "kite","baseball bat","baseball glove","skateboard","surfboard","tennis racket",
+    "bottle","wine glass","cup","fork","knife","spoon","bowl","banana","apple",
+    "sandwich","orange","broccoli","carrot","hot dog","pizza","donut","cake",
+    "chair","couch","potted plant","bed","dining table","toilet","tv","laptop",
+    "mouse","remote","keyboard","cell phone","microwave","oven","toaster","sink",
+    "refrigerator","book","clock","vase","scissors","teddy bear","hair drier","toothbrush"};
+
+static QString resolveModelPath(const QString& path) {
+    const QFileInfo fi(path);
+    if (fi.isAbsolute() && fi.exists()) return path;
+    const QString appDir = QCoreApplication::applicationDirPath();
+    for (const QString& base : {appDir, appDir + "/models", appDir + "/testdata",
+                                QCoreApplication::applicationDirPath() + "/../testdata"}) {
+        const QString cand = base + "/" + path;
+        if (QFileInfo::exists(cand)) return cand;
+    }
+    return path;
+}
+
+PropertyDefList AIDetection::propertyDefs() const {
+    return {
+        PropertyDef::stringProp("modelPath", "模型文件(onnx)", "models/yolov8n.onnx", "模型"),
+        PropertyDef::doubleProp("confThreshold", "置信度阈值", 0.25, 0.01, 1.0, "检测"),
+        PropertyDef::doubleProp("iouThreshold", "NMS重叠阈值", 0.45, 0.1, 1.0, "检测"),
+        PropertyDef::boolProp("detectionIsNG", "检出即NG", true, "判定"),
+    };
+}
+
+bool AIDetection::execute(ToolContext& context) {
+#ifndef VI_HAS_ONNXRT
+    setResultData("error", "未集成ONNX Runtime, AI功能不可用");
+    setStatus(ToolStatus::NG);
+    return false;
+#else
+    CvImagePtr input = getInputImage(context);
+    if (!input || input->empty()) {
+        setResultData("error", "输入图像为空"); setStatus(ToolStatus::NG); return false;
+    }
+
+    const QString modelPath = resolveModelPath(propertyValue("modelPath").toString());
+    QString err;
+    auto engine = InferEngine::acquire(modelPath, &err);
+    if (!engine) {
+        setResultData("error", "模型加载失败: " + err);
+        setStatus(ToolStatus::NG);
+        return false;
+    }
+
+    m_boxes.clear();
+    m_lastOk = false;
+    const float conf = (float)propertyValue("confThreshold").toDouble();
+    const float iou = (float)propertyValue("iouThreshold").toDouble();
+    const std::vector<AiDetection> dets = engine->detectYolo(*input, conf, iou, &err);
+    if (!err.isEmpty()) {
+        setResultData("error", err);
+        setStatus(ToolStatus::NG);
+        return false;
+    }
+
+    for (size_t i = 0; i < dets.size() && i < 20; ++i) {
+        const QString clsName = (dets[i].classId >= 0 && dets[i].classId < 80)
+                                    ? QString::fromUtf8(kCocoNames[dets[i].classId])
+                                    : QString("class%1").arg(dets[i].classId);
+        setResultData(QString("det%1_class").arg(i), clsName);
+        setResultData(QString("det%1_score").arg(i), dets[i].score);
+        setResultData(QString("det%1_x").arg(i), dets[i].x);
+        setResultData(QString("det%1_y").arg(i), dets[i].y);
+        setResultData(QString("det%1_w").arg(i), dets[i].w);
+        setResultData(QString("det%1_h").arg(i), dets[i].h);
+        m_boxes.push_back({dets[i].x, dets[i].y, dets[i].w, dets[i].h,
+                           dets[i].classId, dets[i].score});
+    }
+    setResultData("detectionCount", (int)dets.size());
+    m_lastOk = true;
+
+    // 判定: 检出即NG(缺陷检测场景) / 检出即OK(目标存在场景)
+    const bool detIsNG = propertyValue("detectionIsNG").toBool();
+    const bool hasDet = !dets.empty();
+    const bool pass = detIsNG ? !hasDet : hasDet;
+    setResultData("pass", pass);
+    setStatus(pass ? ToolStatus::OK : ToolStatus::NG);
+    return pass;
+#endif
+}
+
+std::vector<QVariant> AIDetection::overlays() const {
+    std::vector<QVariant> out;
+#ifndef VI_HAS_ONNXRT
+    return out;
+#else
+    if (!m_lastOk) return out;
+    for (const auto& b : m_boxes) {
+        QVariantMap rect;
+        rect["type"] = "rect";
+        rect["x"] = b.x; rect["y"] = b.y;
+        rect["w"] = b.w; rect["h"] = b.h;
+        rect["color"] = "#ff4040";
+        out.push_back(rect);
+        const QString clsName = (b.cls >= 0 && b.cls < 80)
+                                    ? QString::fromUtf8(kCocoNames[b.cls])
+                                    : QString::number(b.cls);
+        QVariantMap text;
+        text["type"] = "text";
+        text["x"] = b.x; text["y"] = std::max(0.f, b.y - 4);
+        text["size"] = 13.0;
+        text["text"] = QString("%1 %2%").arg(clsName).arg((int)(b.score * 100));
+        text["color"] = "#ffff00";
+        out.push_back(text);
+    }
+    return out;
+#endif
+}
+
+} // namespace VisionInspector
+
+VI_REGISTER_TOOL(AIDetection, "AI检测", VisionInspector::ToolCategory::Special)

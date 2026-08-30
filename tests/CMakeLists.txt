@@ -1,4 +1,5 @@
 # 测试
+message(STATUS "tests: ONNXRT=${VI_HAS_ONNXRT}")
 cmake_minimum_required(VERSION 3.21)
 
 find_package(Qt6 REQUIRED COMPONENTS Concurrent)
@@ -65,3 +66,22 @@ foreach(_plugin ${VI_ALL_PLUGINS})
     endif()
 endforeach()
 add_test(NAME thread_inspection COMMAND test_thread)
+
+# ONNX Runtime 最小链接验证 (可选依赖)
+if(VI_HAS_ONNXRT)
+    add_executable(test_onnxrt_min test_onnxrt_min.cpp)
+    vi_link_onnxrt(test_onnxrt_min)
+    add_test(NAME onnxrt_min COMMAND test_onnxrt_min)
+
+    # AI推理功能测试 (链VIAI+全部插件)
+    add_executable(test_ai test_ai.cpp)
+    vi_link_onnxrt(test_ai)
+    target_link_libraries(test_ai PRIVATE
+        VIAI VICore VIEngine VIHAL VIUtils ${OpenCV_LIBS} Qt6::Core Qt6::Gui)
+    foreach(_plugin ${VI_ALL_PLUGINS})
+        if(TARGET ${_plugin})
+            target_link_libraries(test_ai PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${_plugin}>)
+        endif()
+    endforeach()
+    add_test(NAME ai_inference COMMAND test_ai)
+endif()
