@@ -36,6 +36,17 @@ target_link_libraries(test_stats PRIVATE
 )
 add_test(NAME stats_export COMMAND test_stats)
 
+# 用户管理密码安全存储回归 (H-7: 哈希落盘/旧明文升级/登录)
+add_executable(test_usermanager test_usermanager.cpp)
+target_link_libraries(test_usermanager PRIVATE
+    VICore
+    VIEngine
+    VIHAL
+    VIUtils
+    Qt6::Core
+)
+add_test(NAME user_manager COMMAND test_usermanager)
+
 add_executable(test_edgedrawing test_edgedrawing.cpp)
 target_link_libraries(test_edgedrawing PRIVATE
     ${OpenCV_LIBS}
