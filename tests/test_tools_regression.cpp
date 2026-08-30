@@ -12,6 +12,7 @@
 
 #include "../../src/engine/ToolRegistry.h"
 #include "../../src/engine/FlowEngine.h"
+#include "../../src/core/GlobalVariables.h"
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -500,6 +501,25 @@ int main(int argc, char* argv[]) {
             }
             delete sm;
             QFile::remove(tmplPath);
+        }
+
+        // 9d. Calibration applyTo=所有流程 → 写入全局变量
+        {
+            ToolContext ctx;
+            auto* gv = new GlobalVariables;
+            ctx.setGlobalVariables(gv);
+            ITool* cal = reg.createTool("Calibration");
+            cal->setInstanceName("标定-全局");
+            cal->setProperty("calibMethod", 1);       // 已知比例
+            cal->setProperty("pixelRatio", 0.125);    // mm/px
+            cal->setProperty("applyTo", 1);           // 所有流程
+            CHECK(cal->execute(ctx), "标定-全局: 执行成功");
+            CHECK(gv->has("calibration_ratio") && std::fabs(gv->getDouble("calibration_ratio") - 0.125) < 1e-9,
+                  "标定-全局: 全局变量已写入比例");
+            CHECK(std::fabs(gv->getDouble("calibration_pixel_per_mm") - 8.0) < 1e-6,
+                  "标定-全局: 全局像素/毫米=8");
+            delete cal;
+            delete gv;
         }
     }
 

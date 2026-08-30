@@ -13,6 +13,7 @@
  */
 #include "Calibration.h"
 #include "../../../src/engine/ToolRegistry.h"
+#include "../../../src/core/GlobalVariables.h"
 #ifdef VI_HAS_OPENCV
 #include <opencv2/imgproc.hpp>
 #include <opencv2/objdetect.hpp>
@@ -152,6 +153,16 @@ bool Calibration::execute(ToolContext& context) {
     context.setData("calibration_unit", unit);
     context.setData("calibration_mm_per_pixel", ratio);
     context.setData("calibration_pixel_per_mm", 1.0 / ratio);
+
+    // 应用范围: 1=所有流程 → 同时写入全局变量, 供其它流程跨流程共享
+    if (propertyValue("applyTo").toInt() == 1) {
+        if (auto* gv = context.globalVariables()) {
+            gv->set("calibration_ratio", ratio);
+            gv->set("calibration_unit", unit);
+            gv->set("calibration_mm_per_pixel", ratio);
+            gv->set("calibration_pixel_per_mm", 1.0 / ratio);
+        }
+    }
 
     setResultData("mmPerPixel", ratio);
     setResultData("pixelPerMm", 1.0 / ratio);
