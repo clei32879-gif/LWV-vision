@@ -15,7 +15,12 @@ PropertyDefList UpdateView::propertyDefs() const {
 
 bool UpdateView::execute(ToolContext& context) {
 #ifdef VI_HAS_OPENCV
-    CvImagePtr input = getInputImage(context);
+    // imageSource 死属性激活: 0=当前图像(Current), 1=输入图像(getInputImage: 命名的inputImage或当前)
+    CvImagePtr input;
+    if (propertyValue("imageSource").toInt() == 0)
+        input = context.currentImage();
+    else
+        input = getInputImage(context);
     if (!input || input->empty()) {
         // 即使没有图像也标记成功，视图保持不变
         setResultData("viewUpdated", false);

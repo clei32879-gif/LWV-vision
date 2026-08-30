@@ -521,6 +521,52 @@ int main(int argc, char* argv[]) {
             delete cal;
             delete gv;
         }
+
+        // 9e. MultiContourMatch sizeTolerance: 面积一致性过滤
+        {
+            cv::Mat img(120, 200, CV_8UC1, cv::Scalar(0));
+            // 三个相同白斑(约30x30=900) + 一个大斑(60x60=3600)
+            cv::rectangle(img, cv::Rect(20, 20, 30, 30), cv::Scalar(255), cv::FILLED);
+            cv::rectangle(img, cv::Rect(90, 20, 30, 30), cv::Scalar(255), cv::FILLED);
+            cv::rectangle(img, cv::Rect(160, 20, 30, 30), cv::Scalar(255), cv::FILLED);
+            cv::rectangle(img, cv::Rect(70, 60, 60, 60), cv::Scalar(255), cv::FILLED);
+            ToolContext ctx;
+            ctx.setCurrentImage(std::make_shared<CvImage>(img));
+            ITool* mcm = reg.createTool("MultiContourMatch");
+            mcm->setInstanceName("多轮廓-容差");
+            mcm->setProperty("roiType", 0);
+            mcm->setProperty("minArea", 100);
+            mcm->setProperty("maxArea", 100000);
+            mcm->setProperty("sizeTolerance", 10.0);   // 只保留与中位数面积偏差≤10%的斑
+            mcm->setProperty("minCount", 3);
+            CHECK(mcm->execute(ctx), "多轮廓-容差: 执行成功");
+            const int mc = mcm->resultData().value("matchCount").toInt();
+            CHECK(mc == 3, QString("多轮廓-容差: 匹配数%1 期望3(过滤掉大斑)").arg(mc).toLocal8Bit().constData());
+            const int filt = mcm->resultData().value("sizeFiltered").toInt();
+            CHECK(filt == 1, QString("多轮廓-容差: 被过滤%1 期望1").arg(filt).toLocal8Bit().constData());
+            delete mcm;
+        }
+
+        // 9f. CircleDetection tolerance: 拟合超差判定 (双半径边缘 → 拟合RMS大)
+        {
+            cv::Mat img(160, 160, CV_8UC1, cv::Scalar(0));
+            cv::circle(img, cv::Point(80, 80), 50, cv::Scalar(255), 3);  // 主圆
+            cv::circle(img, cv::Point(80, 80), 30, cv::Scalar(255), 3);  // 内圆(干扰, 双半径)
+            ToolContext ctx;
+            ctx.setCurrentImage(std::make_shared<CvImage>(img));
+            ITool* cd = reg.createTool("CircleDetection");
+            cd->setInstanceName("圆-容差严");
+            cd->setProperty("roiCenterX", 80.0);
+            cd->setProperty("roiCenterY", 80.0);
+            cd->setProperty("roiRadius", 45.0);
+            cd->setProperty("roiThickness", 40.0);
+            cd->setProperty("scanCount", 60);
+            cd->setProperty("tolerance", 0.5);          // 严容差 → 双半径必然超差 NG
+            const bool cdOk = cd->execute(ctx);
+            CHECK(!cdOk, "圆-容差严: 超差应NG");
+            CHECK(cd->resultData().value("fitFailed").toBool(), "圆-容差严: 标记fitFailed");
+            delete cd;
+        }
     }
 
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",

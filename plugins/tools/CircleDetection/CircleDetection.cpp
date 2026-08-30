@@ -33,7 +33,7 @@ PropertyDefList CircleDetection::propertyDefs() const {
         PropertyDef::intProp("gradientThreshold", "梯度阈值", 30, 1, 255, "检测"),
         PropertyDef::intProp("filterHalfWidth", "梯度平滑半宽", 2, 1, 20, "检测"),
         PropertyDef::intProp("scanCount", "卡尺数量", 24, 3, 180, "检测"),
-        PropertyDef::doubleProp("tolerance", "容忍误差", 1.0, 0.1, 100, "检测"),
+        PropertyDef::doubleProp("tolerance", "容忍误差(px)", 10.0, 0.1, 100, "检测"),
     };
 }
 
@@ -101,6 +101,19 @@ bool CircleDetection::execute(ToolContext& context) {
     m_lastCenter = center;
     m_lastRadius = radius;
     m_lastEdges = edgePts;
+
+    // tolerance 死属性激活: 拟合RMS超差判定 (单位=像素)
+    const double tol = propertyValue("tolerance").toDouble();
+    if (tol > 0 && rms > tol) {
+        setResultData("centerX", center.x);
+        setResultData("centerY", center.y);
+        setResultData("radius", radius);
+        setResultData("rms", rms);
+        setResultData("fitFailed", true);
+        setResultData("error", QString("拟合误差%1px 超出容差%2px").arg(rms).arg(tol));
+        setStatus(ToolStatus::NG);
+        return false;
+    }
 
     setResultData("centerX", center.x);
     setResultData("centerY", center.y);

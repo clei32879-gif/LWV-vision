@@ -1,5 +1,6 @@
 #include "MultiContourMatch.h"
 #include "../../../src/engine/ToolRegistry.h"
+#include <algorithm>
 #ifdef VI_HAS_OPENCV
 #include <opencv2/imgproc.hpp>
 #include <opencv2/geometry/2d.hpp>
@@ -43,6 +44,8 @@ bool MultiContourMatch::execute(ToolContext& context) {
     double minArea = propertyValue("minArea").toDouble();
     double maxArea = propertyValue("maxArea").toDouble();
     int minCount = propertyValue("minCount").toInt();
+    // sizeTolerance 死属性激活: 面积一致性过滤 (与中位数偏差超过容差%的轮廓剔除)
+    const double sizeTol = propertyValue("sizeTolerance").toDouble();
     QRectF roiRect = m_roi.boundingRect();
     int rx = std::max(0, (int)roiRect.x());
     int ry = std::max(0, (int)roiRect.y());
@@ -54,13 +57,35 @@ bool MultiContourMatch::execute(ToolContext& context) {
     cv::threshold(roiImg, binary, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(binary, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    // 先取面积区间内的面积集合, 计算中位数
+    std::vector<double> areas;
+    for (const auto& c : contours) {
+        double a = cv::contourArea(c);
+        if (a >= minArea && a <= maxArea) areas.push_back(a);
+    }
+    double medianArea = 0;
+    if (!areas.empty()) {
+        std::vector<double> s = areas;
+        std::sort(s.begin(), s.end());
+        medianArea = s[s.size() / 2];
+    }
+    // 面积一致性过滤: 与中位数偏差 > sizeTol% 的剔除
     int matchCount = 0;
+    int filtered = 0;
     for (const auto& c : contours) {
         double area = cv::contourArea(c);
-        if (area >= minArea && area <= maxArea) matchCount++;
+        if (area < minArea || area > maxArea) continue;
+        if (medianArea > 0 && sizeTol < 100 &&
+            std::fabs(area - medianArea) / medianArea * 100.0 > sizeTol) {
+            filtered++;
+            continue;
+        }
+        matchCount++;
     }
     setResultData("matchCount", matchCount);
     setResultData("totalContours", (int)contours.size());
+    setResultData("medianArea", medianArea);
+    setResultData("sizeFiltered", filtered);
     setResultData("found", matchCount >= minCount);
     setStatus(matchCount >= minCount ? ToolStatus::OK : ToolStatus::NG);
     return matchCount >= minCount;
