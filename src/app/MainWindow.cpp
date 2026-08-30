@@ -14,6 +14,7 @@
 #include "../ui/LoginDialog.h"
 #include "../ui/AnnotationDialog.h"
 #include "../ui/TeachWizard.h"
+#include "../ui/YoloTeachWizard.h"
 #include "../ui/UIEditor.h"
 #include "../ui/IconHelper.h"
 #include "../hal/ModbusTcpMaster.h"
@@ -239,6 +240,7 @@ void MainWindow::createMenus() {
 
     QMenu* aiMenu = menuBar()->addMenu(QString::fromUtf8("AI(&I)"));
     aiMenu->addAction(QString::fromUtf8("教导向导(多工位AI缺陷检测)..."), this, &MainWindow::onTeachWizard);
+    aiMenu->addAction(QString::fromUtf8("YOLO检测教导向导..."), this, &MainWindow::onYoloTeachWizard);
 
     QMenu* camMenu = menuBar()->addMenu(QString::fromUtf8("\u76f8\u673a(&C)"));
     camMenu->addAction(QString::fromUtf8("\u626b\u63cf\u76f8\u673a"), this, &MainWindow::onScanCameras);
@@ -692,6 +694,14 @@ void MainWindow::onGlobalVariables() {
 
 void MainWindow::onTeachWizard() {
     auto* dlg = new TeachWizard(m_camera, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->show();
+    dlg->raise();
+    dlg->activateWindow();
+}
+
+void MainWindow::onYoloTeachWizard() {
+    auto* dlg = new YoloTeachWizard(m_camera, this);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
     dlg->show();
     dlg->raise();

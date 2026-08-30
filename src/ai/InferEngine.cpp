@@ -93,6 +93,10 @@ bool InferEngine::loadModel(const QString& onnxPath, QString* err) {
 
 bool InferEngine::isLoaded() const { return m_impl->session != nullptr; }
 QString InferEngine::modelPath() const { return m_impl->path; }
+
+QString InferEngine::className(int classId) const {
+    return m_impl->classNames.value(classId, QString("class%1").arg(classId));
+}
 int InferEngine::inputWidth() const { return m_impl->inW; }
 int InferEngine::inputHeight() const { return m_impl->inH; }
 
@@ -197,6 +201,7 @@ std::vector<AiDetection> InferEngine::detectYolo(const cv::Mat& bgr,
             d.h = hn / (float)scale;
             d.score = maxScore;
             d.classId = maxCls;
+            d.className = m_impl->classNames.value(maxCls, QString("class%1").arg(maxCls));
             dets.push_back(d);
         }
         for (int i : nms(dets, iouThr))

@@ -53,6 +53,10 @@ target_sources(VIUI PRIVATE
     TeachWizard.h
     TeachWizard.cpp
 
+    # YOLO检测教导向导 (加载检测模型/实时画框/采集样本)
+    YoloTeachWizard.h
+    YoloTeachWizard.cpp
+
     # 界面编辑器 (DIY)
     UIEditor.h
     UIEditor.cpp

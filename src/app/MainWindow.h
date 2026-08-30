@@ -61,6 +61,7 @@ private slots:
     void onPlcSimulator();
     void onAnnotationTool();
     void onTeachWizard();
+    void onYoloTeachWizard();
     void onAbout();
     void onExportCsv();
     void onScanCameras();

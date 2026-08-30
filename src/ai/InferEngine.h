@@ -59,6 +59,9 @@ public:
     /** 分类推理: softmax概率, 结果按分数降序 [{类别名,分数}...] */
     bool classify(const cv::Mat& bgr, QList<QPair<QString, float>>& results, QString* err = nullptr);
 
+    /** 类别名查询 (检测/分类通用), 无则返回 "classN" */
+    QString className(int classId) const;
+
     /** 通用推理: 输入BGR图按模型输入尺寸缩放+归一化(可选letterbox), 返回第一个输出张量 */
     bool run(const cv::Mat& bgr, std::vector<float>& output,
              std::vector<int64_t>& outShape, QString* err = nullptr);
