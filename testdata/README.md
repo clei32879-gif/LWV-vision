@@ -12,11 +12,16 @@
 | `NG_BURR_XX.png` | 毛刺（牙顶亮刺） |
 | `NG_DAMAGED_XX.png` | 烂牙（局部牙型抖动坍塌） |
 | `NG_SLANT_XX.png` | 斜牙（牙线倾斜14°） |
+| `calib_board/board_front.png` | 棋盘格标定板（正交，内角点9×6，单格60px） |
+| `calib_board/board_rot12.png` | 棋盘格标定板（绕图心旋转12°，验证带角度检测） |
+
+> `calib_board/` 供 标定校准-棋盘格标定 回归：板单格实长为 10mm → 理论比例 10/60≈0.1667 mm/px。
 
 ## 重新生成
 
 ```bat
 :: 生成到 build 输出目录（虚拟相机默认读取 build\release\bin\testdata\virtual_camera）
+:: 注意: 命令行直接跑 testdata_gen 需先把 OpenCV/Qt DLL 目录加入 PATH, 否则加载 DLL 失败崩溃
 cmake --build build/release --target generate_testdata
 
 :: 或手动指定目录与数量

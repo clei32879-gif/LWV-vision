@@ -310,6 +310,45 @@ int main(int argc, char* argv[]) {
         delete edMax;
     }
 
+    // ---- 7. 标定真实化: 棋盘格角点检测 + 自动比例 (P0-3) ----
+    // testdata_gen 生成的棋盘格: 内角点9x6, 单格60px, 实际10mm → 理论比例 10/60≈0.1667
+    {
+        const QString calDir = d.absoluteFilePath("calib_board");
+        QDir cd(calDir);
+        const QStringList boards = cd.entryList({"*.png"}, QDir::Files, QDir::Name);
+        for (const QString& name : boards) {
+            const QString path = cd.absoluteFilePath(name);
+            cv::Mat img = cv::imread(path.toLocal8Bit().toStdString(), cv::IMREAD_GRAYSCALE);
+            if (img.empty()) continue;
+
+            ToolContext ctx;
+            ctx.setCurrentImage(std::make_shared<CvImage>(img));
+            ITool* cal = reg.createTool("Calibration");
+            cal->setInstanceName("棋盘格标定");
+            cal->setProperty("calibMethod", 2);      // 棋盘格标定
+            cal->setProperty("boardCols", 9);
+            cal->setProperty("boardRows", 6);
+            cal->setProperty("squareSize", 10.0);    // mm
+            const bool ok = cal->execute(ctx);
+            CHECK(ok, QString("棋盘格标定[%1]: 检测成功").arg(name).toLocal8Bit().constData());
+            if (ok) {
+                const double ratio = cal->resultData().value("mmPerPixel").toDouble();
+                const int cnt = cal->resultData().value("cornerCount").toInt();
+                CHECK(cnt == 54, QString("棋盘格标定[%1]: 角点数%2 期望54")
+                            .arg(name).arg(cnt).toLocal8Bit().constData());
+                // 理论比例 10mm/60px = 0.1667, 容差±5%
+                CHECK(std::fabs(ratio - 10.0 / 60.0) < 0.01,
+                      QString("棋盘格标定[%1]: 比例%2 期望≈0.1667")
+                          .arg(name).arg(ratio, 0, 'f', 4).toLocal8Bit().constData());
+                // 上下文写入校验
+                const double ctxRatio = ctx.getDouble("calibration_ratio", 0);
+                CHECK(std::fabs(ctxRatio - ratio) < 1e-9, "棋盘格标定: 上下文比例一致");
+            }
+            delete cal;
+        }
+        CHECK(boards.size() >= 2, "棋盘格测试资产≥2张(正交+旋转)");
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);

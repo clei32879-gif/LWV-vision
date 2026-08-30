@@ -42,6 +42,9 @@ kaggle_screw.zip
 screw.tar.xz
 runs/
 
+# ===== 合成测试图(由generate_testdata目标重建, 不入库) =====
+testdata/virtual_camera/
+
 # ===== 教导运行时数据 (现场抓帧样本/训练中间产物/工位模型, 不入库) =====
 teach/
 

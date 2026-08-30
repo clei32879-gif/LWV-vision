@@ -15,6 +15,7 @@
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
+#include <opencv2/geometry/2d.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <QCoreApplication>
 #include <QDir>
@@ -83,6 +84,28 @@ static void drawThreadPart(Mat& img, Point2f center, double radius,
     }
 }
 
+/**
+ * 画一个标准棋盘格标定板 (黑色背景白方格)
+ * @param topLeft 左上角点 (可带旋转, 由调用方旋转整图)
+ * @param squarePx 单格边长(px)
+ * @param innerCols/innerRows 内角点列/行数 → 方格数 = innerCols+1 × innerRows+1
+ */
+static void drawChessboard(Mat& img, Point2f topLeft, double squarePx,
+                           int innerCols, int innerRows) {
+    const int sqCols = innerCols + 1, sqRows = innerRows + 1;
+    const bool white = true;   // 左上角方格为白
+    for (int r = 0; r < sqRows; ++r) {
+        for (int c = 0; c < sqCols; ++c) {
+            if ((r + c) % 2 == (white ? 0 : 1)) continue;   // 只画黑色格, 白色格即背景
+            const cv::Rect cell((int)std::lround(topLeft.x + c * squarePx),
+                                (int)std::lround(topLeft.y + r * squarePx),
+                                (int)std::lround(squarePx) + 1,
+                                (int)std::lround(squarePx) + 1);
+            cv::rectangle(img, cell, Scalar(0), cv::FILLED);
+        }
+    }
+}
+
 int main(int argc, char* argv[]) {
     QCoreApplication app(argc, argv);
 
@@ -123,6 +146,41 @@ int main(int argc, char* argv[]) {
                         FONT_HERSHEY_SIMPLEX, 0.7, Scalar(200), 1, LINE_AA);
             const QString path = outDir + QString("/%1_%2.png").arg(ngNames[defect - 1]).arg(i + 1, 2, 10, QChar('0'));
             imwrite(path.toLocal8Bit().toStdString(), img);
+            ++generated;
+        }
+    }
+
+    // 棋盘格标定板 (供 标定校准-棋盘格标定 回归):
+    //   内角点 9x6, 单格 60px, 板实际单格 10mm → 理论比例 10/60 ≈ 0.1667 mm/px
+    {
+        const QString calDir = outDir + "/calib_board";
+        QDir().mkpath(calDir);
+        const int bCols = 9, bRows = 6;
+        const double sqPx = 60.0;
+        // 板外廓: 10格×60 = 600 宽, 7格×60 = 420 高
+        const double boardW = (bCols + 1) * sqPx, boardH = (bRows + 1) * sqPx;
+
+        // 1) 正交板: 居中 (留边距)
+        {
+            Mat img(H, W, CV_8UC1, Scalar(255));
+            std::fprintf(stderr, "[calib] draw front board...\n"); std::fflush(stderr);
+            drawChessboard(img, Point2f((W - boardW) / 2, (H - boardH) / 2), sqPx, bCols, bRows);
+            std::fprintf(stderr, "[calib] write front board...\n"); std::fflush(stderr);
+            imwrite((calDir + "/board_front.png").toLocal8Bit().toStdString(), img);
+            ++generated;
+        }
+        // 2) 旋转板: 绕图心旋转 12° (验证带角度检测)
+        {
+            Mat img(H, W, CV_8UC1, Scalar(255));
+            std::fprintf(stderr, "[calib] draw rot board...\n"); std::fflush(stderr);
+            drawChessboard(img, Point2f((W - boardW) / 2, (H - boardH) / 2), sqPx, bCols, bRows);
+            Mat rot = getRotationMatrix2D(Point2f(W / 2.0f, H / 2.0f), 12.0, 1.0);
+            Mat rotated;
+            std::fprintf(stderr, "[calib] warpAffine rot board...\n"); std::fflush(stderr);
+            warpAffine(img, rotated, rot, Size(W, H), INTER_LINEAR,
+                       BORDER_CONSTANT, Scalar(255));
+            std::fprintf(stderr, "[calib] write rot board...\n"); std::fflush(stderr);
+            imwrite((calDir + "/board_rot12.png").toLocal8Bit().toStdString(), rotated);
             ++generated;
         }
     }
