@@ -508,39 +508,51 @@ PropertyDefList YOLOv8Detect::propertyDefs() const
 
 QVariant YOLOv8Detect::propertyValue(const QString& name) const
 {
-    if (name == "modelPath")           return m->modelPath;
-    if (name == "confidenceThreshold")  return m->confidenceThreshold;
-    if (name == "nmsThreshold")        return m->nmsThreshold;
-    if (name == "inputSize")           return m->inputSize;
-    if (name == "classNames")          return m->classNamesStr;
-    if (name == "modelType")           return m->modelType;
-    return ITool::propertyValue(name);
+    // H-4b: 覆写实现必须走基类锁 (工作线程写 vs UI 线程读不竞态)
+    return withStateLock([&]() -> QVariant {
+        if (name == "modelPath")           return m->modelPath;
+        if (name == "confidenceThreshold")  return m->confidenceThreshold;
+        if (name == "nmsThreshold")        return m->nmsThreshold;
+        if (name == "inputSize")           return m->inputSize;
+        if (name == "classNames")          return m->classNamesStr;
+        if (name == "modelType")           return m->modelType;
+        // 锁内直读基类属性 (不能调 ITool::propertyValue, 其内部会二次加锁死锁)
+        if (m_properties.contains(name))
+            return m_properties.value(name);
+        for (const auto& def : propertyDefs())
+            if (def.name == name)
+                return def.defaultValue;
+        return QVariant();
+    });
 }
 
 void YOLOv8Detect::setProperty(const QString& name, const QVariant& value)
 {
-    if (name == "modelPath") {
-        QString newPath = value.toString();
-        if (newPath != m->modelPath) {
-            m->modelPath = newPath;
-            m->releaseModel(); // 路径变更，释放旧模型
+    // H-4b: 覆写实现必须走基类锁; releaseModel 在锁内完成(路径/参数一致性保证)
+    withStateLock([&] {
+        if (name == "modelPath") {
+            QString newPath = value.toString();
+            if (newPath != m->modelPath) {
+                m->modelPath = newPath;
+                m->releaseModel(); // 路径变更，释放旧模型
+            }
         }
-    }
-    else if (name == "confidenceThreshold") { m->confidenceThreshold = value.toFloat(); }
-    else if (name == "nmsThreshold")      { m->nmsThreshold = value.toFloat(); }
-    else if (name == "inputSize")         { m->inputSize = value.toInt(); }
-    else if (name == "classNames")        {
-        m->classNamesStr = value.toString();
-        m->classNames.clear();
-        QStringList parts = m->classNamesStr.split(",", Qt::SkipEmptyParts);
-        for (const QString& part : parts) {
-            m->classNames.push_back(part.trimmed().toStdString());
+        else if (name == "confidenceThreshold") { m->confidenceThreshold = value.toFloat(); }
+        else if (name == "nmsThreshold")      { m->nmsThreshold = value.toFloat(); }
+        else if (name == "inputSize")         { m->inputSize = value.toInt(); }
+        else if (name == "classNames")        {
+            m->classNamesStr = value.toString();
+            m->classNames.clear();
+            QStringList parts = m->classNamesStr.split(",", Qt::SkipEmptyParts);
+            for (const QString& part : parts) {
+                m->classNames.push_back(part.trimmed().toStdString());
+            }
         }
-    }
-    else if (name == "modelType")         { m->modelType = value.toString(); }
-    else { ITool::setProperty(name, value); }
+        else if (name == "modelType")         { m->modelType = value.toString(); }
+        else { m_properties[name] = value; return; }  // 锁内直写基类属性
 
-    m_properties[name] = value;
+        m_properties[name] = value;
+    });
 }
 
 // ------------------------------------------------------------

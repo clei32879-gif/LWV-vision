@@ -267,6 +267,23 @@ protected:
 protected:
     QVariantMap m_properties;
 
+    // H-4b 带锁辅助: 供覆写 propertyValue/setProperty 的派生类(YOLOv8Detect等)
+    // 复用基类锁, 避免覆写实现绕过 m_stateMutex 造成线程安全缺口
+    QVariant propertyValueLocked(const QString& name) const {
+        std::lock_guard<std::mutex> lk(m_stateMutex);
+        return m_properties.value(name);
+    }
+    void setPropertyLocked(const QString& name, const QVariant& value) {
+        std::lock_guard<std::mutex> lk(m_stateMutex);
+        m_properties[name] = value;
+    }
+    // 在基类状态锁内执行一段代码 (覆写实现需要原子更新"自身成员+基类属性"时用)
+    template <typename F>
+    auto withStateLock(F&& f) const -> decltype(f()) {
+        std::lock_guard<std::mutex> lk(m_stateMutex);
+        return f();
+    }
+
 private:
     QString m_instanceName;
     QString m_comment;
