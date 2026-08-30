@@ -205,6 +205,15 @@ void MainWindow::setupUI() {
     connect(m_toolbox, &Toolbox::toolDoubleClicked, this, &MainWindow::onToolAdded);
     connect(m_flowEditor, &FlowEditor::toolDropped, this, &MainWindow::onToolAdded);
     connect(m_flowEditor, &FlowEditor::toolEditProperties, this, &MainWindow::onEditToolProperties);
+    // UI排查 P0-2/P0-1: 双击编辑 + 右键7项全接线 (此前仅属性一项有效)
+    connect(m_flowEditor, &FlowEditor::toolDoubleClicked, this, &MainWindow::onEditToolProperties);
+    connect(m_flowEditor, &FlowEditor::toolToggleActive, this, &MainWindow::onToolToggleActive);
+    connect(m_flowEditor, &FlowEditor::toolDelete, this, &MainWindow::onToolDelete);
+    connect(m_flowEditor, &FlowEditor::toolMoveUp, this, &MainWindow::onToolMoveUp);
+    connect(m_flowEditor, &FlowEditor::toolMoveDown, this, &MainWindow::onToolMoveDown);
+    connect(m_flowEditor, &FlowEditor::toolRename, this, &MainWindow::onToolRename);
+    connect(m_flowEditor, &FlowEditor::toolCopy, this, &MainWindow::onToolCopy);
+    connect(m_flowEditor, &FlowEditor::toolPaste, this, &MainWindow::onToolPaste);
     
     setWindowTitle("LW Vision v1.0.0");
     resize(1400, 900);
@@ -262,6 +271,14 @@ void MainWindow::createViewMenu() {
     QMenu* viewMenu = menuBar()->addMenu(QString::fromUtf8("\u89c6\u56fe(&V)"));
     viewMenu->addAction(m_mainToolBar->toggleViewAction());
     viewMenu->addAction(m_logDock->toggleViewAction());
+    viewMenu->addSeparator();
+    // UI排查 P0-4: 缩放入口 (此前缩放槽无任何UI连接, 完全失效)
+    viewMenu->addAction(QString::fromUtf8("\u653e\u5927(Ctrl++)"), this, &MainWindow::onZoomIn,
+                        QKeySequence::ZoomIn);
+    viewMenu->addAction(QString::fromUtf8("\u7f29\u5c0f(Ctrl+-)"), this, &MainWindow::onZoomOut,
+                        QKeySequence::ZoomOut);
+    viewMenu->addAction(QString::fromUtf8("\u9002\u5e94\u7a97\u53e3"), this, &MainWindow::onZoomFit);
+    viewMenu->addAction(QString::fromUtf8("1:1 \u539f\u5927"), this, &MainWindow::onZoom1x1);
     viewMenu->addSeparator();
     viewMenu->addAction(QString::fromUtf8("\u5168\u5c4f\u663e\u793a"), this, &MainWindow::toggleFullscreen);
 
@@ -366,6 +383,8 @@ void MainWindow::createStatusBar() {
     m_fileLabel = new QLabel("无项目");
 
     statusBar()->addWidget(m_statusLabel, 1);
+    statusBar()->addPermanentWidget(m_userLabel);
+    statusBar()->addPermanentWidget(m_connectionLabel);
     statusBar()->addPermanentWidget(m_fileLabel);
     statusBar()->addPermanentWidget(m_okCountLabel);
     statusBar()->addPermanentWidget(m_ngCountLabel);
@@ -485,6 +504,118 @@ void MainWindow::onEditToolProperties(int index) {
     }
 }
 
+// ============================================================
+// 流程编辑器右键/双击/Delete 信号接线 (UI排查 P0-1~P0-3)
+// ============================================================
+
+void MainWindow::onToolToggleActive(int index) {
+    if (m_flowEngine->flowCount() == 0) return;
+    Flow* flow = m_flowEngine->flows().first();
+    ITool* tool = flow->toolAt(index);
+    if (!tool) return;
+    tool->setActive(!tool->isActive());
+    if (m_flowEditor) {
+        m_flowEditor->updateToolStatus(index, tool->isActive() ? ToolStatus::Idle : ToolStatus::Disabled);
+        m_flowEditor->refresh();
+    }
+    m_projectMgr->markModified();
+    m_statusLabel->setText(QString("%1: %2").arg(tool->instanceName())
+                               .arg(tool->isActive() ? "已启用" : "已禁用"));
+}
+
+void MainWindow::onToolDelete(int index) {
+    if (m_flowEngine->flowCount() == 0) return;
+    Flow* flow = m_flowEngine->flows().first();
+    if (index < 0 || index >= flow->toolCount()) return;
+    // 引擎已在 UI 线程 (不连续运行时); 安全起见若在运行先停
+    if (m_flowEngine->isRunning()) m_flowEngine->stopRunning(true);
+    ITool* tool = flow->toolAt(index);
+    const QString name = tool ? tool->instanceName() : QString::number(index);
+    flow->removeTool(index);   // Flow 拥有工具, removeTool 即删除
+    if (m_flowEditor) m_flowEditor->refresh();
+    m_projectMgr->markModified();
+    m_statusLabel->setText(QString("已删除: %1").arg(name));
+}
+
+void MainWindow::onToolMoveUp(int index) {
+    if (index <= 0) return;
+    if (m_flowEngine->flowCount() == 0) return;
+    Flow* flow = m_flowEngine->flows().first();
+    flow->moveTool(index, index - 1);
+    if (m_flowEditor) m_flowEditor->refresh();
+    m_projectMgr->markModified();
+}
+
+void MainWindow::onToolMoveDown(int index) {
+    if (m_flowEngine->flowCount() == 0) return;
+    Flow* flow = m_flowEngine->flows().first();
+    if (index < 0 || index >= flow->toolCount() - 1) return;
+    flow->moveTool(index, index + 1);
+    if (m_flowEditor) m_flowEditor->refresh();
+    m_projectMgr->markModified();
+}
+
+void MainWindow::onToolRename(int index, const QString& newName) {
+    if (m_flowEngine->flowCount() == 0) return;
+    Flow* flow = m_flowEngine->flows().first();
+    ITool* tool = flow->toolAt(index);
+    if (!tool) return;
+    tool->setInstanceName(newName);
+    if (m_flowEditor) m_flowEditor->refresh();
+    m_projectMgr->markModified();
+    m_statusLabel->setText(QString("已重命名为: %1").arg(newName));
+}
+
+void MainWindow::onToolCopy(int index) {
+    if (m_flowEngine->flowCount() == 0) return;
+    Flow* flow = m_flowEngine->flows().first();
+    ITool* tool = flow->toolAt(index);
+    if (!tool) return;
+    if (m_flowEditor) m_flowEditor->setClipboardTypeName(tool->typeName());
+    m_statusLabel->setText(QString("已复制: %1").arg(tool->typeName()));
+}
+
+void MainWindow::onToolPaste(int index) {
+    if (!m_flowEditor || m_flowEditor->clipboardTypeName().isEmpty()) return;
+    const QString typeName = m_flowEditor->clipboardTypeName();
+    ITool* tool = ToolRegistry::instance().createTool(typeName);
+    if (!tool) {
+        m_logPanel->appendLog(QString("无法创建工具: %1").arg(typeName));
+        return;
+    }
+
+    Flow* flow = nullptr;
+    if (m_flowEngine->flowCount() > 0) {
+        flow = m_flowEngine->flows().first();
+    } else {
+        flow = new Flow(m_flowEngine);
+        flow->setName("主流程");
+        m_flowEngine->addFlow(flow);
+    }
+
+    // 粘贴到指定位置 (index<0 表示末尾)
+    if (index >= 0 && index <= flow->toolCount()) {
+        flow->insertTool(index, tool);
+    } else {
+        flow->addTool(tool);
+    }
+
+    // 命名: 统计同类型数量, 粘贴副本加 _N 后缀
+    int sameTypeCount = 0;
+    for (int i = 0; i < flow->toolCount(); ++i) {
+        ITool* t = flow->toolAt(i);
+        if (t && t != tool && t->typeName() == typeName) sameTypeCount++;
+    }
+    tool->setInstanceName(sameTypeCount == 0
+                              ? tool->displayName()
+                              : QString("%1_%2").arg(tool->displayName()).arg(sameTypeCount + 1));
+
+    m_flowEditor->setFlow(flow);
+    m_flowEditor->refresh();
+    m_projectMgr->markModified();
+    m_logPanel->appendLog(QString("已粘贴工具: %1").arg(tool->instanceName()));
+}
+
 void MainWindow::toggleFullscreen() {
     if (isFullScreen()) showNormal(); else showFullScreen();
 }
@@ -494,19 +625,32 @@ void MainWindow::toggleFullscreen() {
 // ============================================================
 
 void MainWindow::onZoomIn() {
-    if (m_displayArea) m_displayArea->zoomIn();
+    // UI排查 P0-4: m_displayArea 从未实例化(死成员), 改作用于实际图像控件
+    if (m_multiView) {
+        auto* v = m_multiView->viewAt(0);
+        if (v) v->zoomIn();
+    }
 }
 
 void MainWindow::onZoomOut() {
-    if (m_displayArea) m_displayArea->zoomOut();
+    if (m_multiView) {
+        auto* v = m_multiView->viewAt(0);
+        if (v) v->zoomOut();
+    }
 }
 
 void MainWindow::onZoomFit() {
-    if (m_displayArea) m_displayArea->zoomFit();
+    if (m_multiView) {
+        auto* v = m_multiView->viewAt(0);
+        if (v) v->zoomFit();
+    }
 }
 
 void MainWindow::onZoom1x1() {
-    if (m_displayArea) m_displayArea->zoom1x1();
+    if (m_multiView) {
+        auto* v = m_multiView->viewAt(0);
+        if (v) v->zoom1x1();
+    }
 }
 
 // ============================================================

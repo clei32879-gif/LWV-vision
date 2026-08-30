@@ -70,6 +70,13 @@ private slots:
     void onCameraImageReceived(const CvImage& image);
     void onToolAdded(const QString& typeName);
     void onEditToolProperties(int index);
+    void onToolToggleActive(int index);
+    void onToolDelete(int index);
+    void onToolMoveUp(int index);
+    void onToolMoveDown(int index);
+    void onToolRename(int index, const QString& newName);
+    void onToolCopy(int index);
+    void onToolPaste(int index);
     void toggleFullscreen();
     void onZoomIn();
     void onZoomOut();

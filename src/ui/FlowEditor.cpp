@@ -472,6 +472,9 @@ void FlowEditor::setupView() {
     // 从工具箱拖入工具
     connect(m_view, &FlowView::toolDropped, this, &FlowEditor::toolDropped);
 
+    // UI排查 P0-3: Delete键删除选中节点 (此前未连接, onSceneDeleteRequested永不触发)
+    connect(m_view, &FlowView::deleteRequested, this, &FlowEditor::onSceneDeleteRequested);
+
     // 启用鼠标中键平移
     m_view->viewport()->setCursor(Qt::ArrowCursor);
 
