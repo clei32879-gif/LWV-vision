@@ -28,10 +28,10 @@ struct ItemStats {
 };
 
 struct InspectionRecord {
-    int index;
+    int index = 0;
     QDateTime timestamp;
-    bool overallOk;
-    bool isRetest;
+    bool overallOk = false;
+    bool isRetest = false;
     QMap<QString, double> values;
     QMap<QString, bool> itemResults;
 
@@ -61,6 +61,13 @@ public:
     void setItemConfig(const QString& name, double upper, double lower);
     void clear();
 
+    /** 历史记录 (最近 kMaxHistory 条, 用于报表/CSV导出) */
+    const QList<InspectionRecord>& records() const { return m_history; }
+    int historyCount() const { return m_history.size(); }
+
+    /** 导出历史记录为 CSV (UTF-8 BOM, Excel 可直接打开) */
+    bool exportCsv(const QString& path, QString* err = nullptr) const;
+
     QJsonObject toJson() const;
     void fromJson(const QJsonObject& json);
 
@@ -74,6 +81,8 @@ private:
     int m_failCount = 0;
     int m_retestCount = 0;
     QList<ItemStats> m_itemStats;
+    QList<InspectionRecord> m_history;
+    static constexpr int kMaxHistory = 20000;
 };
 
 } // namespace VisionInspector

@@ -62,6 +62,7 @@ private slots:
     void onAnnotationTool();
     void onTeachWizard();
     void onAbout();
+    void onExportCsv();
     void onScanCameras();
     void onOpenCamera();
     void onUseVirtualCamera();

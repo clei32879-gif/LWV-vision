@@ -198,6 +198,16 @@ QVariantList FlowEngine::lastOverlays() const {
     return m_lastOverlays;
 }
 
+DataMap FlowEngine::lastResultData() const {
+    QMutexLocker locker(&m_lastResultMutex);
+    return m_lastResultData;
+}
+
+QList<QPair<QString, bool>> FlowEngine::lastToolStates() const {
+    QMutexLocker locker(&m_lastResultMutex);
+    return m_lastToolStates;
+}
+
 bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
     if (!flow) {
         // 找第一个自动执行的流程
@@ -211,6 +221,8 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
 
     if (!flow) {
         VI_LOG_ERROR("没有可执行的流程");
+        // 也要发完成信号, 避免调用方(如状态栏)永远停留在"执行中..."
+        emit flowExecuted(nullptr, false);
         return false;
     }
 
@@ -229,6 +241,7 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
 
     // 快照工具列表: 执行期间UI线程增删工具不影响本轮
     const QList<ITool*> tools = flow->snapshotTools();
+    QList<QPair<QString, bool>> toolStates;   // 各工具执行状态 (供统计/记录)
 
     for (int i = 0; i < tools.size(); ++i) {
         ITool* tool = tools[i];
@@ -296,6 +309,7 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
         // 更新状态
         ToolStatus status = success ? ToolStatus::OK : ToolStatus::NG;
         tool->setStatus(status);
+        toolStates.append(qMakePair(tool->instanceName(), status == ToolStatus::OK));
         emit toolStatusChanged(flow, i, status);
         emit toolExecuted(flow, i, status, elapsedMs);
 
@@ -326,6 +340,13 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
         QMutexLocker locker(&m_lastImageMutex);
         m_lastImage = context.currentImage();
         m_lastOverlays = context.overlays();
+    }
+
+    // 记录结果数据与各工具状态 (供统计/记录/报表)
+    {
+        QMutexLocker locker(&m_lastResultMutex);
+        m_lastResultData = context.allData();
+        m_lastToolStates = toolStates;
     }
 
     emit flowExecuted(flow, allOk);

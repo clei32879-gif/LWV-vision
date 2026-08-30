@@ -37,6 +37,7 @@
 #include <QTimer>
 #include <QStyle>
 #include <QIcon>
+#include <QStandardPaths>
 
 namespace VisionInspector {
 
@@ -84,6 +85,24 @@ MainWindow::MainWindow(QWidget* parent)
             // 检测结果叠加层
             m_multiView->setOverlays(0, m_flowEngine->lastOverlays());
             m_statusLabel->setText(allOk ? "执行完成 (全部OK)" : "执行完成 (有NG)");
+
+            // 统计与记录: 喂给 GlobalStats (状态栏计数/数据面板/CSV报表)
+            InspectionRecord rec;
+            rec.index = m_stats->totalCount() + 1;
+            rec.timestamp = QDateTime::currentDateTime();
+            rec.overallOk = allOk;
+            rec.isRetest = false;
+            const auto toolStates = m_flowEngine->lastToolStates();
+            for (const auto& s : toolStates)
+                rec.itemResults[s.first] = s.second;
+            const DataMap resultData = m_flowEngine->lastResultData();
+            for (auto it = resultData.begin(); it != resultData.end(); ++it) {
+                bool okNum = false;
+                const double v = it.value().toDouble(&okNum);
+                if (okNum)
+                    rec.values[it.key()] = v;
+            }
+            m_stats->addRecord(rec);
 
             // NG图像自动保存 (系统设置开启时)
             if (!allOk && QSettings("VisionInspector", "VisionInspector")
@@ -230,6 +249,9 @@ void MainWindow::createMenus() {
     opMenu->addAction(QString::fromUtf8("\u8fd0\u884c\u7a0b\u5e8f"), this, &MainWindow::onStartRunning);
     opMenu->addAction(QString::fromUtf8("\u505c\u6b62\u7a0b\u5e8f"), this, &MainWindow::onStopRunning);
 
+    QMenu* dataMenu = menuBar()->addMenu(QString::fromUtf8("\u6570\u636e(&D)"));
+    dataMenu->addAction(QString::fromUtf8("\u5bfc\u51fa\u68c0\u6d4b\u8bb0\u5f55(CSV)..."), this, &MainWindow::onExportCsv);
+
     // View菜单会在createDockWidgets之后添加
 }
 
@@ -268,6 +290,32 @@ void MainWindow::onAbout() {
         .arg(cvVer);
 
     QMessageBox::about(this, QStringLiteral("关于 LW Vision"), html);
+}
+
+void MainWindow::onExportCsv() {
+    if (m_stats->historyCount() == 0) {
+        QMessageBox::information(this, QStringLiteral("导出检测记录"),
+                                 QStringLiteral("暂无检测记录可导出。\n请先执行一次检测(操作→执行程序)。"));
+        return;
+    }
+    const QString def = QStringLiteral("%1/检测记录_%2.csv")
+        .arg(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation))
+        .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss")));
+    const QString path = QFileDialog::getSaveFileName(
+        this, QStringLiteral("导出检测记录"), def, QStringLiteral("CSV 文件 (*.csv)"));
+    if (path.isEmpty())
+        return;
+
+    QString err;
+    if (m_stats->exportCsv(path, &err)) {
+        m_logPanel->appendLog(QStringLiteral("检测记录已导出: ") + path);
+        QMessageBox::information(this, QStringLiteral("导出检测记录"),
+                                 QStringLiteral("已导出 %1 条记录到:\n%2")
+                                     .arg(m_stats->historyCount())
+                                     .arg(path));
+    } else {
+        QMessageBox::warning(this, QStringLiteral("导出检测记录"), err);
+    }
 }
 
 void MainWindow::createToolBar() {
@@ -320,6 +368,13 @@ void MainWindow::createStatusBar() {
     statusBar()->addPermanentWidget(m_ngCountLabel);
     statusBar()->addPermanentWidget(m_yieldLabel);
     statusBar()->addPermanentWidget(m_cameraLabel);
+
+    // 状态栏计数随统计更新 (修复: 之前计数从不更新)
+    connect(m_stats, &GlobalStats::statsChanged, this, [this]() {
+        m_okCountLabel->setText(QString("OK: %1").arg(m_stats->passCount()));
+        m_ngCountLabel->setText(QString("NG: %1").arg(m_stats->failCount()));
+        m_yieldLabel->setText(QStringLiteral("良率: %1%").arg(m_stats->yieldRate(), 0, 'f', 1));
+    });
 }
 
 void MainWindow::onToolAdded(const QString& typeName) {
@@ -557,6 +612,17 @@ void MainWindow::onSaveAsProject() {
 void MainWindow::onExecuteOnce() {
     if (m_flowEngine->isExecuting()) {
         m_statusLabel->setText("正在执行中, 请稍候...");
+        return;
+    }
+    // 无自动执行流程时直接提示, 避免点击后状态栏卡在"执行中..."
+    bool hasExecutable = false;
+    for (const Flow* f : m_flowEngine->flows()) {
+        if (f->autoExecute()) { hasExecutable = true; break; }
+    }
+    if (!hasExecutable) {
+        m_statusLabel->setText("没有可执行的流程");
+        QMessageBox::information(this, QStringLiteral("执行程序"),
+            QStringLiteral("没有可执行的流程。\n请先[文件→从模板新建]或[文件→新建项目]后在流程中添加工具。"));
         return;
     }
     m_statusLabel->setText("执行中...");

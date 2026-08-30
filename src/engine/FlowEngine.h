@@ -25,6 +25,7 @@
 #include "ToolContext.h"
 #include <QObject>
 #include <QList>
+#include <QPair>
 #include <QString>
 #include <QMutex>
 #include <atomic>
@@ -148,6 +149,12 @@ public:
     /** 最近一次执行的全部结果叠加图形 (线程安全, 用于结果显示) */
     QVariantList lastOverlays() const;
 
+    /** 最近一次执行的结果数据快照 (扁平 "工具名.键" → 值, 线程安全) */
+    DataMap lastResultData() const;
+
+    /** 最近一次执行各工具状态快照 (按执行顺序: 工具名 + 是否OK) */
+    QList<QPair<QString, bool>> lastToolStates() const;
+
     // --------------------------------------------------------
     // 硬件接口设置 (注入到ToolContext)
     // --------------------------------------------------------
@@ -191,6 +198,11 @@ private:
     mutable QMutex m_lastImageMutex;
     CvImagePtr m_lastImage;
     QVariantList m_lastOverlays;
+
+    // 最近一次执行的结果数据 + 各工具状态 (供统计/记录)
+    mutable QMutex m_lastResultMutex;
+    DataMap m_lastResultData;
+    QList<QPair<QString, bool>> m_lastToolStates;
 
     // 硬件接口 (注入到ToolContext, 只读指针)
     ICameraDriver* m_camera = nullptr;

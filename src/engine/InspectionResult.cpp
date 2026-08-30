@@ -5,6 +5,10 @@
 
 #include "InspectionResult.h"
 
+#include <QFile>
+#include <QTextStream>
+#include <QStringConverter>
+
 namespace VisionInspector {
 
 // ============================================================
@@ -127,8 +131,63 @@ void GlobalStats::addRecord(const InspectionRecord& record) {
         }
     }
 
+    // 追加历史记录 (有界)
+    m_history.append(record);
+    while (m_history.size() > kMaxHistory)
+        m_history.removeFirst();
+
     emit recordAdded(record);
     emit statsChanged();
+}
+
+// CSV 字段转义 (含逗号/引号/换行时用双引号包裹)
+static QString csvField(const QString& v) {
+    if (v.contains(',') || v.contains('"') || v.contains('\n')) {
+        QString s = v;
+        s.replace('"', "\"\"");
+        return '"' + s + '"';
+    }
+    return v;
+}
+
+bool GlobalStats::exportCsv(const QString& path, QString* err) const {
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        if (err) *err = QString("无法打开文件: %1").arg(path);
+        return false;
+    }
+    QTextStream ts(&f);
+    ts.setEncoding(QStringConverter::Utf8);
+    ts.setGenerateByteOrderMark(true);   // UTF-8 BOM, Excel 识别中文
+
+    // 表头: 序号,时间,结果,<各检测项>...,数值明细
+    QStringList header;
+    header << QStringLiteral("序号") << QStringLiteral("时间") << QStringLiteral("结果");
+    for (const auto& s : m_itemStats)
+        header << csvField(s.name);
+    header << QStringLiteral("数值明细");
+    ts << header.join(',') << "\n";
+
+    for (const auto& rec : m_history) {
+        QStringList row;
+        row << QString::number(rec.index)
+            << rec.timestamp.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz"))
+            << (rec.overallOk ? QStringLiteral("OK") : QStringLiteral("NG"));
+        for (const auto& s : m_itemStats) {
+            if (rec.itemResults.contains(s.name))
+                row << (rec.itemResults.value(s.name) ? QStringLiteral("OK") : QStringLiteral("NG"));
+            else
+                row << QString();
+        }
+        QStringList details;
+        for (auto it = rec.values.begin(); it != rec.values.end(); ++it)
+            details << QStringLiteral("%1=%2").arg(it.key()).arg(it.value());
+        row << csvField(details.join(';'));
+        ts << row.join(',') << "\n";
+    }
+    ts.flush();
+    f.close();
+    return true;
 }
 
 void GlobalStats::setItemConfig(const QString& name, double upper, double lower) {
@@ -153,6 +212,7 @@ void GlobalStats::clear() {
     m_failCount = 0;
     m_retestCount = 0;
     m_itemStats.clear();
+    m_history.clear();
     emit statsChanged();
 }
 
