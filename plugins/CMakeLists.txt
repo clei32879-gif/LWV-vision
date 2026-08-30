@@ -49,6 +49,7 @@ add_subdirectory(logic/GetVariable)
 add_subdirectory(logic/GenerateText)
 add_subdirectory(logic/SplitText)
 add_subdirectory(logic/CompareText)
+add_subdirectory(logic/DataQueue)
 
 # P0 核心工具
 add_subdirectory(tools/CaptureImage)

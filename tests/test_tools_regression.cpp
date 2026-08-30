@@ -1163,6 +1163,76 @@ int main(int argc, char* argv[]) {
         delete rp;
     }
 
+    // ---- 19. 数据队列: 入队/出队/窥视/清空/长度/空队列默认值 (§P0-9 补齐) ----
+    {
+        GlobalVariables gv;
+        ToolContext ctx;
+        ctx.setGlobalVariables(&gv);
+        // 用独立队列名, 避免与其它测试冲突
+        ITool* dq = reg.createTool("DataQueue");
+        dq->setProperty("queueName", "testQ1");
+
+        // 空队列窥视 → 默认值
+        dq->setProperty("operation", 2);  // 窥视
+        dq->setProperty("defaultValue", "EMPTY");
+        CHECK(dq->execute(ctx), "数据队列: 空窥视执行成功");
+        CHECK(dq->resultData().value("value").toString() == "EMPTY", "数据队列: 空队列窥视默认值");
+
+        // 入队 3 个值 (FIFO)
+        dq->setProperty("operation", 0);  // 入队
+        dq->setProperty("value", "10");
+        CHECK(dq->execute(ctx), "数据队列: 入队1");
+        CHECK(dq->resultData().value("queueLength").toInt() == 1, "数据队列: 入队1后长度1");
+        dq->setProperty("value", "20");
+        CHECK(dq->execute(ctx), "数据队列: 入队2");
+        dq->setProperty("value", "30");
+        CHECK(dq->execute(ctx), "数据队列: 入队3");
+        CHECK(dq->resultData().value("queueLength").toInt() == 3, "数据队列: 入队3后长度3");
+
+        // 窥视队首 (不移除)
+        dq->setProperty("operation", 2);
+        CHECK(dq->execute(ctx), "数据队列: 窥视");
+        CHECK(dq->resultData().value("value").toString() == "10", "数据队列: 窥视队首=10");
+        CHECK(dq->resultData().value("queueLength").toInt() == 3, "数据队列: 窥视不移除长度3");
+
+        // 出队 FIFO
+        dq->setProperty("operation", 1);
+        CHECK(dq->execute(ctx), "数据队列: 出队1");
+        CHECK(dq->resultData().value("value").toString() == "10", "数据队列: 出队1=10");
+        CHECK(dq->execute(ctx), "数据队列: 出队2");
+        CHECK(dq->resultData().value("value").toString() == "20", "数据队列: 出队2=20");
+        CHECK(dq->resultData().value("queueLength").toInt() == 1, "数据队列: 出队2后长度1");
+
+        // 跨执行持久: 新 ToolContext 仍能看到剩余队列 (通过同一 GlobalVariables)
+        ToolContext ctx2;
+        ctx2.setGlobalVariables(&gv);
+        ITool* dq2 = reg.createTool("DataQueue");
+        dq2->setProperty("queueName", "testQ1");
+        dq2->setProperty("operation", 4);  // 长度
+        CHECK(dq2->execute(ctx2), "数据队列: 跨执行长度查询");
+        CHECK(dq2->resultData().value("queueLength").toInt() == 1, "数据队列: 跨执行剩余长度1");
+        // 出队剩余
+        dq2->setProperty("operation", 1);
+        dq2->setProperty("defaultValue", "EMPTY");
+        CHECK(dq2->execute(ctx2), "数据队列: 跨执行出队");
+        CHECK(dq2->resultData().value("value").toString() == "30", "数据队列: 跨执行出队=30");
+
+        // 清空
+        dq2->setProperty("operation", 3);
+        CHECK(dq2->execute(ctx2), "数据队列: 清空");
+        CHECK(dq2->resultData().value("queueLength").toInt() == 0, "数据队列: 清空后长度0");
+        // 清空后再出队 → 空默认值
+        dq2->setProperty("operation", 1);
+        CHECK(dq2->execute(ctx2), "数据队列: 清空后出队");
+        CHECK(dq2->resultData().value("value").toString() == "EMPTY", "数据队列: 清空后出队默认值");
+
+        // 空队列名 → NG
+        ITool* dq3 = reg.createTool("DataQueue");
+        dq3->setProperty("queueName", "");
+        CHECK(!dq3->execute(ctx2), "数据队列: 空队列名NG");
+        delete dq; delete dq2; delete dq3;
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);
