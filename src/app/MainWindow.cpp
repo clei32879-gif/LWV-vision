@@ -105,6 +105,16 @@ MainWindow::MainWindow(QWidget* parent)
             }
             m_stats->addRecord(rec);
 
+            // UI排查 P0-6: 底部检测项目表按工位显示当前结果
+            if (m_dataPanel) {
+                int ccd = 0;
+                for (const auto& s : toolStates) {
+                    if (ccd >= m_dataPanel->rowCount()) break;
+                    m_dataPanel->setStationStatus(ccd, s.second, s.first);
+                    ++ccd;
+                }
+            }
+
             // NG图像自动保存 (系统设置开启时)
             if (!allOk && QSettings("VisionInspector", "VisionInspector")
                               .value("autoSaveNGImages", false).toBool()) {
@@ -180,6 +190,8 @@ void MainWindow::setupUI() {
 
     // 底部CCD检测项目表
     m_dataPanel = new DataPanel(this);
+    // UI排查 P0-6: 此前从未调用 setStats/updateResult, 表格纯静态装饰
+    m_dataPanel->setStats(m_stats);
 
     // 整体垂直分割：上部(工具箱+流程+图像) | 下部(检测项目表)
     m_vSplitter = new QSplitter(Qt::Vertical, this);

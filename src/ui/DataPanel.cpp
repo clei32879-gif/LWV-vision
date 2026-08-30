@@ -49,6 +49,12 @@ DataPanel::DataPanel(QWidget* parent) : QWidget(parent) {
     // 固定行高
     m_table->verticalHeader()->setDefaultSectionSize(28);
 
+    // UI排查 P0-6: m_summaryLabel 此前声明未 new, 导致 onStatsChanged 恒提前返回
+    m_summaryLabel = new QLabel(this);
+    m_summaryLabel->setText("OK: 0  NG: 0  总数: 0  良率: 100%");
+    m_summaryLabel->setStyleSheet("color: #bbb; padding-left: 4px;");
+
+    layout->addWidget(m_summaryLabel);
     layout->addWidget(m_table);
 }
 

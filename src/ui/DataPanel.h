@@ -14,6 +14,8 @@ public:
     void setStats(GlobalStats* stats);
     void updateResult(int ccdIndex, const QString& item, double value, double lower, double upper);
     void setStationStatus(int index, bool ok, const QString& detail = QString());
+    /** 工位(行)数 */
+    int rowCount() const { return m_table->rowCount(); }
 
 private slots:
     void onStatsChanged();
