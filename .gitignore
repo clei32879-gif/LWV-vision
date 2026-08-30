@@ -55,3 +55,7 @@ thirdparty/onnxruntime/lib/*.pdb
 stdout.txt
 stderr.txt
 *.log
+
+# ===== 运行时生成的配置状态(不入库) =====
+config/global.json
+
