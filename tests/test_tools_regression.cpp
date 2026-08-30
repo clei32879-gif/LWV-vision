@@ -1356,6 +1356,77 @@ int main(int argc, char* argv[]) {
         delete serverThread;
     }
 
+    // ---- 测试21: 斑点分类 (P1-13) ----
+    std::printf("测试21: 斑点分类(BLOB特征分类)\n");
+    {
+        // 合成图: 黑底 + 白色圆(左上) + 白色矩形(右上) + 圆环(下, 带孔)
+        cv::Mat blobImg(240, 240, CV_8UC1, cv::Scalar(0));
+        cv::circle(blobImg, cv::Point(70, 70), 30, cv::Scalar(255), -1);        // 圆 r=30
+        cv::rectangle(blobImg, cv::Rect(140, 40, 60, 20), cv::Scalar(255), -1); // 矩形 60x20
+        cv::circle(blobImg, cv::Point(80, 160), 30, cv::Scalar(255), -1);       // 环外圆
+        cv::circle(blobImg, cv::Point(80, 160), 12, cv::Scalar(0), -1);         // 环内孔 r=12
+
+        ToolContext ctx21;
+        ctx21.setCurrentImage(std::make_shared<CvImage>(blobImg));
+        ITool* bc = reg.createTool("BlobClassify");
+        bc->setProperty("autoThreshold", false);
+        bc->setProperty("threshold", 127);
+        bc->setProperty("detectionType", 1);  // 白色目标
+        bc->setProperty("useAreaFilter", true);
+        bc->setProperty("minArea", 10);
+
+        // 不启用特征过滤 → 3 个斑点 (圆/矩形/圆环)
+        CHECK(bc->execute(ctx21), "斑点分类: 混合图执行");
+        CHECK(bc->resultData().value("blobCount").toInt() == 3, "斑点分类: 3个斑点");
+
+        // 圆度: 圆与圆环都≈1 (圆环外轮廓仍是圆)
+        bc->setProperty("useCircularityFilter", true);
+        bc->setProperty("minCircularity", 0.9);
+        CHECK(bc->execute(ctx21), "斑点分类: 圆度过滤执行");
+        CHECK(bc->resultData().value("blobCount").toInt() == 2, "斑点分类: 圆度>0.9只留圆+环");
+        CHECK(bc->resultData().value("mainCircularity").toDouble() > 0.9, "斑点分类: 主斑圆度>0.9");
+
+        // 长宽比: 只留矩形 (60x20 → 长宽比≈3)
+        bc->setProperty("useCircularityFilter", false);
+        bc->setProperty("useAspectFilter", true);
+        bc->setProperty("minAspectRatio", 2.0);
+        bc->setProperty("maxAspectRatio", 10.0);
+        CHECK(bc->execute(ctx21), "斑点分类: 长宽比过滤执行");
+        CHECK(bc->resultData().value("blobCount").toInt() == 1, "斑点分类: 长宽比>2只留矩形");
+        const double asp = bc->resultData().value("mainAspectRatio").toDouble();
+        CHECK(asp > 2.5 && asp < 3.5, "斑点分类: 矩形长宽比≈3");
+
+        // 孔数: 只留圆环 (1孔)
+        bc->setProperty("useAspectFilter", false);
+        bc->setProperty("useHoleFilter", true);
+        bc->setProperty("minHoles", 1);
+        bc->setProperty("maxHoles", 10);
+        CHECK(bc->execute(ctx21), "斑点分类: 孔数过滤执行");
+        CHECK(bc->resultData().value("blobCount").toInt() == 1, "斑点分类: 孔数>=1只留圆环");
+        CHECK(bc->resultData().value("mainHoles").toInt() == 1, "斑点分类: 圆环孔数1");
+
+        // 面积过滤: 圆环外圆面积≈π*30²≈2827 → 只留最大(圆环)
+        bc->setProperty("useHoleFilter", false);
+        bc->setProperty("useAreaFilter", true);
+        bc->setProperty("minArea", 2000);
+        bc->setProperty("maxArea", 4000);
+        CHECK(bc->execute(ctx21), "斑点分类: 面积过滤执行");
+        CHECK(bc->resultData().value("blobCount").toInt() == 2, "斑点分类: 面积2000~4000留圆+环");
+
+        // 判定: 有效数不在 [minCount,maxCount] → NG
+        bc->setProperty("useAreaFilter", false);
+        bc->setProperty("minCount", 4);
+        bc->setProperty("maxCount", 100);
+        CHECK(!bc->execute(ctx21), "斑点分类: minCount=4(实际3)→NG");
+        CHECK(bc->resultData().value("judgment").toString() == "NG", "斑点分类: 判定NG");
+        CHECK(bc->status() == ToolStatus::NG, "斑点分类: 状态NG");
+        bc->setProperty("minCount", 1);
+        bc->setProperty("maxCount", 3);
+        CHECK(bc->execute(ctx21), "斑点分类: minCount=1 maxCount=3→OK");
+        CHECK(bc->resultData().value("judgment").toString() == "OK", "斑点分类: 判定OK");
+        delete bc;
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);

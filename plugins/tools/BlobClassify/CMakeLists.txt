@@ -1,0 +1,6 @@
+add_library(BlobClassify STATIC)
+target_sources(BlobClassify PRIVATE BlobClassify.h BlobClassify.cpp)
+target_link_libraries(BlobClassify PUBLIC VICore VIEngine VIUtils Qt6::Core)
+if(VI_HAS_OPENCV)
+    target_link_libraries(BlobClassify PUBLIC ${OpenCV_LIBS})
+endif()
