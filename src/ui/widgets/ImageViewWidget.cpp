@@ -22,8 +22,12 @@ ImageViewWidget::ImageViewWidget(QWidget* parent)
 
 void ImageViewWidget::setImage(const QImage& img) {
     m_image = img;
-    if (!img.isNull())
+    // P1-8: 仅在图像尺寸变化时自动适配, 连续运行时保持用户的缩放/平移
+    // (此前每帧 fitToWidget, 用户放大细看在运行中不可用)
+    if (!img.isNull() && img.size() != m_fittedSize) {
         fitToWidget();
+        m_fittedSize = img.size();
+    }
     update();
 }
 

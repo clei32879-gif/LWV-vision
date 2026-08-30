@@ -76,6 +76,7 @@ private:
 
     QImage m_image;
     QVariantList m_overlays;
+    QSize m_fittedSize;               // 最近一次自动适配的图像尺寸 (P1-8: 连续运行不重置缩放)
     bool m_annotating = false;           // 标注模式
     QList<QRectF> m_annotations;         // 标注矩形(图像坐标)
     QRectF m_drawingRect;                // 正在拖拽的矩形

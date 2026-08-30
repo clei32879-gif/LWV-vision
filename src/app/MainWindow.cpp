@@ -238,11 +238,16 @@ void MainWindow::setupUI() {
 
 void MainWindow::createMenus() {
     QMenu* fileMenu = menuBar()->addMenu(QString::fromUtf8("\u6587\u4ef6(&F)"));
-    fileMenu->addAction(QString::fromUtf8("\u65b0\u5efa\u9879\u76ee"), this, &MainWindow::onNewProject);
+    // UI排查 P0-5: 全应用此前无任何快捷键, 补高频快捷键
+    fileMenu->addAction(QString::fromUtf8("\u65b0\u5efa\u9879\u76ee(Ctrl+N)"), this, &MainWindow::onNewProject,
+                        QKeySequence::New);
     fileMenu->addAction(QString::fromUtf8("\u4ece\u6a21\u677f\u65b0\u5efa(\u7b5b\u9009\u673a)"), this, &MainWindow::onNewFromTemplate);
-    fileMenu->addAction(QString::fromUtf8("\u6253\u5f00\u9879\u76ee"), this, &MainWindow::onOpenProject);
-    fileMenu->addAction(QString::fromUtf8("\u4fdd\u5b58\u9879\u76ee"), this, &MainWindow::onSaveProject);
-    fileMenu->addAction(QString::fromUtf8("\u53e6\u5b58\u4e3a..."), this, &MainWindow::onSaveAsProject);
+    fileMenu->addAction(QString::fromUtf8("\u6253\u5f00\u9879\u76ee(Ctrl+O)"), this, &MainWindow::onOpenProject,
+                        QKeySequence::Open);
+    fileMenu->addAction(QString::fromUtf8("\u4fdd\u5b58\u9879\u76ee(Ctrl+S)"), this, &MainWindow::onSaveProject,
+                        QKeySequence::Save);
+    fileMenu->addAction(QString::fromUtf8("\u53e6\u5b58\u4e3a...(Ctrl+Shift+S)"), this, &MainWindow::onSaveAsProject,
+                        QKeySequence::SaveAs);
     fileMenu->addSeparator();
     fileMenu->addAction(QString::fromUtf8("\u4fdd\u5b58\u5f53\u524d\u753b\u9762(\u542b\u6807\u6ce8)"), this, &MainWindow::onSaveAnnotatedImage);
     fileMenu->addSeparator();
@@ -269,9 +274,13 @@ void MainWindow::createMenus() {
     camMenu->addAction(QString::fromUtf8("\u4f7f\u7528\u865a\u62df\u76f8\u673a"), this, &MainWindow::onUseVirtualCamera);
 
     QMenu* opMenu = menuBar()->addMenu(QString::fromUtf8("\u64cd\u4f5c(&O)"));
-    opMenu->addAction(QString::fromUtf8("\u6267\u884c\u7a0b\u5e8f"), this, &MainWindow::onExecuteOnce);
-    opMenu->addAction(QString::fromUtf8("\u8fd0\u884c\u7a0b\u5e8f"), this, &MainWindow::onStartRunning);
-    opMenu->addAction(QString::fromUtf8("\u505c\u6b62\u7a0b\u5e8f"), this, &MainWindow::onStopRunning);
+    // UI排查 P0-5: F5单次执行/F6连续运行/F7停止
+    opMenu->addAction(QString::fromUtf8("\u6267\u884c\u7a0b\u5e8f(F5)"), this, &MainWindow::onExecuteOnce,
+                      QKeySequence(Qt::Key_F5));
+    opMenu->addAction(QString::fromUtf8("\u8fd0\u884c\u7a0b\u5e8f(F6)"), this, &MainWindow::onStartRunning,
+                      QKeySequence(Qt::Key_F6));
+    opMenu->addAction(QString::fromUtf8("\u505c\u6b62\u7a0b\u5e8f(F7)"), this, &MainWindow::onStopRunning,
+                      QKeySequence(Qt::Key_F7));
 
     QMenu* dataMenu = menuBar()->addMenu(QString::fromUtf8("\u6570\u636e(&D)"));
     dataMenu->addAction(QString::fromUtf8("\u5bfc\u51fa\u68c0\u6d4b\u8bb0\u5f55(CSV)..."), this, &MainWindow::onExportCsv);
