@@ -35,7 +35,10 @@ echo [4/5] Copy models + sample images ...
 mkdir "%DST%\models" 2>nul
 if exist build\release\bin\models\yolov8n.onnx copy /y build\release\bin\models\yolov8n.onnx "%DST%\models\" >nul
 if exist testdata\runs\classify\train\weights\best.onnx copy /y testdata\runs\classify\train\weights\best.onnx "%DST%\models\defect_cls.onnx" >nul
-if exist testdata\runs\classify\train\weights\classes.txt copy /y testdata\runs\classify\train\weights\classes.txt "%DST%\models\defect_cls_classes.txt" >nul
+if exist testdata\runs\classify\train\weights\classes.txt (
+    copy /y testdata\runs\classify\train\weights\classes.txt "%DST%\models\defect_cls_classes.txt" >nul
+    copy /y testdata\runs\classify\train\weights\classes.txt "%DST%\models\classes.txt" >nul
+)
 if exist "%SRC%\testdata\real_samples" (
     mkdir "%DST%\testdata\real_samples" 2>nul
     for %%F in (%SRC%\testdata\real_samples\*.png) do copy /y "%%F" "%DST%\testdata\real_samples\" >nul 2>&1

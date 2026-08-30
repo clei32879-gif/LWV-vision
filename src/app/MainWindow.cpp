@@ -12,6 +12,7 @@
 #include "../ui/SettingsDialogs.h"
 #include "../ui/LoginDialog.h"
 #include "../ui/AnnotationDialog.h"
+#include "../ui/TeachWizard.h"
 #include "../ui/IconHelper.h"
 #include "../hal/ModbusTcpMaster.h"
 #include "AppSettings.h"
@@ -209,6 +210,9 @@ void MainWindow::createMenus() {
 
     QMenu* annoMenu = menuBar()->addMenu(QString::fromUtf8("\u6807\u6ce8(&A)"));
     annoMenu->addAction(QString::fromUtf8("\u7f3a\u9677\u6807\u6ce8\u5de5\u5177..."), this, &MainWindow::onAnnotationTool);
+
+    QMenu* aiMenu = menuBar()->addMenu(QString::fromUtf8("AI(&I)"));
+    aiMenu->addAction(QString::fromUtf8("\u6559\u5bfc\u5411\u5bfc(\u4e0a\u89c6/\u4e0b\u89c6/\u4fa7\u89c6/45\u00b0\u659c\u89c6)..."), this, &MainWindow::onTeachWizard);
 
     QMenu* camMenu = menuBar()->addMenu(QString::fromUtf8("\u76f8\u673a(&C)"));
     camMenu->addAction(QString::fromUtf8("\u626b\u63cf\u76f8\u673a"), this, &MainWindow::onScanCameras);
@@ -557,6 +561,14 @@ void MainWindow::onUISettings() {
 void MainWindow::onGlobalVariables() {
     GlobalVariablesDialog dlg(m_globalVars, this);
     dlg.exec();
+}
+
+void MainWindow::onTeachWizard() {
+    auto* dlg = new TeachWizard(m_camera, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->show();
+    dlg->raise();
+    dlg->activateWindow();
 }
 
 void MainWindow::onAnnotationTool() {

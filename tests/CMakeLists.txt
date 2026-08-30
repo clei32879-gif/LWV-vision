@@ -85,10 +85,28 @@ if(VI_HAS_ONNXRT)
     endforeach()
     add_test(NAME ai_inference COMMAND test_ai)
 
+        # 项目保存/加载往返QA
+    add_executable(test_project_roundtrip test_project_roundtrip.cpp)
+    target_link_libraries(test_project_roundtrip PRIVATE
+        VICore VIEngine VIHAL VIUtils ${OpenCV_LIBS} Qt6::Core Qt6::Gui)
+    foreach(_plugin ${VI_ALL_PLUGINS})
+        if(TARGET ${_plugin})
+            target_link_libraries(test_project_roundtrip PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${_plugin}>)
+        endif()
+    endforeach()
+    add_test(NAME project_roundtrip COMMAND test_project_roundtrip)
+
     # 自训缺陷分类模型验证
     add_executable(test_cls_model test_cls_model.cpp)
     vi_link_onnxrt(test_cls_model)
     target_link_libraries(test_cls_model PRIVATE
         VIAI VICore VIEngine VIUtils  Qt6::Core Qt6::Gui)
     add_test(NAME cls_model COMMAND test_cls_model)
+
+    # 教导向导端到端QA (真实训练, 较慢)
+    add_executable(test_teach_flow test_teach_flow.cpp)
+    vi_link_onnxrt(test_teach_flow)
+    target_link_libraries(test_teach_flow PRIVATE
+        VIAI VICore VIEngine VIUtils ${OpenCV_LIBS} Qt6::Core Qt6::Gui)
+    add_test(NAME teach_flow COMMAND test_teach_flow)
 endif()

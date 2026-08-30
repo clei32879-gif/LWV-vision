@@ -42,6 +42,9 @@ kaggle_screw.zip
 screw.tar.xz
 runs/
 
+# ===== 教导运行时数据 (现场抓帧样本/训练中间产物/工位模型, 不入库) =====
+teach/
+
 # ===== AI模型权重(pt不入库; onnx预训练模型保留供测试) =====
 *.pt
 onnxruntime.zip

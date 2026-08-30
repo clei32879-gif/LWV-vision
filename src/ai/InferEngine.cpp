@@ -65,9 +65,15 @@ bool InferEngine::loadModel(const QString& onnxPath, QString* err) {
                     m_impl->classNames.insert(it.key().toInt(), it.value().toString());
             }
         } catch (...) {}
-        // 元数据缺names时: 读模型旁classes.txt (索引=按名称排序, ultralytics分类同规则)
+        // 元数据缺names时: 读模型旁classes.txt (兼容: classes.txt 或 <模型名>_classes.txt)
         if (m_impl->classNames.isEmpty()) {
-            const QString clsFile = QFileInfo(onnxPath).absolutePath() + "/classes.txt";
+            const QFileInfo modelFi(onnxPath);
+            QString clsFile = modelFi.absolutePath() + "/classes.txt";
+            if (!QFile::exists(clsFile)) {
+                const QString alt = modelFi.absolutePath() + "/"
+                                    + modelFi.completeBaseName() + "_classes.txt";
+                if (QFile::exists(alt)) clsFile = alt;
+            }
             QFile f(clsFile);
             if (f.open(QIODevice::ReadOnly)) {
                 int idx = 0;
@@ -158,8 +164,10 @@ std::vector<AiDetection> InferEngine::detectYolo(const cv::Mat& bgr,
         std::vector<int64_t> inShape{1, (int64_t)C, (int64_t)H, (int64_t)W};
         Ort::Value inTensor = Ort::Value::CreateTensor<float>(
             mem, tensor.data(), tensor.size(), inShape.data(), inShape.size());
-        const char* inNames[] = {m_impl->session->GetInputNameAllocated(0, Ort::AllocatorWithDefaultOptions()).get()};
-        const char* outNames[] = {m_impl->session->GetOutputNameAllocated(0, Ort::AllocatorWithDefaultOptions()).get()};
+        auto inName = m_impl->session->GetInputNameAllocated(0, Ort::AllocatorWithDefaultOptions());
+        auto outName = m_impl->session->GetOutputNameAllocated(0, Ort::AllocatorWithDefaultOptions());
+        const char* inNames[] = {inName.get()};
+        const char* outNames[] = {outName.get()};
         auto outTensors = m_impl->session->Run(Ort::RunOptions{nullptr}, inNames, &inTensor, 1, outNames, 1);
 
         // YOLOv8输出: [1, 4+nc, anchors]
@@ -220,8 +228,10 @@ bool InferEngine::run(const cv::Mat& bgr, std::vector<float>& output,
         std::vector<int64_t> inShape{1, 3, (int64_t)m_impl->inH, (int64_t)m_impl->inW};
         Ort::Value inTensor = Ort::Value::CreateTensor<float>(
             mem, tensor.data(), tensor.size(), inShape.data(), inShape.size());
-        const char* inNames[] = {m_impl->session->GetInputNameAllocated(0, Ort::AllocatorWithDefaultOptions()).get()};
-        const char* outNames[] = {m_impl->session->GetOutputNameAllocated(0, Ort::AllocatorWithDefaultOptions()).get()};
+        auto inName = m_impl->session->GetInputNameAllocated(0, Ort::AllocatorWithDefaultOptions());
+        auto outName = m_impl->session->GetOutputNameAllocated(0, Ort::AllocatorWithDefaultOptions());
+        const char* inNames[] = {inName.get()};
+        const char* outNames[] = {outName.get()};
         auto outs = m_impl->session->Run(Ort::RunOptions{nullptr}, inNames, &inTensor, 1, outNames, 1);
         auto info = outs[0].GetTensorTypeAndShapeInfo();
         outShape = info.GetShape();
@@ -268,8 +278,10 @@ bool InferEngine::classify(const cv::Mat& bgr, QList<QPair<QString, float>>& res
         std::vector<int64_t> inShape{1, 3, (int64_t)T, (int64_t)T};
         Ort::Value inTensor = Ort::Value::CreateTensor<float>(
             mem, tensor.data(), tensor.size(), inShape.data(), inShape.size());
-        const char* inNames[] = {m_impl->session->GetInputNameAllocated(0, Ort::AllocatorWithDefaultOptions()).get()};
-        const char* outNames[] = {m_impl->session->GetOutputNameAllocated(0, Ort::AllocatorWithDefaultOptions()).get()};
+        auto inName = m_impl->session->GetInputNameAllocated(0, Ort::AllocatorWithDefaultOptions());
+        auto outName = m_impl->session->GetOutputNameAllocated(0, Ort::AllocatorWithDefaultOptions());
+        const char* inNames[] = {inName.get()};
+        const char* outNames[] = {outName.get()};
         auto outs = m_impl->session->Run(Ort::RunOptions{nullptr}, inNames, &inTensor, 1, outNames, 1);
         const size_t n = outs[0].GetTensorTypeAndShapeInfo().GetElementCount();
         const float* d = outs[0].GetTensorData<float>();

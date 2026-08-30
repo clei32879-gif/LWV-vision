@@ -49,6 +49,10 @@ target_sources(VIUI PRIVATE
     AnnotationDialog.h
     AnnotationDialog.cpp
 
+    # AI教导向导 (抓帧/标记/训练/实时检测)
+    TeachWizard.h
+    TeachWizard.cpp
+
     # 界面编辑器 (DIY)
     UIEditor.h
     UIEditor.cpp
@@ -70,6 +74,10 @@ target_sources(VIUI PRIVATE
     widgets/ImageViewWidget.cpp
 )
 
+if(VI_HAS_ONNXRT)
+    target_link_libraries(VIUI PUBLIC VIAI)
+    vi_link_onnxrt(VIUI)
+endif()
 target_link_libraries(VIUI PUBLIC
     VICore
     VIEngine
