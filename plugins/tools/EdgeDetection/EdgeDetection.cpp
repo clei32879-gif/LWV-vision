@@ -58,6 +58,8 @@ bool EdgeDetection::execute(ToolContext& context) {
     if (rw <= 0 || rh <= 0) { setStatus(ToolStatus::NG); setResultData("error", "ROI区域无效"); return false; }
 
     cv::Mat roiImg = src(cv::Rect(rx, ry, rw, rh)).clone();
+    // #2 形状ROI: 扫描带只统计形状内部像素 (菱形/圆形/环形)
+    const cv::Mat bandMask = makeRoiShapeMask(m_roi, roiRect);
 
     // 沿扫描方向采样
     std::vector<double> profile;
@@ -67,6 +69,7 @@ bool EdgeDetection::execute(ToolContext& context) {
         for (int dy = -scanWidth/2; dy <= scanWidth/2; ++dy) {
             int y = rh/2 + dy;
             if (y >= 0 && y < rh) {
+                if (!bandMask.empty() && bandMask.at<uchar>(y, x) == 0) continue;
                 sum += roiImg.at<uchar>(y, x);
                 count++;
             }

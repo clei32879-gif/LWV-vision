@@ -54,6 +54,8 @@ bool VertexDetection::execute(ToolContext& context) {
     int rh = std::min((int)roiRect.height(), src.rows - ry);
     if (rw <= 0 || rh <= 0) { setStatus(ToolStatus::NG); return false; }
     cv::Mat roiImg = src(cv::Rect(rx, ry, rw, rh)).clone();
+    // #2 形状ROI: 角点只在菱形/圆形内部找
+    const cv::Mat shapeMask = makeRoiShapeMask(m_roi, roiRect);
     // 用 filterHalfWidth 平滑后再求梯度 (抑制噪点)
     cv::Mat smoothed;
     cv::boxFilter(roiImg, smoothed, -1, cv::Size(filterHalf * 2 + 1, filterHalf * 2 + 1),
@@ -64,6 +66,7 @@ bool VertexDetection::execute(ToolContext& context) {
     const int cxs = rw / 4, cxe = rw * 3 / 4, cys = rh / 4, cye = rh * 3 / 4;
     for (int x = cxs; x < cxe; ++x) {
         for (int y = cys; y < cye; y += scanWidth) {
+            if (!shapeMask.empty() && shapeMask.at<uchar>(y, x) == 0) continue;
             const double l = (x > 0) ? smoothed.at<uchar>(y, x - 1) : smoothed.at<uchar>(y, x);
             const double r = (x < rw - 1) ? smoothed.at<uchar>(y, x + 1) : smoothed.at<uchar>(y, x);
             const double u = (y > 0) ? smoothed.at<uchar>(y - 1, x) : smoothed.at<uchar>(y, x);

@@ -88,6 +88,12 @@ bool ColorDetection::execute(ToolContext& context) {
     cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
     cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel);
     cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel);
+    // #2 形状ROI: 菱形/圆形/环形只在形状内部统计
+    {
+        const cv::Mat shapeMask = makeRoiShapeMask(m_roi, roiRect);
+        if (!shapeMask.empty())
+            cv::bitwise_and(mask, shapeMask, mask);
+    }
     // 查找连通域
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);

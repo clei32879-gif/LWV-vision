@@ -31,6 +31,10 @@ bool BrightnessCheck::execute(ToolContext& context) {
     m_roi.centerY = propertyValue("roiCenterY").toDouble();
     m_roi.width = propertyValue("roiWidth").toDouble();
     m_roi.height = propertyValue("roiHeight").toDouble();
+    {
+        double ang = 0;   // 亮度检测无角度
+        applyCorrection(context, m_roi.centerX, m_roi.centerY, ang);   // #3 位置补正跟随(此前缺失)
+    }
     QRectF roiRect = m_roi.boundingRect();
     int rx = std::max(0, (int)roiRect.x());
     int ry = std::max(0, (int)roiRect.y());
@@ -38,9 +42,19 @@ bool BrightnessCheck::execute(ToolContext& context) {
     int rh = std::min((int)roiRect.height(), src.rows - ry);
     if (rw <= 0 || rh <= 0) { setStatus(ToolStatus::NG); return false; }
     cv::Mat roiImg = src(cv::Rect(rx, ry, rw, rh));
-    cv::Scalar mean = cv::mean(roiImg);
-    cv::Scalar stddev;
-    cv::meanStdDev(roiImg, mean, stddev);
+    // #2 形状ROI: 菱形/圆形/环形只在形状内部统计
+    cv::Mat shapeMask = makeRoiShapeMask(m_roi, roiRect);
+    cv::Scalar mean, stddev;
+    if (!shapeMask.empty()) {
+        if (cv::countNonZero(shapeMask) == 0) {
+            setResultData("error", "ROI形状内无有效像素");
+            setStatus(ToolStatus::NG);
+            return false;
+        }
+        cv::meanStdDev(roiImg, mean, stddev, shapeMask);
+    } else {
+        cv::meanStdDev(roiImg, mean, stddev);
+    }
     double avgBrightness = mean[0];
     double stdDeviation = stddev[0];
     double minB = propertyValue("lowThreshold").toDouble();

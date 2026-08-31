@@ -51,6 +51,12 @@ bool WidthDetection::execute(ToolContext& context) {
     cv::Mat roiImg = src(cv::Rect(rx, ry, rw, rh)).clone();
     cv::Mat binary;
     cv::threshold(roiImg, binary, thresh, 255, cv::THRESH_BINARY);
+    // #2 形状ROI: 菱形/圆形ROI限制宽度测量范围
+    {
+        const cv::Mat shapeMask = makeRoiShapeMask(m_roi, roiRect);
+        if (!shapeMask.empty())
+            cv::bitwise_and(binary, shapeMask, binary);
+    }
     if (mode == 0) { // 水平宽度
         int scanY = propertyValue("scanLine").toInt();
         if (scanY >= rh) scanY = rh / 2;

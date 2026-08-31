@@ -3,6 +3,9 @@
 #include <QJsonArray>
 #include <QDebug>
 #include <cmath>
+#ifdef VI_HAS_OPENCV
+#include <opencv2/imgproc.hpp>
+#endif
 
 namespace VisionInspector {
 
@@ -149,5 +152,54 @@ bool ITool::applyCorrection(const ToolContext& context,
     angleDeg += corrAngle;
     return true;
 }
+
+#ifdef VI_HAS_OPENCV
+cv::Mat ITool::makeRoiShapeMask(const ROIRegion& roi, const QRectF& roiRect)
+{
+    if (roi.type == ROIType::None || roi.type == ROIType::Rectangle)
+        return cv::Mat();   // 矩形/无: 无需形状掩码
+
+    const int w = std::max(1, (int)std::lround(roiRect.width()));
+    const int h = std::max(1, (int)std::lround(roiRect.height()));
+    cv::Mat mask(h, w, CV_8UC1, cv::Scalar(0));
+
+    // ROI中心在局部矩形内的位置
+    const double localCx = roi.centerX - roiRect.x();
+    const double localCy = roi.centerY - roiRect.y();
+    const cv::Point c((int)std::lround(localCx), (int)std::lround(localCy));
+    const double halfW = roiRect.width() / 2.0;
+    const double halfH = roiRect.height() / 2.0;
+
+    switch (roi.type) {
+    case ROIType::Circle:
+        // 椭圆填充 (宽高即长短轴, 正方形ROI时为正圆)
+        cv::ellipse(mask, c, cv::Size((int)std::lround(halfW), (int)std::lround(halfH)),
+                    0, 0, 360, cv::Scalar(255), -1);
+        break;
+    case ROIType::Diamond: {
+        // 菱形: 外接矩形四边中点连线
+        std::vector<cv::Point> poly = {
+            cv::Point(c.x, c.y - (int)std::lround(halfH)),
+            cv::Point(c.x + (int)std::lround(halfW), c.y),
+            cv::Point(c.x, c.y + (int)std::lround(halfH)),
+            cv::Point(c.x - (int)std::lround(halfW), c.y),
+        };
+        cv::fillPoly(mask, poly, cv::Scalar(255));
+        break;
+    }
+    case ROIType::Ring: {
+        // 环带: 外椭圆 - 内椭圆 (内椭圆轴=外椭圆的一半, 即环厚=外半径的一半)
+        cv::ellipse(mask, c, cv::Size((int)std::lround(halfW), (int)std::lround(halfH)),
+                    0, 0, 360, cv::Scalar(255), -1);
+        cv::ellipse(mask, c, cv::Size((int)std::lround(halfW / 2), (int)std::lround(halfH / 2)),
+                    0, 0, 360, cv::Scalar(0), -1);
+        break;
+    }
+    default:
+        return cv::Mat();
+    }
+    return mask;
+}
+#endif
 
 } // namespace VisionInspector

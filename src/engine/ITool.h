@@ -16,6 +16,7 @@
 
 #include "../utils/Common.h"
 #include "ToolContext.h"
+#include "ROI.h"
 #include <QObject>
 #include <QString>
 #include <QVariant>
@@ -252,6 +253,17 @@ protected:
 
     CvImagePtr getInputImage(const ToolContext& context) const;
     void setOutputImage(ToolContext& context, const CvImagePtr& img);
+
+#ifdef VI_HAS_OPENCV
+    /**
+     * ROI形状掩码 (#2 菱形/圆形/环形ROI真实生效):
+     * 按 roi.type 生成与 roiRect 同尺寸的掩码:
+     *   Rectangle=全白 / Diamond=菱形 / Circle=椭圆(宽高) / Ring=环带(外椭圆-内椭圆)
+     * 返回空 Mat 表示矩形(无需掩码)。工具把生成的掩码与结果掩码按位与即可。
+     * roiRect 为工具已裁剪的局部ROI外接矩形; roi 为完整ROI定义(坐标系一致)。
+     */
+    static cv::Mat makeRoiShapeMask(const ROIRegion& roi, const QRectF& roiRect);
+#endif
 
     /**
      * 位置补正跟随 (P0-1 数据流打通):

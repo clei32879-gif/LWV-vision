@@ -68,10 +68,27 @@ bool LineDetection::execute(ToolContext& context) {
     const cv::Point2d u(std::cos(rad), std::sin(rad));
     const cv::Point2d v(-std::sin(rad), std::cos(rad));
 
+    // #2 形状ROI: 菱形/圆形时基点在形状外的扫描线跳过
+    QRectF roiRectFull(cx - roiW / 2, cy - roiH / 2, roiW, roiH);
+    cv::Mat shapeMaskFull;
+    {
+        m_roi.type = (ROIType)propertyValue("roiType").toInt();
+        m_roi.centerX = cx; m_roi.centerY = cy;
+        m_roi.width = roiW; m_roi.height = roiH;
+        shapeMaskFull = makeRoiShapeMask(m_roi, roiRectFull);
+    }
+
     std::vector<cv::Point2d> edgePts;
     for (int s = 0; s < scanCount; ++s) {
         const double t = (scanCount == 1) ? 0.0 : -0.5 + (double)s / (scanCount - 1);
         const cv::Point2d base(cx + u.x * (t * roiW), cy + u.y * (t * roiW));
+        if (!shapeMaskFull.empty()) {
+            const int mx = (int)std::lround(base.x - roiRectFull.x());
+            const int my = (int)std::lround(base.y - roiRectFull.y());
+            if (mx < 0 || my < 0 || mx >= shapeMaskFull.cols || my >= shapeMaskFull.rows ||
+                shapeMaskFull.at<uchar>(my, mx) == 0)
+                continue;
+        }
         const cv::Point2d p0 = base - v * (roiH / 2);
         const cv::Point2d p1 = base + v * (roiH / 2);
 

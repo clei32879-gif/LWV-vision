@@ -116,6 +116,12 @@ bool BlobClassify::execute(ToolContext& context) {
     if (autoThresh) cv::threshold(roiImg, binary, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
     else           cv::threshold(roiImg, binary, thresh, 255, cv::THRESH_BINARY);
     if (detType == 0) cv::bitwise_not(binary, binary);   // 黑色目标
+    // #2 形状ROI: 菱形/圆形/环形只在形状内部统计
+    {
+        const cv::Mat shapeMask = makeRoiShapeMask(m_roi, roiRect);
+        if (!shapeMask.empty())
+            cv::bitwise_and(binary, shapeMask, binary);
+    }
 
     // 连通域 (4/8连通)
     cv::Mat labels, stats, centroids;
