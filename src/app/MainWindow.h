@@ -12,7 +12,6 @@
 #include "../engine/InspectionResult.h"
 #include "../hal/HardwareManager.h"
 #include "../hal/ICameraDriver.h"
-#include "../hal/BaslerCamera.h"
 #include "../hal/GigECamera.h"
 #include "../hal/VirtualCamera.h"
 #include "../ui/CameraManagerDialog.h"

@@ -53,7 +53,7 @@ BaslerCamera::BaslerCamera(QObject* parent)
 {
     m_grabTimer = new QTimer(this);
     connect(m_grabTimer, &QTimer::timeout, this, &BaslerCamera::onGrabFrame);
-    loadPylonDll();
+    // 不在构造函数加载DLL, 改为懒加载 (首次使用时加载)
 }
 
 BaslerCamera::~BaslerCamera()
@@ -70,31 +70,30 @@ bool BaslerCamera::loadPylonDll()
 {
     // 尝试多个可能的 Pylon DLL 路径和版本
     QStringList dllNames = {
+        // Pylon 8 (v7.5.0 实际版本)
+        "PylonC_v8_0.dll",
         // Pylon 7
         "PylonC_v7_5.dll", "PylonC_v7_4.dll", "PylonC_v7_3.dll",
         "PylonC_v7_2.dll", "PylonC_v7_1.dll", "PylonC_v7_0.dll",
         // Pylon 6
         "PylonC_v6_3.dll", "PylonC_v6_2.dll", "PylonC_v6_1.dll", "PylonC_v6_0.dll",
-        // Pylon 5
-        "PylonC_v5.dll", "PylonC_MD_VC141_v3_1_Basler_pylon_v5.dll",
         // 通用名
         "PylonC.dll", "pylon_c.dll",
     };
 
-    // 搜索路径: 程序目录 → PATH → Pylon 默认安装目录
+    // 搜索路径: 程序目录 → Pylon 安装目录
     QStringList searchPaths;
     searchPaths << QCoreApplication::applicationDirPath();
 
-    // Pylon 默认安装目录
     QStringList pylonDirs = {
+        "D:/Program Files/Basler/pylon 7",
         "C:/Program Files/Basler/pylon 7",
         "C:/Program Files/Basler/pylon 6",
-        "C:/Program Files/Basler/pylon 5",
-        "C:/Program Files/Basler/Pylon",
+        "D:/Program Files/Basler/pylon 6",
     };
     for (const auto& dir : pylonDirs) {
-        searchPaths << dir + "/Development/bin/x64";
         searchPaths << dir + "/Runtime/x64";
+        searchPaths << dir + "/Development/bin/x64";
         searchPaths << dir + "/bin";
     }
 

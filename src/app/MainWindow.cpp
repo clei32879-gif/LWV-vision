@@ -57,16 +57,8 @@ MainWindow::MainWindow(QWidget* parent)
     m_hardware = new HardwareManager(this);
     m_projectMgr->setServices(m_flowEngine, m_globalVars);
 
-    // 相机驱动: 优先巴斯勒Pylon SDK, 无SDK时用GigE Vision通用驱动
-    auto* baslerCam = new BaslerCamera(this);
-    if (baslerCam->isPylonLoaded()) {
-        setCameraDriver(baslerCam);
-        m_logPanel->appendLog("相机驱动: Basler Pylon SDK (已加载)");
-    } else {
-        delete baslerCam;
-        setCameraDriver(new GigECamera(this));
-        m_logPanel->appendLog("相机驱动: GigE Vision 通用 (Pylon SDK未找到)");
-    }
+    // 相机驱动: GigE Vision 通用驱动 (支持度申/海康/巴斯勒所有GigE相机, 无SDK依赖)
+    setCameraDriver(new GigECamera(this));
 
     qDebug() << "MainWindow: About to call setupUI...";
     setupUI();

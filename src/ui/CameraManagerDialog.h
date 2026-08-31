@@ -12,7 +12,6 @@
 #include <QVector>
 #include "../hal/ICameraDriver.h"
 #include "../hal/GigECamera.h"
-#include "../hal/BaslerCamera.h"
 
 namespace VisionInspector {
 

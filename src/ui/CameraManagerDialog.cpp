@@ -175,15 +175,9 @@ void CameraManagerDialog::onConnectClicked(int index)
         return;
     }
 
-    // 创建相机驱动: 优先巴斯勒Pylon SDK, 无SDK时用GigE通用驱动
+    // 创建相机驱动
     if (!m_cameras[index]) {
-        auto* basler = new BaslerCamera();
-        if (basler->isPylonLoaded()) {
-            m_cameras[index] = basler;
-        } else {
-            delete basler;
-            m_cameras[index] = new GigECamera();
-        }
+        m_cameras[index] = new GigECamera();
     }
 
     auto* cam = m_cameras[index];
