@@ -206,17 +206,53 @@ bool GigECamera::openCamera(const QString& cameraId)
     }
     m_devicePort = 3956;
 
-    // 绑定控制通道
+    // 自动查找与相机IP在同一子网的本地网卡
+    // 针对 169.254.x.x 多网口配置: 每个网口独立网段
+    QHostAddress localBindAddr = QHostAddress::Any;
+    const auto interfaces = QNetworkInterface::allInterfaces();
+    for (const auto& iface : interfaces) {
+        if (!(iface.flags() & QNetworkInterface::IsUp)) continue;
+        if (iface.flags() & QNetworkInterface::IsLoopBack) continue;
+        for (const auto& entry : iface.addressEntries()) {
+            if (entry.ip().protocol() != QAbstractSocket::IPv4Protocol) continue;
+            // 检查相机IP是否在这个网卡的子网内
+            QHostAddress netmask = entry.netmask();
+            quint32 camNet = m_deviceIp.toIPv4Address() & netmask.toIPv4Address();
+            quint32 ifNet = entry.ip().toIPv4Address() & netmask.toIPv4Address();
+            if (camNet == ifNet) {
+                localBindAddr = entry.ip();
+                VI_LOG_INFO(QString("GigE: 匹配网卡 %1 (%2) → 相机 %3")
+                    .arg(iface.humanReadableName(), entry.ip().toString(), cameraId));
+                break;
+            }
+        }
+        if (localBindAddr != QHostAddress::Any) break;
+    }
+
+    // 绑定控制通道到匹配的本地网卡
     m_ctrlSocket->close();
-    if (!m_ctrlSocket->bind(QHostAddress::Any, 0)) {
-        VI_LOG_ERROR("GigE: 控制通道绑定失败");
+    if (!m_ctrlSocket->bind(localBindAddr, 0)) {
+        VI_LOG_ERROR("GigE: 控制通道绑定失败 (本地地址: " + localBindAddr.toString() + ")");
         return false;
     }
 
-    // 测试连接: 读取设备型号寄存器
+    // 先发一个 DISCOVERY 单播到相机IP (有些相机需要先收到发现包才响应寄存器读)
+    QByteArray discoverPkt = buildGvcpHeader(GVCP_DISCOVERY_CMD, 0x0000, 0x0001);
+    discoverPkt.append(8, '\0');
+    m_ctrlSocket->writeDatagram(discoverPkt, m_deviceIp, m_devicePort);
+
+    // 等一下发现响应 (非阻塞, 有些相机不需要)
+    if (m_ctrlSocket->waitForReadyRead(500)) {
+        QByteArray resp;
+        resp.resize((int)m_ctrlSocket->pendingDatagramSize());
+        m_ctrlSocket->readDatagram(resp.data(), resp.size());
+        // 丢弃, 只是为了触发相机进入可通信状态
+    }
+
+    // 测试连接: 读取设备模式寄存器
     uint32_t modelVal = 0;
     if (!readRegister(REG_DEVICE_MODE, modelVal)) {
-        VI_LOG_ERROR("GigE: 无法连接相机 " + cameraId);
+        VI_LOG_ERROR("GigE: 无法连接相机 " + cameraId + " (寄存器读取失败)");
         return false;
     }
 
@@ -377,29 +413,27 @@ bool GigECamera::gvspBindDataChannel()
 {
     m_dataSocket = new QUdpSocket(this);
 
-    // 绑定随机端口接收图像数据
-    if (!m_dataSocket->bind(QHostAddress::Any, 0)) {
-        VI_LOG_ERROR("GigE: 无法绑定GVSP数据端口");
+    // 找到与控制通道相同的本地IP (即与相机同子网的网卡)
+    QHostAddress localAddr = QHostAddress::Any;
+    if (m_ctrlSocket->localAddress() != QHostAddress::Any &&
+        m_ctrlSocket->localAddress() != QHostAddress::LocalHost) {
+        localAddr = m_ctrlSocket->localAddress();
+    }
+
+    // 绑定到同一网卡的随机端口
+    if (!m_dataSocket->bind(localAddr, 0)) {
+        VI_LOG_ERROR("GigE: 无法绑定GVSP数据端口 (地址: " + localAddr.toString() + ")");
         return false;
     }
     m_localDataPort = m_dataSocket->localPort();
 
-    // 向相机注册数据通道端口
-    // Stream channel 0 destination port
+    // 向相机注册数据通道端口和IP
     writeRegister(REG_STREAM_CHANNEL_PORT, m_localDataPort);
+    quint32 localIp = localAddr.toIPv4Address();
+    writeRegister(REG_STREAM_CHANNEL_IP, localIp);
 
-    // 设置流通道 IP (本机 IP)
-    const auto addrs = QNetworkInterface::allAddresses();
-    for (const auto& addr : addrs) {
-        if (addr.protocol() == QAbstractSocket::IPv4Protocol && !addr.isLoopback()) {
-            // 写入 IP (大端 uint32)
-            quint32 ip = addr.toIPv4Address();
-            writeRegister(REG_STREAM_CHANNEL_IP, ip);
-            VI_LOG_INFO(QString("GigE 数据通道: 本地 %1:%2")
-                .arg(addr.toString()).arg(m_localDataPort));
-            break;
-        }
-    }
+    VI_LOG_INFO(QString("GigE 数据通道: %1:%2 → 相机 %3")
+        .arg(localAddr.toString()).arg(m_localDataPort).arg(m_deviceIp.toString()));
 
     connect(m_dataSocket, &QUdpSocket::readyRead, this, &GigECamera::onDataReady);
     return true;
