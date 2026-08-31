@@ -18,6 +18,8 @@
 #include "../ui/UIEditor.h"
 #include "../ui/IconHelper.h"
 #include "../hal/ModbusTcpMaster.h"
+#include "../hal/GigECamera.h"
+#include "../hal/VirtualCamera.h"
 #include "AppSettings.h"
 
 #include <QMenuBar>
@@ -55,12 +57,8 @@ MainWindow::MainWindow(QWidget* parent)
     m_hardware = new HardwareManager(this);
     m_projectMgr->setServices(m_flowEngine, m_globalVars);
 
-    // 相机驱动: 装了度申SDK用真相机, 否则用虚拟相机(回放/合成图案)
-#ifdef VI_HAS_DVP2
-    setCameraDriver(new DeshengCamera(this));
-#else
-    setCameraDriver(new VirtualCamera(this));
-#endif
+    // 相机驱动: GigE Vision 通用驱动(支持度申/海康/巴斯勒GigE), 无SDK依赖
+    setCameraDriver(new GigECamera(this));
 
     qDebug() << "MainWindow: About to call setupUI...";
     setupUI();

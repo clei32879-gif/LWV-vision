@@ -9,6 +9,10 @@ target_sources(VIHAL PRIVATE
     DeshengCamera.h
     DeshengCamera.cpp
 
+    # GigE Vision 通用相机驱动 (GVCP/GVSP, 不依赖厂商SDK)
+    GigECamera.h
+    GigECamera.cpp
+
     # Virtual camera driver (无硬件开发/演示)
     VirtualCamera.h
     VirtualCamera.cpp
