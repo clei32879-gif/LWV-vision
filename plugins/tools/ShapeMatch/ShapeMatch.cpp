@@ -30,25 +30,45 @@ static double contourMatchScore(const std::vector<cv::Point>& tmpl, const std::v
 
 // 旋转敏感距离(归一化): 模板与目标轮廓各自质心居中+按面积开方归一尺度,
 // 再计算模板点到目标轮廓的最近距离均值 (越小越对齐, 用于定角度; 平移/缩放无关)
+// #6 性能: 双方轮廓先均匀降采样到≤maxPts点 (200点粒度对角度判定足够),
+//    暴力最近邻从 N×M=数千×数千 降到 200×200=4万次hypot, 快100倍以上
+static void resampleContour(const std::vector<cv::Point>& in, std::vector<cv::Point2d>& out, int maxPts) {
+    out.clear();
+    if (in.empty()) return;
+    if ((int)in.size() <= maxPts) {
+        out.reserve(in.size());
+        for (const auto& p : in) out.emplace_back(p.x, p.y);
+        return;
+    }
+    const double step = (double)in.size() / maxPts;
+    out.reserve(maxPts);
+    for (int i = 0; i < maxPts; ++i)
+        out.emplace_back(in[(int)(i * step) % in.size()].x, in[(int)(i * step) % in.size()].y);
+}
+
 static double contourPointDist(const std::vector<cv::Point>& a, const std::vector<cv::Point>& b) {
     if (a.empty() || b.empty()) return 1e9;
+    static thread_local std::vector<cv::Point2d> ra, rb;
+    resampleContour(a, ra, 200);
+    resampleContour(b, rb, 200);
+
     const cv::Moments ma = cv::moments(a), mb = cv::moments(b);
     if (ma.m00 <= 0 || mb.m00 <= 0) return 1e9;
     const double ax = ma.m10 / ma.m00, ay = ma.m01 / ma.m00;
     const double bx = mb.m10 / mb.m00, by = mb.m01 / mb.m00;
     const double sa = std::sqrt(ma.m00), sb = std::sqrt(mb.m00);
     double sum = 0;
-    for (const auto& p : a) {
+    for (const auto& p : ra) {
         const double px = (p.x - ax) / sa, py = (p.y - ay) / sa;
         double best = 1e18;
-        for (const auto& q : b) {
+        for (const auto& q : rb) {
             const double qx = (q.x - bx) / sb, qy = (q.y - by) / sb;
             const double d = std::hypot(px - qx, py - qy);
             if (d < best) best = d;
         }
         sum += best;
     }
-    return sum / a.size();
+    return sum / ra.size();
 }
 #endif
 
@@ -94,13 +114,13 @@ bool ShapeMatch::execute(ToolContext& context) {
     const double tcy = tm.m00 > 0 ? tm.m01 / tm.m00 : templ.rows / 2.0;
     const double tmplArea = cv::contourArea(tmplContour);
 
-    // 采样角度与缩放
+    // 采样角度与缩放 (#11: scaleRange 属性激活 — 原先缩放数组构建后未使用)
+    // 语义: 缩放搜索范围=接受的目标缩放偏差区间 [1-range, 1+range],
+    //       实际缩放由面积比得到, 超出范围的候选直接拒绝
     const double aStep = std::max(1.0, angleRange / 24.0);          // 每角度范围内≤25个采样
     std::vector<double> angles;                                     // 负角度到正角度
     for (double a = -angleRange; a <= angleRange + 1e-9; a += aStep) angles.push_back(a);
-    const double sStep = std::max(0.02, scaleRange / 10.0);
-    std::vector<double> scales;
-    for (double s = 1.0 - scaleRange; s <= 1.0 + scaleRange + 1e-9; s += sStep) scales.push_back(s);
+    const bool scaleLimited = scaleRange < 1.0 - 1e-6;
 
     for (const auto& sc : srcContours) {
         if (cv::contourArea(sc) < 100) continue;
@@ -112,6 +132,9 @@ bool ShapeMatch::execute(ToolContext& context) {
         const double scx = sm.m00 > 0 ? sm.m10 / sm.m00 : 0;
         const double scy = sm.m00 > 0 ? sm.m01 / sm.m00 : 0;
         const double scArea = cv::contourArea(sc);
+        const double scale = tmplArea > 1e-6 ? scArea / tmplArea : 1.0;
+        if (scaleLimited && (scale < 1.0 - scaleRange || scale > 1.0 + scaleRange))
+            continue;   // #11: 缩放偏差超出搜索范围, 拒绝该候选
 
         // 角度搜索: 旋转敏感的点距最小化定最佳角度 (matchShapes 旋转不变, 对对称形状无区分度)
         double bestAngle = 0, bestDist = 1e18;
@@ -130,7 +153,7 @@ bool ShapeMatch::execute(ToolContext& context) {
                 if (d < bestDist) { bestDist = d; bestAngle = ang; }
             }
         }
-        const double bestScale = tmplArea > 1e-6 ? scArea / tmplArea : 1.0;
+        const double bestScale = scale;   // #11: 面积比缩放, 受 scaleRange 范围约束
         matches.push_back({scx, scy, base, bestAngle, bestScale});
     }
     std::sort(matches.begin(), matches.end(), [](const auto& a, const auto& b) { return a.score > b.score; });
