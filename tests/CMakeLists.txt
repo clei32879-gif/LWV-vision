@@ -149,6 +149,17 @@ if(VI_HAS_ONNXRT)
     add_test(NAME teach_flow COMMAND test_teach_flow)
 endif()
 
+# OCR 真实功能验证 (教导→识别→泛化)
+add_executable(test_ocr test_ocr.cpp)
+target_link_libraries(test_ocr PRIVATE
+    VICore VIEngine VIHAL VIUtils ${OpenCV_LIBS} Qt6::Core Qt6::Gui)
+foreach(_plugin ${VI_ALL_PLUGINS})
+    if(TARGET ${_plugin})
+        target_link_libraries(test_ocr PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${_plugin}>)
+    endif()
+endforeach()
+add_test(NAME ocr COMMAND test_ocr)
+
 # 图标加载回归: 遍历全部工具/分类, 验证素材图标非空 (链VIUI获取编译进的icons.qrc)
 add_executable(test_icons test_icons.cpp)
 target_link_libraries(test_icons PRIVATE
