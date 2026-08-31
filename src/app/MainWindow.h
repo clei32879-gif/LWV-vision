@@ -33,6 +33,7 @@ class DisplayArea;
 class FlowEditor;
 class Toolbox;
 class DataPanel;
+class StatsPanel;
 class LogPanel;
 
 class MainWindow : public QMainWindow {
@@ -67,6 +68,7 @@ private slots:
     void onAbout();
     void onExportCsv();
     void onScanCameras();
+    void syncCamerasToEngine();
     void onOpenCamera();
     void onUseVirtualCamera();
     void onCameraImageReceived(const CvImage& image);
@@ -112,6 +114,7 @@ private:
     FlowEditor* m_flowEditor = nullptr;
     Toolbox* m_toolbox = nullptr;
     DataPanel* m_dataPanel = nullptr;
+    StatsPanel* m_statsPanel = nullptr;
     LogPanel* m_logPanel = nullptr;
     MultiViewWidget* m_multiView = nullptr;
 

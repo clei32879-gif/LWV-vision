@@ -41,6 +41,20 @@ ICameraDriver* CameraManagerDialog::cameraAt(int index) const
     return m_cameras[index];
 }
 
+QMap<QString, ICameraDriver*> CameraManagerDialog::connectedCameras() const
+{
+    QMap<QString, ICameraDriver*> result;
+    for (int i = 0; i < m_cameras.size() && i < m_configs.size(); ++i) {
+        if (m_cameras[i] && m_cameras[i]->isOpen()) {
+            // 别名 = 名称框内容; 为空时用默认 "CCD{n}"
+            QString alias = m_configs[i].name.trimmed();
+            if (alias.isEmpty()) alias = QString("CCD%1").arg(i + 1);
+            result[alias] = m_cameras[i];
+        }
+    }
+    return result;
+}
+
 QVector<CameraSlotConfig> CameraManagerDialog::slotConfigs() const
 {
     return m_configs;
@@ -104,6 +118,9 @@ void CameraManagerDialog::setupUI()
 
         // 1: 别名
         w.nameEdit = new QLineEdit(defaultNames[i]);
+        connect(w.nameEdit, &QLineEdit::textChanged, this, [this, i](const QString& text) {
+            m_configs[i].name = text;
+        });
         table->setCellWidget(row, 1, w.nameEdit);
 
         // 2: IP

@@ -236,6 +236,8 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
 
     // 设置硬件接口到上下文
     context.setCameraDriver(m_camera);
+    for (auto it = m_namedCameras.begin(); it != m_namedCameras.end(); ++it)
+        context.setNamedCamera(it.key(), it.value());
     context.setPLCDriver(m_plc);
     context.setServoDriver(m_servo);
     context.setGlobalVariables(m_globalVars);

@@ -169,6 +169,11 @@ public:
     // 硬件接口设置 (注入到ToolContext)
     // --------------------------------------------------------
     void setCameraDriver(ICameraDriver* camera) { m_camera = camera; }
+    /** 注册命名相机 (多相机: CaptureImage 按别名取用, 如 "CCD1"/"CCD2") */
+    void setNamedCamera(const QString& name, ICameraDriver* cam) {
+        if (!name.isEmpty()) m_namedCameras[name] = cam;
+    }
+    void clearNamedCameras() { m_namedCameras.clear(); }
     void setPLCDriver(IPLCDriver* plc) { m_plc = plc; }
     void setServoDriver(IServoDriver* servo) { m_servo = servo; }
     void setGlobalVariables(GlobalVariables* gv) { m_globalVars = gv; }
@@ -222,6 +227,7 @@ private:
 
     // 硬件接口 (注入到ToolContext, 只读指针)
     ICameraDriver* m_camera = nullptr;
+    QMap<QString, ICameraDriver*> m_namedCameras;   // 多相机别名表 (非拥有)
     IPLCDriver* m_plc = nullptr;
     IServoDriver* m_servo = nullptr;
     GlobalVariables* m_globalVars = nullptr;

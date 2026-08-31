@@ -14,6 +14,7 @@ namespace VisionInspector {
 PropertyDefList CaptureImage::propertyDefs() const {
     return {
         PropertyDef::enumProp("source", "图像来源", {"从相机采集", "从文件加载", "图像列表"}, 0),
+        PropertyDef::stringProp("cameraName", "相机别名", "", "采集"),
         PropertyDef::stringProp("imagePath", "图像路径", ""),
         PropertyDef::stringProp("imageDir", "图像目录", ""),
         PropertyDef::boolProp("autoNext", "自动换图", false),
@@ -26,11 +27,24 @@ bool CaptureImage::execute(ToolContext& context) {
 
 #ifdef VI_HAS_OPENCV
     if (source == 0) {
-        // 从相机采集
-        ICameraDriver* cam = context.cameraDriver();
+        // 从相机采集: 优先按相机别名取多相机表 (CCD1~CCD8), 空则用主相机
+        ICameraDriver* cam = nullptr;
+        const QString camName = propertyValue("cameraName").toString().trimmed();
+        if (!camName.isEmpty()) {
+            cam = context.namedCamera(camName);
+            if (!cam) {
+                setResultData("error", QString("未找到相机 \"%1\"").arg(camName));
+                setResultData("status", QString("可用相机: %1 (相机管理里连接后自动注册)")
+                                        .arg(context.namedCameraNames().join(", ")));
+                setStatus(ToolStatus::NG);
+                return false;
+            }
+        } else {
+            cam = context.cameraDriver();
+        }
         if (!cam) {
             setResultData("error", "未设置相机驱动");
-            setResultData("status", "请先通过菜单[相机→扫描相机]连接相机");
+            setResultData("status", "请先通过[相机管理]连接相机");
             setStatus(ToolStatus::NG);
             return false;
         }
@@ -132,9 +146,17 @@ bool CaptureImage::execute(ToolContext& context) {
         if (idx >= files.size()) idx = 0;
 
         QString filePath = files[idx].absoluteFilePath();
-        cv::Mat img = cv::imread(filePath.toUtf8().constData());
-        if (img.empty()) {
+        // 中文路径兼容: 用Qt加载再转cv::Mat (cv::imread在Windows下不支持中文路径)
+        QImage qimg;
+        if (!qimg.load(filePath)) {
             setResultData("error", QString("无法加载: %1").arg(filePath));
+            setResultData("status", "文件已损坏或格式不支持");
+            setStatus(ToolStatus::NG);
+            return false;
+        }
+        cv::Mat img = qImageToCvMat(qimg);
+        if (img.empty()) {
+            setResultData("error", QString("图像转换失败: %1").arg(filePath));
             setStatus(ToolStatus::NG);
             return false;
         }

@@ -6,6 +6,8 @@
 #include "../ui/FlowEditor.h"
 #include "../ui/Toolbox.h"
 #include "../ui/DataPanel.h"
+#include "../ui/widgets/StatsPanel.h"
+#include <QTabWidget>
 #include "../ui/LogPanel.h"
 #include "../ui/PropertyDialog.h"
 #include "../ui/widgets/ImageViewWidget.h"
@@ -186,16 +188,22 @@ void MainWindow::setupUI() {
     m_mainSplitter->setStretchFactor(1, 0);  // 流程栏不参与拉伸
     m_mainSplitter->setStretchFactor(2, 1);  // 图像栏拉伸
 
-    // 底部CCD检测项目表
+    // 底部CCD检测项目表 + 良率统计面板(趋势/NG分布/CSV导出)
     m_dataPanel = new DataPanel(this);
-    // UI排查 P0-6: 此前从未调用 setStats/updateResult, 表格纯静态装饰
     m_dataPanel->setStats(m_stats);
+    m_statsPanel = new StatsPanel(this);
+    m_statsPanel->setStats(m_stats);
 
     // 整体垂直分割：上部(工具箱+流程+图像) | 下部(检测项目表)
     m_vSplitter = new QSplitter(Qt::Vertical, this);
     m_vSplitter->setHandleWidth(6);
     m_vSplitter->addWidget(m_mainSplitter);
-    m_vSplitter->addWidget(m_dataPanel);
+    // 底部Tab容器: 检测项目表 | 良率统计(趋势/NG分布)
+    auto* bottomTabs = new QTabWidget(this);
+    bottomTabs->setObjectName("BottomTabs");
+    bottomTabs->addTab(m_dataPanel, QString::fromUtf8("检测项目"));
+    bottomTabs->addTab(m_statsPanel, QString::fromUtf8("良率统计"));
+    m_vSplitter->addWidget(bottomTabs);
     m_vSplitter->setStretchFactor(0, 7);
     m_vSplitter->setStretchFactor(1, 2);
     setCentralWidget(m_vSplitter);
@@ -910,25 +918,47 @@ void MainWindow::onScanCameras() {
         m_cameraManager = new CameraManagerDialog(this);
         connect(m_cameraManager, &CameraManagerDialog::cameraStatusChanged,
                 this, [this](int index, bool connected, const QString& info) {
-            if (index == 0 && connected) {
-                // CCD1 连接成功, 切换主相机驱动
-                ICameraDriver* cam = m_cameraManager->cameraAt(0);
-                if (cam) {
-                    setCameraDriver(cam);
-                    m_cameraLabel->setText(QString("CCD1: %1").arg(info));
+            Q_UNUSED(index);
+            syncCamerasToEngine();
+            if (connected) {
+                // 主状态栏显示第一个连接的相机
+                const auto cams = m_cameraManager->connectedCameras();
+                if (!cams.isEmpty()) {
+                    ICameraDriver* cam = cams.first();
+                    const QString name = cams.firstKey();
+                    if (m_camera != cam) {
+                        setCameraDriver(cam);
+                    }
+                    m_cameraLabel->setText(QString("%1: %2").arg(name, info));
                     m_connectionLabel->setText("已连接");
-                    // 开始采集
-                    cam->startAcquisition();
+                    if (!cam->isAcquiring()) cam->startAcquisition();
                 }
-            } else if (index == 0 && !connected) {
-                m_cameraLabel->setText("相机: 无");
-                m_connectionLabel->setText("无相机");
+            } else {
+                const auto cams = m_cameraManager->connectedCameras();
+                if (cams.isEmpty()) {
+                    m_cameraLabel->setText("相机: 无");
+                    m_connectionLabel->setText("无相机");
+                }
             }
         });
     }
     m_cameraManager->show();
     m_cameraManager->raise();
     m_cameraManager->activateWindow();
+}
+
+/** 把相机管理器中全部已连接相机注册到流程引擎多相机表 (CaptureImage按别名取用) */
+void MainWindow::syncCamerasToEngine()
+{
+    if (!m_flowEngine || !m_cameraManager) return;
+    m_flowEngine->clearNamedCameras();
+    const auto cams = m_cameraManager->connectedCameras();
+    for (auto it = cams.begin(); it != cams.end(); ++it)
+        m_flowEngine->setNamedCamera(it.key(), it.value());
+    if (!cams.isEmpty()) {
+        QStringList names = cams.keys();
+        m_logPanel->appendLog(QString("多相机注册: %1").arg(names.join(", ")));
+    }
 }
 
 void MainWindow::onOpenCamera() {

@@ -10,6 +10,7 @@
 #include <QComboBox>
 #include <QGridLayout>
 #include <QVector>
+#include <QMap>
 #include "../hal/ICameraDriver.h"
 #include "../hal/GigECamera.h"
 #include "../hal/BaslerCamera.h"
@@ -37,6 +38,9 @@ public:
 
     /// 获取指定槽位的相机驱动
     ICameraDriver* cameraAt(int index) const;
+
+    /// 全部已连接相机 (别名→驱动), 供主窗口注册到 FlowEngine 多相机表
+    QMap<QString, ICameraDriver*> connectedCameras() const;
 
     /// 所有槽位配置
     QVector<CameraSlotConfig> slotConfigs() const;

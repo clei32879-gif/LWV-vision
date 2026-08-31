@@ -201,6 +201,27 @@ public:
     void setCameraDriver(ICameraDriver* camera) { m_camera = camera; }
     ICameraDriver* cameraDriver() { return m_camera; }
 
+    // --------------------------------------------------------
+    // 多相机支持 (按相机别名取驱动, 供 CaptureImage 指定 CCD1~CCD8)
+    // --------------------------------------------------------
+    /** 注册/更新命名相机 (FlowEngine执行前由 MainWindow 按相机管理器槽位注册) */
+    void setNamedCamera(const QString& name, ICameraDriver* cam) {
+        if (!name.isEmpty()) m_namedCameras[name] = cam;
+    }
+    /** 按别名取相机 (如 "CCD1"/"CCD2-正面"); 未找到返回 nullptr */
+    ICameraDriver* namedCamera(const QString& name) const {
+        // 精确匹配优先
+        auto it = m_namedCameras.find(name);
+        if (it != m_namedCameras.end()) return it.value();
+        // 前缀匹配: "CCD1" 可匹配 "CCD1-正面检测" (工具里填短名即可)
+        for (auto jt = m_namedCameras.begin(); jt != m_namedCameras.end(); ++jt) {
+            if (jt.key().startsWith(name)) return jt.value();
+        }
+        return nullptr;
+    }
+    /** 命名相机别名列表 (属性对话框下拉用) */
+    QStringList namedCameraNames() const { return m_namedCameras.keys(); }
+
     void setPLCDriver(IPLCDriver* plc) { m_plc = plc; }
     IPLCDriver* plcDriver() { return m_plc; }
 
@@ -247,6 +268,7 @@ private:
 
     // 硬件接口 (非拥有, 由外部设置)
     ICameraDriver* m_camera = nullptr;
+    QMap<QString, ICameraDriver*> m_namedCameras;   // 多相机: 别名→驱动 (非拥有)
     IPLCDriver* m_plc = nullptr;
     IServoDriver* m_servo = nullptr;
     GlobalVariables* m_globalVars = nullptr;
