@@ -20,6 +20,7 @@
 #include <QFile>
 #include <QTextStream>
 #include <algorithm>
+#include <climits>
 #include <cmath>
 #include <QVariantMap>
 
@@ -27,6 +28,16 @@ namespace VisionInspector {
 
 namespace {
 constexpr int kNormW = 16, kNormH = 24;
+
+/** 字符归一化: 保持纵横比缩放到16x24画布居中 (连通域/投影两条分割路径共用) */
+void normalizeChar(const cv::Mat& ch, cv::Mat& norm) {
+    norm = cv::Mat(kNormH, kNormW, CV_8UC1, cv::Scalar(0));
+    const double sc = std::min((double)kNormW / ch.cols, (double)kNormH / ch.rows);
+    cv::Mat scaled;
+    cv::resize(ch, scaled, cv::Size(), sc, sc, cv::INTER_NEAREST);
+    const int ox = (kNormW - scaled.cols) / 2, oy = (kNormH - scaled.rows) / 2;
+    scaled.copyTo(norm(cv::Rect(ox, oy, scaled.cols, scaled.rows)));
+}
 }
 
 QString OCR::templatePath() const {
@@ -47,6 +58,7 @@ PropertyDefList OCR::propertyDefs() const {
         PropertyDef::intProp("thresholdValue", "二值化阈值(0=Otsu自动)", 0, 0, 255, "识别"),
         PropertyDef::boolProp("invert", "亮字暗底(白字黑底勾选)", true, "识别"),
         PropertyDef::doubleProp("matchThreshold", "匹配置信度下限", 0.55, 0.1, 1.0, "识别"),
+        PropertyDef::enumProp("segmentMethod", "分割方法", {"连通域", "垂直投影(粘连字符)"}, 0, "分割"),
         PropertyDef::intProp("minCharHeight", "最小字符高度(px)", 12, 2, 500, "分割"),
         PropertyDef::intProp("maxCharHeight", "最大字符高度(px)", 200, 2, 2000, "分割"),
         PropertyDef::intProp("charGap", "字符间距容差(px)", 20, 1, 200, "分割"),
@@ -102,13 +114,126 @@ void OCR::segmentChars(const cv::Mat& binary, std::vector<cv::Mat>& chars,
     // 逐字符裁剪归一化 16x24
     for (const cv::Rect& r : merged) {
         cv::Mat ch = binary(r);
-        // 归一化: 保持纵横比缩放到16x24画布居中
-        cv::Mat norm(kNormH, kNormW, CV_8UC1, cv::Scalar(0));
-        const double sc = std::min((double)kNormW / ch.cols, (double)kNormH / ch.rows);
-        cv::Mat scaled;
-        cv::resize(ch, scaled, cv::Size(), sc, sc, cv::INTER_NEAREST);
-        const int ox = (kNormW - scaled.cols) / 2, oy = (kNormH - scaled.rows) / 2;
-        scaled.copyTo(norm(cv::Rect(ox, oy, scaled.cols, scaled.rows)));
+        cv::Mat norm;
+        normalizeChar(ch, norm);
+        chars.push_back(norm);
+        boxes.push_back(r);
+    }
+}
+
+/** #10 投影分割备选: 垂直投影峰谷切分
+ *  适用场景: 字符相互粘连/接触, 连通域法把它们当成一个大块分不开。
+ *  算法: 行带定位(水平投影最大行带) → 带内垂直投影 → 零谷切分 + 小间隙合并
+ *        → 超宽块按估计字宽在投影局部极小处二次切分(处理部分粘连) */
+void OCR::segmentCharsByProjection(const cv::Mat& binary, std::vector<cv::Mat>& chars,
+                                   std::vector<cv::Rect>& boxes) const {
+    const int minH = propertyValue("minCharHeight").toInt();
+    const int maxH = propertyValue("maxCharHeight").toInt();
+    const int gap = propertyValue("charGap").toInt();
+    if (binary.empty()) return;
+
+    // ---- 行带定位: 水平投影取最大连续行带 (单行OCR场景) ----
+    cv::Mat rowProj;
+    cv::reduce(binary, rowProj, 1, cv::REDUCE_SUM, CV_32S);
+    int rowMax = 0;
+    for (int r = 0; r < rowProj.rows; ++r) rowMax = std::max(rowMax, rowProj.at<int>(r, 0));
+    if (rowMax <= 0) return;
+    int bandY0 = -1, bandY1 = -1, best0 = 0, best1 = 0, bestSum = -1, run0 = -1;
+    long long runSum = 0;
+    for (int r = 0; r <= rowProj.rows; ++r) {
+        const bool fg = (r < rowProj.rows) && rowProj.at<int>(r, 0) >= rowMax / 10;
+        if (fg && run0 < 0) { run0 = r; runSum = 0; }
+        if (fg) runSum += rowProj.at<int>(r, 0);
+        if ((!fg || r == rowProj.rows) && run0 >= 0) {
+            if ((long long)runSum > bestSum) {
+                bestSum = runSum; best0 = run0; best1 = r;
+            }
+            run0 = -1;
+        }
+    }
+    bandY0 = best0; bandY1 = best1;
+    if (bandY1 - bandY0 < 2) return;
+
+    const cv::Mat band = binary(cv::Rect(0, bandY0, binary.cols, bandY1 - bandY0));
+
+    // ---- 垂直投影 ----
+    cv::Mat colProjM;
+    cv::reduce(band, colProjM, 0, cv::REDUCE_SUM, CV_32S);
+    std::vector<int> proj(colProjM.cols);
+    int projMax = 0;
+    for (int x = 0; x < colProjM.cols; ++x) {
+        proj[x] = colProjM.at<int>(0, x);
+        projMax = std::max(projMax, proj[x]);
+    }
+    if (projMax <= 0) return;
+
+    // 平滑(宽度3)去噪
+    std::vector<int> sm(proj.size(), 0);
+    for (int x = 0; x < (int)proj.size(); ++x) {
+        int lo = std::max(0, x - 1), hi = std::min((int)proj.size() - 1, x + 1);
+        sm[x] = (proj[lo] + proj[x] + proj[hi]) / 3;
+    }
+
+    // 前景列段 (阈值=最大投影5%)
+    const int bgLevel = std::max(1, projMax / 20);
+    std::vector<cv::Rect> cand;
+    int runStart = -1;
+    for (int x = 0; x <= (int)sm.size(); ++x) {
+        const bool fg = (x < (int)sm.size()) && sm[x] > bgLevel;
+        if (fg && runStart < 0) runStart = x;
+        if ((!fg || x == (int)sm.size()) && runStart >= 0) {
+            cand.push_back(cv::Rect(runStart, bandY0, x - runStart, bandY1 - bandY0));
+            runStart = -1;
+        }
+    }
+    if (cand.empty()) return;
+
+    // 小间隙合并 (断裂部件: 间隙<=charGap)
+    std::vector<cv::Rect> merged;
+    for (const cv::Rect& r : cand) {
+        if (!merged.empty()) {
+            cv::Rect& last = merged.back();
+            if (r.x - (last.x + last.width) <= gap) { last |= r; continue; }
+        }
+        merged.push_back(r);
+    }
+
+    // 超宽块二次切分: 宽度>1.8倍估计字宽(0.6*高度)时, 在块内投影局部极小处切
+    // 切分数 = round(宽 / 估计字宽)
+    std::vector<cv::Rect> finalBoxes;
+    for (const cv::Rect& r : merged) {
+        const double estW = 0.6 * r.height;
+        const int nSplit = std::max(1, (int)std::lround(r.width / std::max(4.0, estW * 1.6)));
+        if (nSplit <= 1) { finalBoxes.push_back(r); continue; }
+        // 在块内找 nSplit-1 个最低投影列作为切点 (等距邻域内搜索)
+        std::vector<int> cuts;
+        const double segW = (double)r.width / nSplit;
+        for (int k = 1; k < nSplit; ++k) {
+            const int cx0 = r.x + (int)(segW * (k - 0.45));
+            const int cx1 = r.x + (int)(segW * (k + 0.45));
+            int bestX = r.x + (int)(segW * k);
+            int bestV = INT_MAX;
+            for (int x = std::max(r.x, cx0); x <= std::min(r.x + r.width - 1, cx1); ++x) {
+                if (x >= 0 && x < (int)proj.size() && proj[x] < bestV) { bestV = proj[x]; bestX = x; }
+            }
+            cuts.push_back(bestX);
+        }
+        int prev = r.x;
+        for (int cut : cuts) {
+            finalBoxes.push_back(cv::Rect(prev, r.y, cut - prev, r.height));
+            prev = cut;
+        }
+        finalBoxes.push_back(cv::Rect(prev, r.y, r.x + r.width - prev, r.height));
+    }
+
+    // 高度过滤 + 归一化 (与连通域路径同一套判定)
+    for (const cv::Rect& r : finalBoxes) {
+        if (r.width < 2) continue;
+        const bool dashLike = (r.width >= r.height * 3 && r.width >= 6);
+        if (!dashLike && (r.height < minH || r.height > maxH)) continue;
+        cv::Mat ch = band(cv::Rect(r.x, 0, r.width, band.rows));
+        cv::Mat norm;
+        normalizeChar(ch, norm);
         chars.push_back(norm);
         boxes.push_back(r);
     }
@@ -187,10 +312,13 @@ bool OCR::execute(ToolContext& context) {
     else
         cv::threshold(roi, binary, threshVal, 255, flag);
 
-    // 分割
+    // 分割 (#10: 连通域默认 / 垂直投影备选解决粘连字符)
     std::vector<cv::Mat> chars;
     std::vector<cv::Rect> boxes;
-    segmentChars(binary, chars, boxes);
+    if (propertyValue("segmentMethod").toInt() == 1)
+        segmentCharsByProjection(binary, chars, boxes);
+    else
+        segmentChars(binary, chars, boxes);
     m_charRects.clear();
     for (const cv::Rect& r : boxes)
         m_charRects.append(QRect(r.x + (roi.data != src.data ? propertyValue("roiX").toInt() : 0),

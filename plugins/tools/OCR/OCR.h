@@ -32,6 +32,9 @@ private:
     /** 字符分割: 返回按x排序的字符二值图列表(与边界框列表) */
     void segmentChars(const cv::Mat& binary, std::vector<cv::Mat>& chars,
                       std::vector<cv::Rect>& boxes) const;
+    /** #10 投影分割备选: 垂直投影峰谷切分, 解决粘连/接触字符连通域分不开的场景 */
+    void segmentCharsByProjection(const cv::Mat& binary, std::vector<cv::Mat>& chars,
+                                  std::vector<cv::Rect>& boxes) const;
 #endif
     /** 加载模板集: 字符 → 16x24二值模板 */
     bool loadTemplates(const QString& file);
