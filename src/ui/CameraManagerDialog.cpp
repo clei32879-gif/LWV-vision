@@ -220,12 +220,21 @@ void CameraManagerDialog::onConnectClicked(int index)
         w.statusLabel->setText("连接失败");
         w.statusLabel->setStyleSheet("color: red;");
         w.connectBtn->setEnabled(true);
+
+        // 从相机驱动获取详细错误信息
+        QString detail;
+        auto* gigeCam = qobject_cast<GigECamera*>(m_cameras[index]);
+        if (gigeCam && !gigeCam->lastError().isEmpty()) {
+            detail = "\n\n诊断: " + gigeCam->lastError();
+        }
+
         QMessageBox::warning(this, "连接失败",
-            QString("无法连接到 %1\n\n可能原因:\n"
-                    "1. 相机未通电\n"
-                    "2. IP不在同一网段\n"
-                    "3. 防火墙拦截了UDP 3956端口\n"
-                    "4. IP地址输入错误").arg(ip));
+            QString("无法连接到 %1\n\n"
+                    "请逐项检查:\n"
+                    "1. 关闭 pylon Viewer 等其他相机软件 (GigE相机同时只能一个程序连接)\n"
+                    "2. 相机已通电, 网线已插好\n"
+                    "3. 网口和相机在同一网段 (如 169.254.4.4 ↔ 169.254.4.44)\n"
+                    "4. Windows 防火墙已放行 UDP 3956%2").arg(ip, detail));
     }
 }
 

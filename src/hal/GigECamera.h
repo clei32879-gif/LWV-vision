@@ -60,6 +60,9 @@ public:
     bool triggerOnce() override;
     QStringList supportedPixelFormats() const override;
 
+    /// 获取最后一次连接失败的详细错误信息
+    QString lastError() const { return m_lastError; }
+
 private:
     // GVCP 操作
     bool gvspBindDataChannel();
@@ -141,6 +144,9 @@ private:
     int m_imageWidth = 0;
     int m_imageHeight = 0;
     int m_pixelFormat = 0x01080001; // Mono8 default
+
+    // 错误信息
+    QString m_lastError;
 
 private slots:
     void onHeartbeat();

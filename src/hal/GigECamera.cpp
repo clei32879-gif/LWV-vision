@@ -12,6 +12,7 @@
 #include "../utils/Logger.h"
 #include <QNetworkInterface>
 #include <QElapsedTimer>
+#include <QProcess>
 #include <cstring>
 #include <QtEndian>
 
@@ -30,12 +31,13 @@ static quint16 nextPacketId(quint16& id) {
     return id++;
 }
 
-static QByteArray buildGvcpHeader(quint16 cmd, quint16 length, quint16 packetId) {
+static QByteArray buildGvcpHeader(quint16 cmd, quint16 length, quint16 packetId, bool broadcast = false) {
     QByteArray hdr(8, '\0');
     // Byte 0: message type (0x42 = cmd, 0x00 = ack)
     hdr[0] = 0x42;
-    // Byte 1: flags (0x11 = acknowledge required + broadcast)
-    hdr[1] = 0x11;
+    // Byte 1: flags — bit0=ack required, bit4=broadcast
+    // 单播 READREG/WRITEREG 用 0x01; DISCOVERY 广播用 0x11
+    hdr[1] = broadcast ? 0x11 : 0x01;
     // Byte 2-3: command
     qToBigEndian(cmd, (uchar*)hdr.data() + 2);
     // Byte 4-5: length (payload in 32-bit words)
@@ -90,10 +92,8 @@ QList<CameraInfo> GigECamera::enumerateCameras()
         m_ctrlSocket->bind(QHostAddress::Any, 0);
     }
 
-    // 构建 DISCOVERY 命令
-    // GVCP DISCOVERY: flags=0x11, cmd=0x0002, length=0 (无 payload)
-    // 但需要发一个 8 字节的全 0 payload (有些固件要求)
-    QByteArray pkt = buildGvcpHeader(GVCP_DISCOVERY_CMD, 0x0000, 0x0001);
+    // 构建 DISCOVERY 命令 (广播)
+    QByteArray pkt = buildGvcpHeader(GVCP_DISCOVERY_CMD, 0x0000, 0x0001, true);
     pkt.append(8, '\0'); // discover payload (全0 = 所有设备)
 
     // 广播发送到 255.255.255.255:3956
@@ -244,24 +244,71 @@ bool GigECamera::openCamera(const QString& cameraId)
     }
 
     // 先发一个 DISCOVERY 单播到相机IP (有些相机需要先收到发现包才响应寄存器读)
-    QByteArray discoverPkt = buildGvcpHeader(GVCP_DISCOVERY_CMD, 0x0000, 0x0001);
+    QByteArray discoverPkt = buildGvcpHeader(GVCP_DISCOVERY_CMD, 0x0000, 0x0001, false);
     discoverPkt.append(8, '\0');
     m_ctrlSocket->writeDatagram(discoverPkt, m_deviceIp, m_devicePort);
 
-    // 等一下发现响应 (非阻塞, 有些相机不需要)
-    if (m_ctrlSocket->waitForReadyRead(500)) {
+    // 等待 DISCOVERY ACK (非阻塞, 某些相机不需要)
+    bool discoveryOk = false;
+    if (m_ctrlSocket->waitForReadyRead(1000)) {
         QByteArray resp;
         resp.resize((int)m_ctrlSocket->pendingDatagramSize());
         m_ctrlSocket->readDatagram(resp.data(), resp.size());
-        // 丢弃, 只是为了触发相机进入可通信状态
+        if (resp.size() >= 256) {
+            quint16 ackCmd = read16(resp, 2);
+            if (ackCmd == GVCP_DISCOVERY_ACK) {
+                discoveryOk = true;
+                VI_LOG_INFO(QString("GigE: DISCOVERY ACK 收到, 相机 %1 可达").arg(cameraId));
+            }
+        }
     }
 
     // 测试连接: 读取设备模式寄存器
     uint32_t modelVal = 0;
     if (!readRegister(REG_DEVICE_MODE, modelVal)) {
-        VI_LOG_ERROR("GigE: 无法连接相机 " + cameraId + " (寄存器读取失败)");
+        // 尝试自动添加防火墙规则 (仅首次)
+        static bool firewallAttempted = false;
+        if (!firewallAttempted) {
+            firewallAttempted = true;
+            VI_LOG_WARN("GigE: 尝试添加防火墙规则...");
+            QProcess proc;
+            proc.start("netsh", {"advfirewall", "firewall", "add", "rule",
+                "name=LWVision GigE Camera",
+                "dir=in", "action=allow", "protocol=UDP", "localport=3956"});
+            proc.waitForFinished(3000);
+            if (proc.exitCode() == 0) {
+                VI_LOG_INFO("GigE: 防火墙规则已添加, 重试连接...");
+                // 重新绑定并重试
+                m_ctrlSocket->close();
+                m_ctrlSocket->bind(localBindAddr, 0);
+                QThread::msleep(100);
+                m_ctrlSocket->writeDatagram(discoverPkt, m_deviceIp, m_devicePort);
+                if (m_ctrlSocket->waitForReadyRead(1000)) {
+                    QByteArray r;
+                    r.resize((int)m_ctrlSocket->pendingDatagramSize());
+                    m_ctrlSocket->readDatagram(r.data(), r.size());
+                }
+                if (readRegister(REG_DEVICE_MODE, modelVal)) {
+                    goto connectSuccess;
+                }
+            }
+        }
+
+        QString detail;
+        if (discoveryOk) {
+            detail = QString("相机 DISCOVERY 可达但寄存器读取失败 (协议不兼容?)");
+        } else if (localBindAddr == QHostAddress::Any) {
+            detail = QString("未找到与 %1 同网段的本地网卡 (IP第三段不匹配)").arg(cameraId);
+        } else {
+            detail = QString("网卡 %1 → 相机 %2 不通 (网线/电源/防火墙?)")
+                .arg(localBindAddr.toString(), cameraId);
+        }
+        VI_LOG_ERROR("GigE: 连接失败 " + detail);
+        m_lastError = detail;
         return false;
     }
+
+connectSuccess:
 
     // 读取图像尺寸
     uint32_t w = 0, h = 0, fmt = 0;
@@ -350,31 +397,36 @@ bool GigECamera::readRegister(uint32_t address, uint32_t& value)
     if (!m_ctrlSocket->isValid()) return false;
 
     quint16 pid = nextPacketId(m_lastPacketId);
-    // READREG: cmd=0x0080, payload=1 register (4 bytes = 1 word)
+    // READREG: cmd=0x0080, payload=1个寄存器地址 (length=1, 单位是32位字)
     QByteArray pkt = buildGvcpHeader(GVCP_READREG_CMD, 0x0001, pid);
     append32(pkt, address);
 
-    m_ctrlSocket->writeDatagram(pkt, m_deviceIp, m_devicePort);
+    // 重试3次, 逐步增加超时 (巴斯勒相机首次响应可能较慢)
+    for (int retry = 0; retry < 3; retry++) {
+        int timeout = 300 + retry * 500;  // 300ms, 800ms, 1300ms
+        m_ctrlSocket->writeDatagram(pkt, m_deviceIp, m_devicePort);
 
-    // 等待 ACK
-    if (m_ctrlSocket->waitForReadyRead(500)) {
-        QByteArray resp;
-        resp.resize((int)m_ctrlSocket->pendingDatagramSize());
-        QHostAddress sender;
-        quint16 senderPort;
-        m_ctrlSocket->readDatagram(resp.data(), resp.size(), &sender, &senderPort);
+        if (m_ctrlSocket->waitForReadyRead(timeout)) {
+            QByteArray resp;
+            resp.resize((int)m_ctrlSocket->pendingDatagramSize());
+            QHostAddress sender;
+            quint16 senderPort;
+            m_ctrlSocket->readDatagram(resp.data(), resp.size(), &sender, &senderPort);
 
-        if (resp.size() >= 12) {
-            quint16 ackCmd = read16(resp, 2);
-            if (ackCmd == GVCP_READREG_ACK) {
-                // ACK: 8 header + 4 status + 4 register value
-                if (resp.size() >= 16) {
-                    value = read32(resp, 12);
-                    return true;
+            if (resp.size() >= 12) {
+                quint16 ackCmd = read16(resp, 2);
+                if (ackCmd == GVCP_READREG_ACK) {
+                    if (resp.size() >= 16) {
+                        value = read32(resp, 12);
+                        return true;
+                    }
                 }
             }
         }
     }
+
+    VI_LOG_ERROR(QString("GigE READREG 失败: addr=0x%1 目标=%2 (3次重试均超时)")
+        .arg(address, 8, 16, QChar('0')).arg(m_deviceIp.toString()));
     return false;
 }
 
