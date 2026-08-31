@@ -413,11 +413,13 @@ bool GigECamera::readRegister(uint32_t address, uint32_t& value)
             quint16 senderPort;
             m_ctrlSocket->readDatagram(resp.data(), resp.size(), &sender, &senderPort);
 
-            if (resp.size() >= 12) {
+            // GVCP ACK头: status(2) + ack_cmd(2) + ack_length(2) + packet_id(2) = 8字节,
+            // 后随寄存器值(4字节). 必须校验发送方是目标相机 (否则读到自己的广播回显).
+            if (sender == m_deviceIp && resp.size() >= 12) {
                 quint16 ackCmd = read16(resp, 2);
                 if (ackCmd == GVCP_READREG_ACK) {
-                    if (resp.size() >= 16) {
-                        value = read32(resp, 12);
+                    if (resp.size() >= 12) {
+                        value = read32(resp, 8);
                         return true;
                     }
                 }
@@ -445,12 +447,15 @@ bool GigECamera::writeRegister(uint32_t address, uint32_t value)
     if (m_ctrlSocket->waitForReadyRead(500)) {
         QByteArray resp;
         resp.resize((int)m_ctrlSocket->pendingDatagramSize());
-        m_ctrlSocket->readDatagram(resp.data(), resp.size());
+        QHostAddress sender;
+        m_ctrlSocket->readDatagram(resp.data(), resp.size(), &sender);
 
-        if (resp.size() >= 12) {
+        // WRITEREG_ACK: status(2)+ack_cmd(2)+length(2)+packet_id(2)+index(2)+reserved(2)=12字节头,
+        // 状态字在偏移12. 同样必须校验来源是相机.
+        if (sender == m_deviceIp && resp.size() >= 16) {
             quint16 ackCmd = read16(resp, 2);
             if (ackCmd == GVCP_WRITEREG_ACK) {
-                quint32 status = read32(resp, 8);
+                quint32 status = read32(resp, 12);
                 return status == 0; // 0=成功
             }
         }
@@ -513,23 +518,35 @@ void GigECamera::processGvspPacket(const QByteArray& data)
     if (data.size() < 8) return;
 
     const char* p = data.constData();
-    // GVSP header: status(2) + header_size(1) + packet_type(1) + block_id(4) + packet_id(4)
-    // 但实际格式: block_id_high(2) + packet_id(2) + format_flag(1) + packet_type(1) + ...
-    // 简化: 按 packet_type 分类
+    // GVSP 包头 (GigE Vision 2.0 GVSP 格式):
+    //   status(2,大端) | block_id(2,大端) | 数据含义由第4字节 packet_format 决定:
+    //     0x01=LEADER 0x02=TRAILER 0x03=PAYLOAD(数据)
+    // 注意: leader 的图像信息在8字节扩展头之后 (offset 8+8=16 起为 payload):
+    //   16: x_padding+reso信息, leader 固定结构中 width@+28, height@+32,
+    //       pixel_format@+36 (相对包起点)
+    quint16 blockId = read16(p, 2);
+    quint8 packetFormat = (quint8)p[4];
+    quint8 packetStatus = (quint8)p[0] >> 0;  // 低字节在前? 实际 status 是大端2字节
+    Q_UNUSED(packetStatus);
 
-    quint16 blockId = read16(p, 0);
-    quint16 packetId = read16(p, 2);
-    quint8 formatId = (quint8)p[4];
-    quint8 packetType = (quint8)p[5];
+    // 状态非0 = 出错包, 丢弃
+    if (read16(p, 0) != 0) {
+        resetGvspState();
+        return;
+    }
 
-    Q_UNUSED(formatId);
+    // packet_format 字段 (p[4]): 低4位为实体格式, 0x8X 标志位忽略
+    const quint8 type = packetFormat & 0x0F;
 
-    if (packetType == GVSP_HEADER_LEADER) {
-        // 帧头: 解析图像信息
-        if (data.size() >= 36) {
-            m_imageWidth = (int)read32(p, 20);
-            m_imageHeight = (int)read32(p, 24);
-            m_pixelFormat = (int)read32(p, 28);
+    if (type == GVSP_HEADER_LEADER) {
+        // LEADER: 8字节GVSP头 + 8字节扩展头 + payload
+        // 标准leader payload: tag(4) + reserved(4) + x_offset(4) + y_offset(4)
+        //                     + width(4) + height(4) + pixel_format(4) ...
+        // 相对包头: width@28+16=... 按GIgeV2: payload起始=8, width@8+20, height@8+24, pf@8+28
+        if (data.size() >= 8 + 32) {
+            m_imageWidth = (int)read32(p, 8 + 20);
+            m_imageHeight = (int)read32(p, 8 + 24);
+            m_pixelFormat = (int)read32(p, 8 + 28);
 
             // 计算预期大小
             int bpp = 1;
@@ -548,8 +565,8 @@ void GigECamera::processGvspPacket(const QByteArray& data)
             m_frameComplete = false;
         }
     }
-    else if (packetType == GVSP_HEADER_DATA && m_leaderReceived) {
-        // 帧数据: 8字节 GVSP header 后面是像素数据
+    else if (type == GVSP_HEADER_DATA && m_leaderReceived) {
+        // PAYLOAD包: 标准头8字节(本格式下无扩展头)后即像素数据
         if (data.size() > 8) {
             QMutexLocker lk(&m_frameMutex);
             if (blockId == m_lastBlockId) {
@@ -558,8 +575,8 @@ void GigECamera::processGvspPacket(const QByteArray& data)
             }
         }
     }
-    else if (packetType == GVSP_HEADER_TRAILER && m_leaderReceived) {
-        // 帧尾: 一帧完成
+    else if (type == GVSP_HEADER_TRAILER && m_leaderReceived) {
+        // TRAILER: 一帧完成
         QMutexLocker lk(&m_frameMutex);
         if (blockId == m_lastBlockId) {
             m_frameComplete = true;
@@ -585,15 +602,16 @@ void GigECamera::onHeartbeat()
 {
     if (!m_isOpen) return;
 
-    // 发送心跳 (READREG 自己的寄存器, 或发 HEARTBEAT 命令)
-    // GVCP 心跳: 0x0003 = DISCOVERY 但实际应用中发 READREG 也行
-    // 更标准的做法: 发 CONTROL packet (cmd=0x0002, flag=0x0001)
+    // GVCP 心跳标准做法: 发 READREG 读任意安全寄存器 (相机回复即证明控制通道活跃).
+    // 之前的"CONTROL cmd=0x0002"是错误的 — 0x0002 是 DISCOVERY, 发出去会触发相机
+    // 广播式 DISCOVERY_ACK, 污染控制通道且不维持心跳.
+    uint32_t v = 0;
     quint16 pid = nextPacketId(m_lastPacketId);
-    QByteArray pkt = buildGvcpHeader(0x0002, 0x0000, pid); // CONTROL cmd
-    pkt.append(8, '\0');
+    QByteArray pkt = buildGvcpHeader(GVCP_READREG_CMD, 0x0001, pid);
+    append32(pkt, REG_DEVICE_MODE);   // 读设备模式寄存器作为心跳
     m_ctrlSocket->writeDatagram(pkt, m_deviceIp, m_devicePort);
 
-    // 非阻塞读 (清除可能的 ACK)
+    // 非阻塞读 (清除 ACK, 交由事件循环)
     while (m_ctrlSocket->hasPendingDatagrams()) {
         QByteArray r;
         r.resize((int)m_ctrlSocket->pendingDatagramSize());
