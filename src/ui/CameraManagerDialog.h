@@ -12,6 +12,7 @@
 #include <QVector>
 #include "../hal/ICameraDriver.h"
 #include "../hal/GigECamera.h"
+#include "../hal/BaslerCamera.h"
 
 namespace VisionInspector {
 
@@ -68,7 +69,7 @@ private:
     };
 
     QVector<SlotWidgets> m_slotWidgets;
-    QVector<GigECamera*> m_cameras;
+    QVector<ICameraDriver*> m_cameras;
     QVector<CameraSlotConfig> m_configs;
 };
 

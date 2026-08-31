@@ -13,6 +13,10 @@ target_sources(VIHAL PRIVATE
     GigECamera.h
     GigECamera.cpp
 
+    # 巴斯勒 Pylon 相机驱动 (动态加载系统中的 Pylon DLL)
+    BaslerCamera.h
+    BaslerCamera.cpp
+
     # Virtual camera driver (无硬件开发/演示)
     VirtualCamera.h
     VirtualCamera.cpp
