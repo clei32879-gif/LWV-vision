@@ -175,7 +175,7 @@ void CameraManagerDialog::onConnectClicked(int index)
         return;
     }
 
-    // 创建相机驱动
+    // 创建相机驱动: GigE通用 (兼容所有GigE相机)
     if (!m_cameras[index]) {
         m_cameras[index] = new GigECamera();
     }

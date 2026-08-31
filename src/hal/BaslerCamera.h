@@ -56,8 +56,11 @@ public:
 
     QString lastError() const { return m_lastError; }
 
-    /// 是否成功加载了 Pylon DLL
-    bool isPylonLoaded() const { return m_pylonLoaded; }
+    /// 是否成功加载了 Pylon DLL (懒加载: 首次调用时尝试加载)
+    bool isPylonLoaded() {
+        if (!m_pylonLoaded && !m_dllHandle) loadPylonDll();
+        return m_pylonLoaded;
+    }
 
 private:
     bool loadPylonDll();

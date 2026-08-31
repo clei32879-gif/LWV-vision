@@ -57,7 +57,7 @@ MainWindow::MainWindow(QWidget* parent)
     m_hardware = new HardwareManager(this);
     m_projectMgr->setServices(m_flowEngine, m_globalVars);
 
-    // 相机驱动: GigE Vision 通用驱动 (支持度申/海康/巴斯勒所有GigE相机, 无SDK依赖)
+    // 相机驱动: 默认GigE通用, 用户在相机管理对话框中可选BaslerCamera
     setCameraDriver(new GigECamera(this));
 
     qDebug() << "MainWindow: About to call setupUI...";
