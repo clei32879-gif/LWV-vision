@@ -267,8 +267,7 @@ void MainWindow::createMenus() {
     aiMenu->addAction(QString::fromUtf8("YOLO检测教导向导..."), this, &MainWindow::onYoloTeachWizard);
 
     QMenu* camMenu = menuBar()->addMenu(QString::fromUtf8("\u76f8\u673a(&C)"));
-    camMenu->addAction(QString::fromUtf8("\u626b\u63cf\u76f8\u673a"), this, &MainWindow::onScanCameras);
-    camMenu->addAction(QString::fromUtf8("\u6253\u5f00/\u5173\u95ed\u76f8\u673a"), this, &MainWindow::onOpenCamera);
+    camMenu->addAction(QString::fromUtf8("\u76f8\u673a\u7ba1\u7406 (CCD1~8)"), this, &MainWindow::onScanCameras);
     camMenu->addAction(QString::fromUtf8("\u4f7f\u7528\u865a\u62df\u76f8\u673a"), this, &MainWindow::onUseVirtualCamera);
 
     QMenu* opMenu = menuBar()->addMenu(QString::fromUtf8("\u64cd\u4f5c(&O)"));
@@ -381,10 +380,8 @@ void MainWindow::createToolBar() {
 
     m_mainToolBar->addSeparator();
 
-    act = m_mainToolBar->addAction(IconHelper::scanIcon(), QString::fromUtf8("\u626b\u63cf"));
+    act = m_mainToolBar->addAction(IconHelper::cameraIcon(), QString::fromUtf8("\u76f8\u673a\u7ba1\u7406"));
     connect(act, &QAction::triggered, this, &MainWindow::onScanCameras);
-    act = m_mainToolBar->addAction(IconHelper::cameraIcon(), QString::fromUtf8("\u76f8\u673a"));
-    connect(act, &QAction::triggered, this, &MainWindow::onOpenCamera);
 
     m_mainToolBar->addSeparator();
     act = m_mainToolBar->addAction(IconHelper::userIcon(), QString::fromUtf8("\u7528\u6237"));
@@ -908,38 +905,30 @@ void MainWindow::applyUserRole(UserRole role) {
 // ============================================================
 
 void MainWindow::onScanCameras() {
-    if (!m_camera) return;
-    m_statusLabel->setText("正在扫描...");
-    m_logPanel->appendLog("正在扫描相机...");
-    QList<CameraInfo> cameras = m_camera->enumerateCameras();
-    if (cameras.isEmpty()) {
-        m_statusLabel->setText("未找到相机");
-        m_logPanel->appendLog("未找到相机，请检查网络连接");
-        m_connectionLabel->setText("无相机");
-    } else {
-        m_logPanel->appendLog(QString("找到 %1 台相机:").arg(cameras.size()));
-        for (const auto& cam : cameras) {
-            m_logPanel->appendLog(QString("  - %1 %2 (ID: %3)").arg(cam.vendor).arg(cam.model).arg(cam.id));
-        }
-        m_connectionLabel->setText(QString("%1 台相机").arg(cameras.size()));
-        if (cameras.size() == 1) {
-            m_statusLabel->setText("正在打开...");
-            if (m_camera->openCamera(cameras[0].id)) {
-                m_cameraLabel->setText(QString("相机: %1").arg(cameras[0].model));
-                m_connectionLabel->setText("已连接");
-                m_logPanel->appendLog("相机已打开");
-                if (m_camera->startAcquisition()) {
-                    m_statusLabel->setText("采集中");
-                    m_logPanel->appendLog("已开始采集");
+    // 弹出相机管理对话框 (CCD1~CCD8 手动IP配置)
+    if (!m_cameraManager) {
+        m_cameraManager = new CameraManagerDialog(this);
+        connect(m_cameraManager, &CameraManagerDialog::cameraStatusChanged,
+                this, [this](int index, bool connected, const QString& info) {
+            if (index == 0 && connected) {
+                // CCD1 连接成功, 切换主相机驱动
+                ICameraDriver* cam = m_cameraManager->cameraAt(0);
+                if (cam) {
+                    setCameraDriver(cam);
+                    m_cameraLabel->setText(QString("CCD1: %1").arg(info));
+                    m_connectionLabel->setText("已连接");
+                    // 开始采集
+                    cam->startAcquisition();
                 }
-            } else {
-                m_statusLabel->setText("打开失败");
-                m_logPanel->appendLog("打开相机失败");
+            } else if (index == 0 && !connected) {
+                m_cameraLabel->setText("相机: 无");
+                m_connectionLabel->setText("无相机");
             }
-        } else {
-            QMessageBox::information(this, "扫描结果", QString("找到 %1 台相机").arg(cameras.size()));
-        }
+        });
     }
+    m_cameraManager->show();
+    m_cameraManager->raise();
+    m_cameraManager->activateWindow();
 }
 
 void MainWindow::onOpenCamera() {

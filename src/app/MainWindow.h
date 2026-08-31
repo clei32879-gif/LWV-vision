@@ -14,6 +14,7 @@
 #include "../hal/ICameraDriver.h"
 #include "../hal/GigECamera.h"
 #include "../hal/VirtualCamera.h"
+#include "../ui/CameraManagerDialog.h"
 #include "../ui/widgets/MultiViewWidget.h"
 #include <QMainWindow>
 #include <QSplitter>
@@ -100,7 +101,8 @@ private:
     FlowEngine* m_flowEngine = nullptr;
     GlobalStats* m_stats = nullptr;
     HardwareManager* m_hardware = nullptr;
-    ICameraDriver* m_camera = nullptr;      // 当前相机驱动(度申/虚拟相机等)
+    ICameraDriver* m_camera = nullptr;      // 当前相机驱动
+    CameraManagerDialog* m_cameraManager = nullptr; // 相机管理对话框
 
     void setCameraDriver(ICameraDriver* cam); // 切换驱动并重连信号
 

@@ -42,6 +42,10 @@ target_sources(VIUI PRIVATE
     PlcSimulatorDialog.h
     PlcSimulatorDialog.cpp
 
+    # 相机管理对话框 (CCD1~CCD8 手动IP配置)
+    CameraManagerDialog.h
+    CameraManagerDialog.cpp
+
     # 设置类对话框 (系统/项目/全局变量) 与登录
     SettingsDialogs.h
     SettingsDialogs.cpp
