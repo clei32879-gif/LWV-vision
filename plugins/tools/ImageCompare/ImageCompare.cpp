@@ -1,4 +1,4 @@
-﻿#include "ImageCompare.h"
+#include "ImageCompare.h"
 #include "../../../src/engine/ToolRegistry.h"
 #ifdef VI_HAS_OPENCV
 #include <opencv2/imgproc.hpp>
@@ -25,7 +25,7 @@ bool ImageCompare::execute(ToolContext& context) {
     if (!input || input->empty()) { setStatus(ToolStatus::NG); setResultData("error", "输入图像为空"); return false; }
 
     QString templatePath = propertyValue("templatePath").toString();
-    cv::Mat templ = cv::imread(templatePath.toUtf8().constData(), cv::IMREAD_GRAYSCALE);
+    cv::Mat templ = cachedTemplateImage(templatePath, cv::IMREAD_GRAYSCALE);   // #8 模板缓存
     if (templ.empty()) { setStatus(ToolStatus::NG); setResultData("error", "无法加载模板"); return false; }
 
     cv::Mat src;

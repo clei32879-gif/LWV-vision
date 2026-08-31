@@ -2,9 +2,12 @@
 #include "ToolRegistry.h"
 #include <QJsonArray>
 #include <QDebug>
+#include <QFileInfo>
+#include <QDateTime>
 #include <cmath>
 #ifdef VI_HAS_OPENCV
 #include <opencv2/imgproc.hpp>
+#include <opencv2/imgcodecs.hpp>
 #endif
 
 namespace VisionInspector {
@@ -199,6 +202,41 @@ cv::Mat ITool::makeRoiShapeMask(const ROIRegion& roi, const QRectF& roiRect)
         return cv::Mat();
     }
     return mask;
+}
+
+cv::Mat ITool::cachedTemplateImage(const QString& path, int flags)
+{
+    struct CacheEntry {
+        cv::Mat image;
+        QDateTime lastModified;
+    };
+    static QMutex s_mutex;
+    static QMap<QString, CacheEntry> s_cache;
+
+    if (path.isEmpty()) return cv::Mat();
+
+    const QDateTime mtime = QFileInfo(path).lastModified();
+    const QString key = QStringLiteral("%1|%2").arg(path).arg(flags);
+
+    QMutexLocker lock(&s_mutex);
+    auto it = s_cache.find(key);
+    if (it != s_cache.end()) {
+        // 文件未变化 → 直接复用缓存 (每帧省一次磁盘IO)
+        if (it->lastModified == mtime && !it->image.empty())
+            return it->image;
+    }
+    lock.unlock();
+
+    cv::Mat img = cv::imread(path.toUtf8().constData(), flags);
+
+    lock.relock();
+    CacheEntry& e = s_cache[key];
+    e.image = img;
+    e.lastModified = mtime;
+    // 缓存上限保护: 防止异常路径无限增长 (正常使用只有几个模板)
+    while (s_cache.size() > 32)
+        s_cache.erase(s_cache.begin());
+    return e.image;
 }
 #endif
 

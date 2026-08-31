@@ -26,7 +26,7 @@ bool ContourCompare::execute(ToolContext& context) {
     QString templatePath = propertyValue("templatePath").toString();
     double threshold = propertyValue("threshold").toDouble();
     double minArea = propertyValue("minArea").toDouble();
-    cv::Mat templ = cv::imread(templatePath.toUtf8().constData(), cv::IMREAD_GRAYSCALE);
+    cv::Mat templ = cachedTemplateImage(templatePath, cv::IMREAD_GRAYSCALE);   // #8 模板缓存
     if (templ.empty()) { setStatus(ToolStatus::NG); setResultData("error", "无法加载模板"); return false; }
     // 提取模板轮廓
     cv::Mat templBin;

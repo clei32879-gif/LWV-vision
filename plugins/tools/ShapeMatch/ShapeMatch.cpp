@@ -83,7 +83,7 @@ bool ShapeMatch::execute(ToolContext& context) {
     double scaleRange = propertyValue("scaleRange").toDouble();   // 缩放搜索范围
     int cannyLow = propertyValue("cannyLow").toInt();
     int cannyHigh = propertyValue("cannyHigh").toInt();
-    cv::Mat templ = cv::imread(templatePath.toUtf8().constData(), cv::IMREAD_GRAYSCALE);
+    cv::Mat templ = cachedTemplateImage(templatePath, cv::IMREAD_GRAYSCALE);   // #8 模板缓存
     if (templ.empty()) { setStatus(ToolStatus::NG); setResultData("error", "无法加载模板"); return false; }
     cv::Mat src;
     if (input->channels() > 1) cv::cvtColor(*input, src, cv::COLOR_BGR2GRAY);

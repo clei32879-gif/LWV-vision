@@ -17,12 +17,18 @@
 #include "../utils/Common.h"
 #include "ToolContext.h"
 #include "ROI.h"
+#ifdef VI_HAS_OPENCV
+#include <opencv2/core.hpp>
+#include <opencv2/imgcodecs.hpp>
+#endif
 #include <QObject>
 #include <QString>
 #include <QVariant>
 #include <QIcon>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QMutex>
+#include <QMap>
 #include <memory>
 #include <functional>
 #include <mutex>
@@ -263,6 +269,13 @@ protected:
      * roiRect 为工具已裁剪的局部ROI外接矩形; roi 为完整ROI定义(坐标系一致)。
      */
     static cv::Mat makeRoiShapeMask(const ROIRegion& roi, const QRectF& roiRect);
+
+    /**
+     * 模板图像缓存 (#8 性能): 匹配类工具每帧都读模板文件是纯磁盘IO浪费。
+     * 按 路径+flags 缓存 imread 结果; 文件修改时间变化时自动重读。
+     * 返回的 Mat 为缓存共享对象, 调用方不得就地修改 (需要修改时自行clone)。
+     */
+    static cv::Mat cachedTemplateImage(const QString& path, int flags = cv::IMREAD_GRAYSCALE);
 #endif
 
     /**

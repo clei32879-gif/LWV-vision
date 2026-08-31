@@ -42,7 +42,7 @@ bool GrayscaleMatch::execute(ToolContext& context) {
     const double scaleMin = std::max(0.1, propertyValue("scaleMin").toDouble());
     const double scaleMax = std::max(scaleMin, propertyValue("scaleMax").toDouble());
 
-    cv::Mat templ = cv::imread(templatePath.toUtf8().constData(), cv::IMREAD_GRAYSCALE);
+    cv::Mat templ = cachedTemplateImage(templatePath, cv::IMREAD_GRAYSCALE);   // #8 模板缓存
     if (templ.empty()) {
         setStatus(ToolStatus::NG);
         setResultData("error", QString("无法加载模板: %1").arg(templatePath));
