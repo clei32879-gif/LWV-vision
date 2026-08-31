@@ -13,6 +13,9 @@
 
 #include "../utils/Common.h"
 #include <QVariant>
+#include <QRectF>
+#include <QPointF>
+#include <cmath>
 #include <vector>
 #include <QMap>
 #include <QString>
@@ -127,6 +130,64 @@ public:
     const QVariantList& overlays() const { return m_overlays; }
 
     // --------------------------------------------------------
+    // 坐标系服务 (位置补正→ROI自动跟随, 对齐CKVision流程灵魂)
+    // --------------------------------------------------------
+
+    /**
+     * 设置当前补正坐标系 (由 PositionCorrection 调用):
+     *   图像点 p 在补正坐标系下的定义: p_img = R(θ)·p_local + origin
+     * 即: 模板教导时工件在"标准位置", 实际工件平移了origin、旋转了θ.
+     * 后续工具用 transformPoint/transformRect 把教导时的ROI变换到当前图像坐标.
+     */
+    void setCoordinateFrame(double cosT, double sinT, double originX, double originY) {
+        m_cfActive = true;
+        m_cfCos = cosT; m_cfSin = sinT;
+        m_cfOriginX = originX; m_cfOriginY = originY;
+    }
+
+    /** 清除坐标系 (由 EndCorrection 调用, 恢复模板坐标=图像坐标) */
+    void clearCoordinateFrame() { m_cfActive = false; }
+
+    bool hasCoordinateFrame() const { return m_cfActive; }
+
+    /**
+     * 把"教导时的点"变换到"当前图像坐标":
+     *   实际位置 = 教导位置相对标准位置的偏移 施加到教导点
+     *   p_img = p_teach + (origin - teachOrigin), 再绕origin旋转θ
+     * 简化实现(与CKVision一致的工程语义):
+     *   d = (origin - 教导标准原点) 不需要 — 直接用: 先绕原点旋转, 再平移
+     *   p_img = R(θ)·(p_teach - p_ref) + origin + p_ref - p_ref
+     * 其中 p_ref = 教导时标准参考点(即补正前定位位置). 由于 PositionCorrection
+     * 已经把 origin 设为"当前实际定位点", 语义为:
+     *   p_img = R(θ)·(p_teach - teachRef) + actualRef
+     * teachRef 由首次 setCoordinateFrame 时记录的参考点给出 — 这里用最简模型:
+     * 直接旋转+平移: p_img = R(θ)·p_teach_offset + actual
+     * 工程上等价于: 工具教导ROI以"标准位置工件中心"为基准, 运行时跟随.
+     */
+    QPointF transformPoint(const QPointF& teachPt) const {
+        if (!m_cfActive) return teachPt;
+        const double dx = teachPt.x();  // 相对标准位置的量(工具的ROI参数即相对量)
+        const double dy = teachPt.y();
+        return QPointF(m_cfCos * dx - m_cfSin * dy + m_cfOriginX,
+                       m_cfSin * dx + m_cfCos * dy + m_cfOriginY);
+    }
+
+    /** 变换矩形ROI: 中心按坐标系变换, 尺寸不变, 返回轴对齐外接矩形 */
+    QRectF transformRect(const QRectF& teachRect) const {
+        if (!m_cfActive) return teachRect;
+        const QPointF c = transformPoint(teachRect.center());
+        return QRectF(c.x() - teachRect.width() / 2,
+                      c.y() - teachRect.height() / 2,
+                      teachRect.width(), teachRect.height());
+    }
+
+    /** 变换角度 (工具的扫描角度叠加补正角) */
+    double transformAngle(double teachAngleDeg) const {
+        if (!m_cfActive) return teachAngleDeg;
+        return teachAngleDeg + std::atan2(m_cfSin, m_cfCos) * 180.0 / M_PI;
+    }
+
+    // --------------------------------------------------------
     // 消息值 (流程控制用, 对应CKVision的消息机制)
     // --------------------------------------------------------
 
@@ -167,6 +228,7 @@ public:
         m_data.clear();
         m_toolResults.clear();
         m_overlays.clear();
+        clearCoordinateFrame();
         m_message = 0;
         // 不清空硬件接口和全局变量
     }
@@ -177,6 +239,11 @@ private:
     QMap<QString, DataMap> m_toolResults;    // 各工具的结果归档
     QVariantList m_overlays;                 // 结果叠加图形
     int m_message = 0;                   // 消息值
+
+    // 坐标系服务 (PositionCorrection写入 / EndCorrection清除)
+    bool m_cfActive = false;
+    double m_cfCos = 1.0, m_cfSin = 0.0;
+    double m_cfOriginX = 0.0, m_cfOriginY = 0.0;
 
     // 硬件接口 (非拥有, 由外部设置)
     ICameraDriver* m_camera = nullptr;

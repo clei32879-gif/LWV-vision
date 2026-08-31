@@ -52,6 +52,8 @@ bool PositionCorrection::execute(ToolContext& context) {
     context.setData("coord_sin", std::sin(rad));
     context.setData("coord_originX", correctedX);
     context.setData("coord_originY", correctedY);
+    // 坐标系服务: 后续检测工具的ROI自动跟随本补正坐标系
+    context.setCoordinateFrame(std::cos(rad), std::sin(rad), correctedX, correctedY);
 
     setResultData("correctedX", correctedX);
     setResultData("correctedY", correctedY);

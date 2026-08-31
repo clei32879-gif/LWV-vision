@@ -10,6 +10,8 @@ PropertyDefList EndCorrection::propertyDefs() const {
 }
 
 bool EndCorrection::execute(ToolContext& context) {
+    // 结束补正: 清除坐标系, 恢复图像坐标 (与PositionCorrection成对)
+    context.clearCoordinateFrame();
     // 清除坐标系修正，恢复原始坐标
     context.setData("correctedX", 0.0);
     context.setData("correctedY", 0.0);
