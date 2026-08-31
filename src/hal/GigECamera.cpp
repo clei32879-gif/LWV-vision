@@ -206,20 +206,27 @@ bool GigECamera::openCamera(const QString& cameraId)
     }
     m_devicePort = 3956;
 
-    // 自动查找与相机IP在同一子网的本地网卡
-    // 针对 169.254.x.x 多网口配置: 每个网口独立网段
+    // 自动查找与相机IP对应的本地网卡
+    // 针对 169.254.x.x 多网口配置:
+    //   CCD1 网卡 169.254.1.1  →  相机 169.254.1.11
+    //   CCD2 网卡 169.254.2.2  →  相机 169.254.2.22
+    // 匹配规则: 本地IP的第三段 == 相机IP的第三段
     QHostAddress localBindAddr = QHostAddress::Any;
+    quint32 camIpVal = m_deviceIp.toIPv4Address();
+    int camThirdOctet = (camIpVal >> 8) & 0xFF;  // 第三段
+
+    VI_LOG_INFO(QString("GigE: 相机IP %1, 第三段=%2, 正在匹配本地网卡...")
+        .arg(cameraId).arg(camThirdOctet));
+
     const auto interfaces = QNetworkInterface::allInterfaces();
     for (const auto& iface : interfaces) {
         if (!(iface.flags() & QNetworkInterface::IsUp)) continue;
         if (iface.flags() & QNetworkInterface::IsLoopBack) continue;
         for (const auto& entry : iface.addressEntries()) {
             if (entry.ip().protocol() != QAbstractSocket::IPv4Protocol) continue;
-            // 检查相机IP是否在这个网卡的子网内
-            QHostAddress netmask = entry.netmask();
-            quint32 camNet = m_deviceIp.toIPv4Address() & netmask.toIPv4Address();
-            quint32 ifNet = entry.ip().toIPv4Address() & netmask.toIPv4Address();
-            if (camNet == ifNet) {
+            quint32 localIpVal = entry.ip().toIPv4Address();
+            int localThirdOctet = (localIpVal >> 8) & 0xFF;
+            if (localThirdOctet == camThirdOctet) {
                 localBindAddr = entry.ip();
                 VI_LOG_INFO(QString("GigE: 匹配网卡 %1 (%2) → 相机 %3")
                     .arg(iface.humanReadableName(), entry.ip().toString(), cameraId));
