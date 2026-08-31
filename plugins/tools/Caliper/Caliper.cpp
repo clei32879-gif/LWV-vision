@@ -2,10 +2,14 @@
  * @file Caliper.cpp
  * @brief 卡尺测量工具 — 亚像素版
  *
- * 算法 (阶段2升级):
+ * 算法 (阶段2升级 + #4 边缘对模式):
  *   1. 旋转卡尺: 沿ROI角度方向的扫描线(长度=roiWidth, 宽度=scanWidth平均)
  *   2. 双线性剖面采样 + 梯度峰值抛物线内插 → 亚像素边缘位置
- * 输出: edgePositionX/Y(图像坐标), width(沿扫描方向距离), strength, found
+ *   3. 边缘对模式: 找剖面上全部边缘, 按"边缘选择"输出
+ *      - 第一边缘: 扫描起点到第一条边缘的距离 (原行为, 兼容)
+ *      - 第一对/最强对: 两条边缘之间的真实间距 (对齐CKVision卡尺)
+ *      - 全部边缘: 输出全部边缘位置与相邻间距
+ * 输出: edgePositionX/Y(图像坐标), width(边缘间距), strength, found, edgeCount
  */
 #include "Caliper.h"
 #include "../../../src/engine/ToolRegistry.h"
@@ -15,6 +19,7 @@
 #endif
 #include <cmath>
 #include <QVariantMap>
+#include <QVariantList>
 
 namespace VisionInspector {
 
@@ -27,6 +32,8 @@ PropertyDefList Caliper::propertyDefs() const {
         PropertyDef::doubleProp("roiHeight", "卡尺宽度(平均高)", 10, 1, 1000, "卡尺"),
         PropertyDef::doubleProp("roiAngle", "卡尺角度", 0, -180, 180, "卡尺"),
         PropertyDef::boolProp("useCorrection", "跟随位置补正", false, "卡尺"),
+        PropertyDef::enumProp("edgeMode", "边缘模式",
+                              {"第一边缘", "第一对边缘", "最强对边缘", "全部边缘"}, 1, "检测"),
         PropertyDef::enumProp("edgePolarity", "边缘极性", {"任意", "亮到暗", "暗到亮"}, 0, "检测"),
         PropertyDef::intProp("gradientThreshold", "梯度阈值", 30, 1, 255, "检测"),
         PropertyDef::intProp("filterHalfWidth", "梯度平滑半宽", 2, 1, 20, "检测"),
@@ -63,21 +70,108 @@ bool Caliper::execute(ToolContext& context) {
     m_scanStart = cv::Point2d(cx - u.x * roiW / 2, cy - u.y * roiW / 2);
     m_scanEnd   = cv::Point2d(cx + u.x * roiW / 2, cy + u.y * roiW / 2);
 
-    SubpixEdgePoint ep;
-    m_lastOk = findEdgeSubpix(src, m_scanStart, m_scanEnd, opt, ep);
-    if (!m_lastOk) {
+    // 全部边缘 (按扫描顺序)
+    const std::vector<SubpixEdgePoint> edges =
+        findEdgesSubpix(src, m_scanStart, m_scanEnd, opt, 0);
+    m_edges.clear();
+    for (const auto& e : edges) m_edges.push_back(e.pos);
+
+    const int edgeMode = propertyValue("edgeMode").toInt();
+    setResultData("edgeCount", (int)edges.size());
+
+    if (edges.empty()) {
         setResultData("found", false);
         setResultData("error", "扫描方向未找到超阈值边缘");
         setStatus(ToolStatus::NG);
         return false;
     }
 
-    m_edge = ep.pos;
-    const double dist = std::hypot(ep.pos.x - m_scanStart.x, ep.pos.y - m_scanStart.y);
-    setResultData("edgePositionX", ep.pos.x);
-    setResultData("edgePositionY", ep.pos.y);
-    setResultData("width", dist);
-    setResultData("strength", ep.strength);
+    // 距离: 边缘沿扫描方向距起点的距离
+    auto distFromStart = [&](const SubpixEdgePoint& e) {
+        return std::hypot(e.pos.x - m_scanStart.x, e.pos.y - m_scanStart.y);
+    };
+
+    // ---- 全部边缘模式: 输出列表 + 相邻间距 ----
+    if (edgeMode == 3) {
+        QVariantList xs, ys, strengths, gaps;
+        double prev = -1;
+        for (const auto& e : edges) {
+            const double d = distFromStart(e);
+            xs.append(e.pos.x); ys.append(e.pos.y); strengths.append(e.strength);
+            if (prev >= 0) gaps.append(d - prev);
+            prev = d;
+        }
+        setResultData("edgeXs", xs);
+        setResultData("edgeYs", ys);
+        setResultData("edgeStrengths", strengths);
+        setResultData("edgeGaps", gaps);
+        // width = 首末边缘总跨度; 主边缘 = 最强
+        size_t best = 0;
+        for (size_t i = 1; i < edges.size(); ++i)
+            if (edges[i].strength > edges[best].strength) best = i;
+        m_edge = edges[best].pos;
+        setResultData("edgePositionX", edges[best].pos.x);
+        setResultData("edgePositionY", edges[best].pos.y);
+        setResultData("width", distFromStart(edges.back()) - distFromStart(edges.front()));
+        setResultData("strength", edges[best].strength);
+        setResultData("found", true);
+        setStatus(ToolStatus::OK);
+        return true;
+    }
+
+    // ---- 单边缘模式 (原行为): 第一条边缘, width=起点到边缘距离 ----
+    if (edgeMode == 0) {
+        const SubpixEdgePoint& e = edges.front();
+        m_edge = e.pos;
+        setResultData("edgePositionX", e.pos.x);
+        setResultData("edgePositionY", e.pos.y);
+        setResultData("width", distFromStart(e));
+        setResultData("strength", e.strength);
+        setResultData("found", true);
+        setStatus(ToolStatus::OK);
+        return true;
+    }
+
+    // ---- 边缘对模式: 至少2条边缘 ----
+    if (edges.size() < 2) {
+        // 只有1条边缘: 退化为单边缘语义 (保持结果可用)
+        const SubpixEdgePoint& e = edges.front();
+        m_edge = e.pos;
+        setResultData("edgePositionX", e.pos.x);
+        setResultData("edgePositionY", e.pos.y);
+        setResultData("width", distFromStart(e));
+        setResultData("strength", e.strength);
+        setResultData("found", true);
+        setResultData("error", "仅找到1条边缘, 无边缘对");
+        setStatus(ToolStatus::OK);
+        return true;
+    }
+
+    // 第一对: 第1、2条边缘 / 最强对: 以最强边缘为中心取其相邻更近一侧组成对?
+    // CKVision语义: 最强对=所有相邻对中"两条都强"的组合 — 简化为:
+    //   第一对 = edges[0], edges[1]
+    //   最强对 = 强度最大的两条相邻边缘 (按强度和最大)
+    size_t i1 = 0, i2 = 1;
+    if (edgeMode == 2) {
+        double bestSum = -1;
+        for (size_t i = 0; i + 1 < edges.size(); ++i) {
+            const double s = edges[i].strength + edges[i + 1].strength;
+            if (s > bestSum) { bestSum = s; i1 = i; i2 = i + 1; }
+        }
+    }
+    const SubpixEdgePoint& e1 = edges[i1];
+    const SubpixEdgePoint& e2 = edges[i2];
+    const double gap = distFromStart(e2) - distFromStart(e1);
+
+    m_edge = (e1.strength >= e2.strength) ? e1.pos : e2.pos;
+    setResultData("edgePositionX", m_edge.x);
+    setResultData("edgePositionY", m_edge.y);
+    setResultData("edge1X", e1.pos.x);
+    setResultData("edge1Y", e1.pos.y);
+    setResultData("edge2X", e2.pos.x);
+    setResultData("edge2Y", e2.pos.y);
+    setResultData("width", gap);
+    setResultData("strength", std::max(e1.strength, e2.strength));
     setResultData("found", true);
     setStatus(ToolStatus::OK);
     return true;
@@ -94,13 +188,13 @@ std::vector<QVariant> Caliper::overlays() const {
     box["x2"] = m_scanEnd.x;   box["y2"] = m_scanEnd.y;
     box["color"] = "#00aaff";
     out.push_back(box);
-    if (m_lastOk) {
-        // 找到的边缘点(黄色)
+    // 全部边缘点(黄色)
+    for (const auto& p : m_edges) {
         QVariantMap cross;
         cross["type"] = "cross";
-        cross["cx"] = m_edge.x;
-        cross["cy"] = m_edge.y;
-        cross["size"] = 6.0;
+        cross["cx"] = p.x;
+        cross["cy"] = p.y;
+        cross["size"] = 5.0;
         cross["color"] = "#ffff00";
         out.push_back(cross);
     }

@@ -20,6 +20,7 @@ private:
 #ifdef VI_HAS_OPENCV
     // 结果缓存(供叠加层绘制)
     cv::Point2d m_scanStart{0, 0}, m_scanEnd{0, 0}, m_edge{0, 0};
+    std::vector<cv::Point2d> m_edges;   // 全部边缘点(叠加层用)
     bool m_lastOk = false;
 #endif
 };
