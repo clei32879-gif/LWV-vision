@@ -332,6 +332,8 @@ struct ToolMetaData {
     QString displayName;
     ToolCategory category;
     ToolCreateFunc createFunc;
+    // 中文说明(工具箱悬浮/属性对话框展示); 宏注册留空, 由 ToolRegistry 说明表填充
+    QString description;
 };
 
 } // namespace VisionInspector

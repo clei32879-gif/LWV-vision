@@ -82,9 +82,12 @@ void Toolbox::refreshTools() {
         for (const auto& meta : byCategory[cat]) {
             auto* item = new QTreeWidgetItem(group, QStringList{meta.displayName});
             item->setData(0, Qt::UserRole, meta.typeName);
-            // 悬浮提示: 工具名 + 所属分类 + 类型名(供属性引用 $(类型名) 时查)
-            item->setToolTip(0, QStringLiteral("%1\n分类：%2\n类型名：%3")
-                .arg(meta.displayName, categoryToString(cat), meta.typeName));
+            item->setData(0, Qt::UserRole + 1, meta.description); // 供搜索匹配描述关键词
+            // 悬浮提示: 工具名 + 说明 + 所属分类 + 类型名(供属性引用 $(类型名) 时查)
+            item->setToolTip(0, QStringLiteral("%1\n%2\n分类：%3 ｜ 类型名：%4")
+                .arg(meta.displayName,
+                     meta.description.isEmpty() ? QStringLiteral("（暂无说明）") : meta.description,
+                     categoryToString(cat), meta.typeName));
             // 优先使用该工具的专属素材图标, 无素材时内部回退分类图标
             item->setIcon(0, IconHelper::toolIcon(meta.typeName, meta.category, 16));
         }
@@ -101,9 +104,11 @@ void Toolbox::applyFilter(const QString& text) {
         int visible = 0;
         for (int j = 0; j < group->childCount(); ++j) {
             auto* item = group->child(j);
+            // 显示名/类型名/中文描述 任一命中即显示 (搜"报警"能找到播放声音)
             const bool hit = needle.isEmpty()
                 || item->text(0).contains(needle, Qt::CaseInsensitive)
-                || item->data(0, Qt::UserRole).toString().contains(needle, Qt::CaseInsensitive);
+                || item->data(0, Qt::UserRole).toString().contains(needle, Qt::CaseInsensitive)
+                || item->data(0, Qt::UserRole + 1).toString().contains(needle, Qt::CaseInsensitive);
             item->setHidden(!hit);
             if (hit) ++visible;
         }

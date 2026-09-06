@@ -1,5 +1,6 @@
 #include "PropertyDialog.h"
 #include "IconHelper.h"
+#include "../engine/ToolRegistry.h"
 #include "widgets/ImageViewWidget.h"
 #include <QVBoxLayout>
 #include <QFormLayout>
@@ -63,6 +64,16 @@ void PropertyDialog::buildUI() {
     basicForm->addRow(new QLabel(
         QStringLiteral("类型: %1    分类: %2")
             .arg(m_tool->typeName(), categoryToString(m_tool->category())), basicPage));
+    // 工具说明: 告诉新用户这个工具是干什么的
+    {
+        const QString desc = ToolRegistry::instance().metaData(m_tool->typeName()).description;
+        if (!desc.isEmpty()) {
+            auto* descLabel = new QLabel(desc, basicPage);
+            descLabel->setWordWrap(true);
+            descLabel->setStyleSheet("color: #9aa0a6; padding: 2px;");
+            basicForm->addRow(descLabel);
+        }
+    }
     m_tabs->addTab(basicPage, QStringLiteral("基本设置"));
 
     // ============ 页签2: 参数设置 ============
