@@ -46,6 +46,10 @@ target_sources(VIUI PRIVATE
     HistoryDialog.h
     HistoryDialog.cpp
 
+    # DIY布局运行时渲染器 (阶段6 DIY界面)
+    RuntimeUI.h
+    RuntimeUI.cpp
+
     # PLC模拟器对话框 (Modbus TCP从站)
     PlcSimulatorDialog.h
     PlcSimulatorDialog.cpp

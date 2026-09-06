@@ -30,6 +30,10 @@ public:
     QString label() const { return m_label; }
     void setLabel(const QString& label);
 
+    /** 绑定: ValueDisplay=数据键(工具名.结果键) / Button=动作(run|start|stop); 其余类型未用 */
+    QString bind() const { return m_bind; }
+    void setBind(const QString& b) { m_bind = b; }
+
     // 序列化
     QJsonObject toJson() const;
     void fromJson(const QJsonObject& obj);
@@ -47,6 +51,7 @@ private:
     WidgetType m_type;
     QString m_widgetId;
     QString m_label;
+    QString m_bind;
     QColor m_headerColor;
 
     void applyStyle();
@@ -125,6 +130,7 @@ private slots:
     void onCanvasSelectionChanged(const QString& widgetId);
     void onPropertyEdited();
     void onWidgetLabelEdited();
+    void onBindEdited();
 
 private:
     void setupUI();
@@ -154,6 +160,7 @@ private:
     QSpinBox* m_wSpin = nullptr;
     QSpinBox* m_hSpin = nullptr;
     QLabel* m_typeLabel = nullptr;
+    QLineEdit* m_bindEdit = nullptr;   // 绑定键(数值显示)/动作(按钮)
 
     // ── 状态 ──
     QString m_selectedId;

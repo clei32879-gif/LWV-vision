@@ -19,6 +19,7 @@
 #include "../ui/AnnotationDialog.h"
 #include "../ui/TemplateDialog.h"
 #include "../ui/HistoryDialog.h"
+#include "../ui/RuntimeUI.h"
 #include "../ui/TeachWizard.h"
 #include "../ui/YoloTeachWizard.h"
 #include "../ui/UIEditor.h"
@@ -31,6 +32,7 @@
 #include <QMenuBar>
 #include <QToolBar>
 #include <QStatusBar>
+#include <QStackedWidget>
 #include <QSplitter>
 #include <QDockWidget>
 #include <QLabel>
@@ -130,6 +132,20 @@ MainWindow::MainWindow(QWidget* parent)
                     if (ccd >= m_dataPanel->rowCount()) break;
                     m_dataPanel->setStationStatus(ccd, s.second, s.first);
                     ++ccd;
+                }
+            }
+
+            // 阶段6: DIY运行界面同步 (图像/结果表/数值/工位灯)
+            if (m_runtimeUI) {
+#ifdef VI_HAS_OPENCV
+                if (img && !img->empty())
+                    m_runtimeUI->setRuntimeImage(cvMatToQImage(*img));
+#endif
+                m_runtimeUI->updateResults(toolStates, resultData);
+                int rtCcd = 0;
+                for (const auto& s : toolStates) {
+                    m_runtimeUI->setStationStatus(rtCcd, s.second, s.first);
+                    if (++rtCcd >= 8) break;
                 }
             }
 
@@ -346,6 +362,11 @@ void MainWindow::createViewMenu() {
     viewMenu->addAction(QString::fromUtf8("1:1 \u539f\u5927"), this, &MainWindow::onZoom1x1);
     viewMenu->addSeparator();
     viewMenu->addAction(QString::fromUtf8("\u5168\u5c4f\u663e\u793a"), this, &MainWindow::toggleFullscreen);
+
+    // 阶段6: DIY运行界面 (布局在 界面设置(DIY) 编辑, 默认存 config/runtime_ui.json)
+    QAction* runtimeAct = viewMenu->addAction(QStringLiteral("运行界面(DIY布局)"));
+    runtimeAct->setCheckable(true);
+    connect(runtimeAct, &QAction::toggled, this, &MainWindow::onToggleRuntimeUI);
 
     // 帮助菜单 (放在最后)
     QMenu* helpMenu = menuBar()->addMenu(QString::fromUtf8("\u5e2e\u52a9(&H)"));
@@ -935,6 +956,65 @@ void MainWindow::onSaveAsTemplate() {
 void MainWindow::onHistoryQuery() {
     HistoryDialog dlg(m_recorder, this);
     dlg.exec();
+}
+
+// 阶段6: DIY运行界面 (标准界面 ↔ 编辑器保存的布局 切换)
+void MainWindow::onToggleRuntimeUI(bool on) {
+    // 首次切换: 用 QStackedWidget 包住现有中央控件, 标准界面保持原样可随时切回
+    if (!m_centralStack) {
+        m_centralStack = new QStackedWidget(this);
+        m_centralStack->addWidget(m_vSplitter); // index 0 = 标准界面
+        setCentralWidget(m_centralStack);
+    }
+    if (!on) {
+        m_centralStack->setCurrentIndex(0);
+        m_statusLabel->setText(QStringLiteral("已切回标准界面"));
+        return;
+    }
+
+    const QString layoutPath = QCoreApplication::applicationDirPath()
+                               + QStringLiteral("/config/runtime_ui.json");
+    if (!QFileInfo::exists(layoutPath)) {
+        QMessageBox::information(this, QStringLiteral("运行界面"),
+            QStringLiteral("尚未保存DIY布局。\n\n请先通过 设置→界面设置(DIY) 拖拽控件,"
+                           "保存时选择默认路径 (config/runtime_ui.json), 再切换到运行界面。"));
+        if (auto* act = qobject_cast<QAction*>(sender()))
+            act->setChecked(false);
+        return;
+    }
+
+    if (m_runtimeUI) {
+        m_runtimeUI->deleteLater();
+        m_runtimeUI = nullptr;
+    }
+    m_runtimeUI = new RuntimeUI(this);
+    if (!m_runtimeUI->loadLayout(layoutPath)) {
+        QMessageBox::warning(this, QStringLiteral("运行界面"),
+                             QStringLiteral("布局文件解析失败:\n%1").arg(layoutPath));
+        m_runtimeUI->deleteLater();
+        m_runtimeUI = nullptr;
+        if (sender()) static_cast<QAction*>(sender())->setChecked(false);
+        return;
+    }
+    connect(m_runtimeUI, &RuntimeUI::actionRequested, this,
+            [this](const QString& action) {
+        if (action == QStringLiteral("start")) onStartRunning();
+        else if (action == QStringLiteral("stop")) onStopRunning();
+        else onExecuteOnce(); // run
+    });
+    // 立即喂最近一次结果, 避免切过来一片空白
+    m_runtimeUI->updateResults(m_flowEngine->lastToolStates(), m_flowEngine->lastResultData());
+#ifdef VI_HAS_OPENCV
+    CvImagePtr lastImg = m_flowEngine->lastImage();
+    if (lastImg && !lastImg->empty())
+        m_runtimeUI->setRuntimeImage(cvMatToQImage(*lastImg));
+#endif
+
+    // 已存在则先移除旧页
+    if (m_centralStack->indexOf(m_runtimeUI) < 0)
+        m_centralStack->addWidget(m_runtimeUI);
+    m_centralStack->setCurrentWidget(m_runtimeUI);
+    m_statusLabel->setText(QStringLiteral("已切换到运行界面(DIY布局)"));
 }
 
 void MainWindow::onOpenProject() {

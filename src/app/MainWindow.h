@@ -26,6 +26,7 @@ class QToolBar;
 class QMenu;
 class QAction;
 class QLabel;
+class QStackedWidget;
 
 namespace VisionInspector {
 
@@ -52,6 +53,7 @@ private slots:
     void onOpenTemplateGallery();
     void onSaveAsTemplate();
     void onHistoryQuery();
+    void onToggleRuntimeUI(bool on);
     void onOpenProject();
     void onSaveProject();
     void onSaveAsProject();
@@ -117,6 +119,8 @@ private:
     GlobalStats* m_stats = nullptr;
     HardwareManager* m_hardware = nullptr;
     class DetectionRecorder* m_recorder = nullptr;  // 检测记录SQLite持久化 (阶段6)
+    class RuntimeUI* m_runtimeUI = nullptr;         // DIY布局运行界面 (阶段6)
+    QStackedWidget* m_centralStack = nullptr;       // 标准界面/运行界面 切换
     ICameraDriver* m_camera = nullptr;      // 当前相机驱动
     CameraManagerDialog* m_cameraManager = nullptr; // 相机管理对话框
 

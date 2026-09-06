@@ -167,6 +167,7 @@ QJsonObject WidgetProxyItem::toJson() const {
     obj["id"]       = m_widgetId;
     obj["type"]     = typeToString(m_type);
     obj["label"]    = m_label;
+    obj["bind"]     = m_bind;
     obj["x"]        = pos().x();
     obj["y"]        = pos().y();
     obj["width"]    = rect().width();
@@ -176,6 +177,7 @@ QJsonObject WidgetProxyItem::toJson() const {
 
 void WidgetProxyItem::fromJson(const QJsonObject& obj) {
     m_label = obj.value("label").toString(typeToString(m_type));
+    m_bind  = obj.value("bind").toString();
     qreal x = obj.value("x").toDouble(0);
     qreal y = obj.value("y").toDouble(0);
     qreal w = obj.value("width").toDouble(rect().width());
@@ -397,13 +399,19 @@ void UIEditor::setupUI() {
 
     // ── 连接信号 ──
     connect(btnSave,   &QAction::triggered, [this]() {
+        // 默认存到运行界面的约定路径, 保存后即可在 视图→运行界面 直接生效
+        const QString def = QCoreApplication::applicationDirPath()
+                            + QStringLiteral("/config/runtime_ui.json");
+        QDir().mkpath(QCoreApplication::applicationDirPath() + QStringLiteral("/config"));
         QString path = QFileDialog::getSaveFileName(this,
-            QString::fromUtf8("保存界面布局"), QString(), "JSON (*.json)");
+            QString::fromUtf8("保存界面布局"), def, "JSON (*.json)");
         if (!path.isEmpty()) saveLayout(path);
     });
     connect(btnLoad,   &QAction::triggered, [this]() {
+        const QString def = QCoreApplication::applicationDirPath()
+                            + QStringLiteral("/config/runtime_ui.json");
         QString path = QFileDialog::getOpenFileName(this,
-            QString::fromUtf8("加载界面布局"), QString(), "JSON (*.json)");
+            QString::fromUtf8("加载界面布局"), def, "JSON (*.json)");
         if (!path.isEmpty()) loadLayout(path);
     });
     connect(btnClear,  &QAction::triggered, this, &UIEditor::clearCanvas);
@@ -624,6 +632,15 @@ void UIEditor::setupPropertiesPanel() {
     m_hSpin->setSuffix(" px");
     form->addRow(QString::fromUtf8("高:"), m_hSpin);
 
+    // 绑定/动作 (数值显示: 数据键 工具名.结果键; 按钮: run/start/stop)
+    m_bindEdit = new QLineEdit();
+    m_bindEdit->setPlaceholderText(QString::fromUtf8("工具名.结果键 / 动作"));
+    m_bindEdit->setToolTip(QString::fromUtf8(
+        "数值显示: 填数据键(如 找圆_1.centerX), 运行界面实时显示该结果\n"
+        "按钮: 填动作 run(单次执行)/start(连续启动)/stop(停止)"));
+    form->addRow(QString::fromUtf8("绑定/动作:"), m_bindEdit);
+    connect(m_bindEdit, &QLineEdit::editingFinished, this, &UIEditor::onBindEdited);
+
     // ── 连接属性编辑信号 ──
     connect(m_xSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &UIEditor::onPropertyEdited);
     connect(m_ySpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &UIEditor::onPropertyEdited);
@@ -760,6 +777,14 @@ void UIEditor::updatePropertiesFromItem(WidgetProxyItem* item) {
     m_wSpin->blockSignals(false);
     m_hSpin->blockSignals(false);
 
+    m_bindEdit->setText(item->bind());
+    if (item->widgetType() == WidgetProxyItem::Button)
+        m_bindEdit->setPlaceholderText(QStringLiteral("动作: run / start / stop"));
+    else if (item->widgetType() == WidgetProxyItem::ValueDisplay)
+        m_bindEdit->setPlaceholderText(QStringLiteral("数据键: 工具名.结果键"));
+    else
+        m_bindEdit->setPlaceholderText(QStringLiteral("(该类型无绑定)"));
+
     m_updatingProperties = false;
 }
 
@@ -790,6 +815,14 @@ void UIEditor::onWidgetLabelEdited() {
     if (!item) return;
     item->setLabel(m_labelEdit->text());
     item->update();
+    emit layoutChanged();
+}
+
+void UIEditor::onBindEdited() {
+    if (m_updatingProperties) return;
+    auto* item = findItemById(m_selectedId);
+    if (!item) return;
+    item->setBind(m_bindEdit->text().trimmed());
     emit layoutChanged();
 }
 
