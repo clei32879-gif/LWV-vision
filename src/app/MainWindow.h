@@ -136,6 +136,7 @@ private:
     QLabel* m_ngCountLabel = nullptr;
     QLabel* m_yieldLabel = nullptr;
     QLabel* m_fileLabel = nullptr;
+    QLabel* m_posLabel = nullptr;   // 鼠标像素坐标读数
 };
 
 } // namespace VisionInspector

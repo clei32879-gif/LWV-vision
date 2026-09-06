@@ -178,6 +178,18 @@ void MainWindow::setupUI() {
     const int camCols = camN > 4 ? 4 : camN;
     const int camRows = (camN + camCols - 1) / camCols;
     m_multiView->setLayout(camRows, camCols);
+    // 每个图像格的鼠标移动 → 状态栏实时像素坐标 (此前信号存在但从未接线)
+    for (int i = 0; i < camRows * camCols; ++i) {
+        if (auto* v = m_multiView->viewAt(i)) {
+            connect(v, &ImageViewWidget::cursorImagePos, this, [this](const QPointF& pos) {
+                if (pos.x() < 0 || pos.y() < 0)
+                    m_posLabel->setText(" X: -  Y: - ");
+                else
+                    m_posLabel->setText(QString(" X: %1  Y: %2 ")
+                                            .arg((int)pos.x()).arg((int)pos.y()));
+            });
+        }
+    }
     
     m_mainSplitter = new QSplitter(Qt::Horizontal, this);
     m_mainSplitter->setHandleWidth(6);
@@ -405,8 +417,10 @@ void MainWindow::createStatusBar() {
     m_ngCountLabel = new QLabel("NG: 0");
     m_yieldLabel = new QLabel("良率: 100%");
     m_fileLabel = new QLabel("无项目");
+    m_posLabel = new QLabel(" X: -  Y: - ");
 
     statusBar()->addWidget(m_statusLabel, 1);
+    statusBar()->addPermanentWidget(m_posLabel);
     statusBar()->addPermanentWidget(m_userLabel);
     statusBar()->addPermanentWidget(m_connectionLabel);
     statusBar()->addPermanentWidget(m_fileLabel);
