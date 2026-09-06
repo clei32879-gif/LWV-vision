@@ -34,6 +34,8 @@ QString builtinToolDescription(const QString& typeName) {
         { "EdgeCircleFind",     "用EdgeDrawing整图搜圆并支持Hough回退定位；常作流程首个工具引导补正" },
         { "EdgeDetection",      "在ROI内按灰度梯度剖面检测边缘点并按位置策略选取；用于找边定位" },
         { "EdgeSpacing",        "沿卡尺扫描线检测全部边缘并计算相邻间距；用于齿距间隙测量" },
+        { "EdgeDepression",     "沿扫描线提取边缘拟合基线, 检测凹陷/凸起段(深度+宽度)；用于缺件崩边缺口" },
+        { "MessageBoxTool",     "流程执行中弹出提示框提醒操作工, 支持自动关闭超时；用于换型提醒异常告知" },
         { "LineDetection",      "沿旋转ROI布置卡尺提取亚像素边缘并鲁棒拟合直线；用于直线定位测量" },
         { "MultiContourMatch",  "按面积区间与尺寸一致性过滤统计ROI内轮廓数量；用于多目标计数检查" },
         { "PixelStatistics",    "统计ROI灰度均值极值及阈值区间像素数与占比并判定；用于亮度分布检查" },

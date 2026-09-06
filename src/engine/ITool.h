@@ -192,6 +192,7 @@ public:
             QStringLiteral("PlcLink"),
             QStringLiteral("DataDisplay"),
             QStringLiteral("UpdateView"),
+            QStringLiteral("MessageBoxTool"),
         };
         return !noImageTools.contains(typeName);
     }

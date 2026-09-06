@@ -8,12 +8,12 @@
 ### P0（产线刚需，短期补）
 | CKVision 工具 | 说明 | 我们的落地建议 |
 |---|---|---|
-| 边缘凹陷 EdgeDepression | 检测边缘轮廓的凹陷/凸起（缺件、崩边类缺陷利器） | 新工具：轮廓提取→与拟合直线/圆弧比对→凹陷深度+面积判定 |
-| 读取 DM 码 DataMatrix | DM 码与条码/QR 并列 | QRCodeReader 扩展或新工具：`cv::DataMatrixDetector`(OpenCV objdetect) |
+| 边缘凹陷 EdgeDepression | 检测边缘轮廓的凹陷/凸起（缺件、崩边类缺陷利器） | **✅已做(2026-09-05)**: 扫描线取边→鲁棒直线基线→偏离段聚合(深度/宽度/段数判定), 回归500+项全过 |
+| 读取 DM 码 DataMatrix | DM 码与条码/QR 并列 | **受阻**: OpenCV5 objdetect 只含 一维码+QR (wechat_qrcode contrib 的 zxing 子集也只有 qrcode 族), 无 DM 解码。待选项: libdmtx(新依赖,需评审) / ZXing-C++ / 商用扫码库 |
 | 光源控制 LightControl | 串口/IO 控制光源控制器（4通道亮度） | 新工具：串口发亮度指令，产线换型调光刚需 |
 | 执行流程 ExecuteFlow | 子流程调用（流程复用/模块化） | 引擎 doExecute 支持子流程节点 + 参数传递 |
 | 选择分支 SelectBranch | 多路 switch（现 ConditionBranch 只两路） | 扩展 ConditionBranch 或新工具：N 路 cases→跳转标签 |
-| 提示对话框 MessageBox | 现场提示操作工 | 新工具：QMessageBox(需UI线程投递)，含自动关闭超时 |
+| 提示对话框 MessageBox | 现场提示操作工 | **✅已做(2026-09-05)**: MessageBoxTool — invokeMethod投递UI线程, 模态可选/自动关闭/连续运行同框去重 |
 | 代码编辑 Script | 脚本节点（JS/Lua 灵活逻辑） | 引入 QJSEngine 新工具 script 节点（无新编译依赖） |
 
 ### P1（完善工具矩阵）

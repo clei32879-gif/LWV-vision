@@ -1742,6 +1742,73 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // --- 测试26: 边缘凹陷 (合成直边+缺口图: 检出1段凹陷, 深度合理; 平整图OK) ---
+    {
+        // 合成: 上半黑下半白 (水平直边 y=100), 在 x∈[120,160] 处向下挖缺口至 y=130
+        // 边缘梯度: 30→220 中心差分可达 190 (黑↔白 190/2px), 阈值 60 足够
+        cv::Mat dep(200, 320, CV_8UC1, cv::Scalar(30));
+        cv::rectangle(dep, cv::Rect(0, 100, 320, 100), cv::Scalar(220), -1); // 白区: y>=100
+        cv::rectangle(dep, cv::Rect(120, 100, 40, 30), cv::Scalar(30), -1);  // 缺口: y∈[100,130) 变黑
+        ToolContext ctx26;
+        ctx26.setCurrentImage(std::make_shared<CvImage>(dep));
+
+        ITool* ed = reg.createTool("EdgeDepression");
+        CHECK(ed != nullptr, "边缘凹陷: 注册");
+        if (ed) {
+            // 扫描线约定(与ScanEdge一致): roiWidth=单线长(沿扫描方向),
+            // roiHeight=平行线总跨度. 找水平直边 → 扫描线垂直向下(90°), 线长80(y∈[60,140]),
+            // 跨度280 (x∈[20,300] 均布)
+            ed->setProperty("roiCenterX", 160.0);
+            ed->setProperty("roiCenterY", 100.0);
+            ed->setProperty("roiWidth", 80.0);
+            ed->setProperty("roiHeight", 280.0);
+            ed->setProperty("roiAngle", 90.0);
+            ed->setProperty("edgePolarity", 2);   // 暗到亮
+            ed->setProperty("gradientThreshold", 30);
+            ed->setProperty("filterHalfWidth", 1); // 半宽2会把1px阶跃梯度削到38
+            ed->setProperty("depressionThreshold", 5.0);
+            ed->setProperty("minWidth", 3.0);
+            const bool okDep = ed->execute(ctx26);
+            CHECK(!okDep, "边缘凹陷: 缺口图应NG");
+            const auto& r26 = ed->resultData();
+            // 输出诊断值, 便于对照修正
+            std::printf("  [诊断] img=%sx%s edgesFound=%d scanLines=%d segCount=%d maxDepth=%.1f err=%s\n",
+                        r26.value("imgW").toString().toUtf8().constData(),
+                        r26.value("imgH").toString().toUtf8().constData(),
+                        r26.value("edgesFound").toInt(), r26.value("scanLines").toInt(),
+                        r26.value("segmentCount").toInt(), r26.value("maxDepth").toDouble(),
+                        r26.value("error").toString().toUtf8().constData());
+            CHECK(r26.value("edgesFound").toInt() > 200, "边缘凹陷: 边缘点覆盖宽");
+            CHECK(r26.value("segmentCount").toInt() == 1, "边缘凹陷: 恰检出1段");
+            const double maxDepth = r26.value("maxDepth").toDouble();
+            CHECK(maxDepth > 20 && maxDepth < 40, "边缘凹陷: 缺口深度≈30");
+            delete ed;
+        }
+
+        // 对照: 无缺口平整边 → OK
+        cv::Mat flat(200, 320, CV_8UC1, cv::Scalar(30));
+        cv::rectangle(flat, cv::Rect(0, 100, 320, 100), cv::Scalar(220), -1);
+        ToolContext ctxFlat;
+        ctxFlat.setCurrentImage(std::make_shared<CvImage>(flat));
+        ITool* ed2 = reg.createTool("EdgeDepression");
+        if (ed2) {
+            ed2->setProperty("roiCenterX", 160.0);
+            ed2->setProperty("roiCenterY", 100.0);
+            ed2->setProperty("roiWidth", 80.0);
+            ed2->setProperty("roiHeight", 280.0);
+            ed2->setProperty("roiAngle", 90.0);
+            ed2->setProperty("edgePolarity", 2);
+            ed2->setProperty("gradientThreshold", 30);
+            ed2->setProperty("filterHalfWidth", 1);
+            ed2->setProperty("depressionThreshold", 5.0);
+            const bool okFlat = ed2->execute(ctxFlat);
+            CHECK(okFlat, "边缘凹陷: 平整边OK");
+            CHECK(ed2->resultData().value("segmentCount").toInt() == 0,
+                  "边缘凹陷: 平整边0段");
+            delete ed2;
+        }
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);
