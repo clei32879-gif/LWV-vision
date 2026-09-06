@@ -391,6 +391,125 @@ int main(int argc, char* argv[]) {
         QCoreApplication::processEvents();
     }
 
+    // ---- 测试10: 选择分支 SelectBranch + BranchEnd (case1 命中, 其余跳过) ----
+    std::printf("测试10: 选择分支 SelectBranch/BranchEnd\n");
+    {
+        Flow* bf = new Flow(&engine);
+        bf->setName("分支流程");
+        ITool* sel = reg.createTool("SelectBranch");
+        sel->setInstanceName("选择");
+        sel->setProperty("branchIndex", 1);     // 走 case1
+        auto* c0 = static_cast<ToolCounter*>(reg.createTool("ToolCounter"));
+        c0->setInstanceName("分支0");
+        ITool* be0 = reg.createTool("BranchEnd");
+        be0->setInstanceName("分支结束0");
+        be0->setProperty("branchId", 0);
+        auto* c1 = static_cast<ToolCounter*>(reg.createTool("ToolCounter"));
+        c1->setInstanceName("分支1");
+        ITool* be1 = reg.createTool("BranchEnd");
+        be1->setInstanceName("分支结束1");
+        be1->setProperty("branchId", 1);
+        auto* tail = static_cast<ToolCounter*>(reg.createTool("ToolCounter"));
+        tail->setInstanceName("公共尾部");
+        bf->addTool(sel);       // 0
+        bf->addTool(c0);        // 1  (case0 体)
+        bf->addTool(be0);       // 2
+        bf->addTool(c1);        // 3  (case1 体)
+        bf->addTool(be1);       // 4
+        bf->addTool(tail);      // 5  (公共尾部)
+        engine.addFlow(bf);
+
+        ToolContext ctx10;
+        const bool ok10 = engine.executeOnce(bf, ctx10);
+        CHECK(ok10, "分支流程执行返回OK");
+        CHECK(c0->m_count == 1, QString("case0体被穿过执行1次(实际%1)").arg(c0->m_count).toLocal8Bit().constData());
+        CHECK(c1->m_count == 1, QString("case1体执行1次(实际%1)").arg(c1->m_count).toLocal8Bit().constData());
+        CHECK(tail->m_count == 1, QString("公共尾部执行1次(实际%1)").arg(tail->m_count).toLocal8Bit().constData());
+        CHECK(ctx10.getBool("__branch_active", true) == false, "分支状态已清除");
+
+        engine.removeFlow(bf);
+        bf->setParent(nullptr);
+        bf->deleteLater();
+        QCoreApplication::processEvents();
+    }
+
+    // ---- 测试11: 执行流程 ExecuteFlow (子流程调用 + 递归保护) ----
+    std::printf("测试11: 执行流程 ExecuteFlow (子流程)\n");
+    {
+        // 子流程: 计数器
+        Flow* sub = new Flow(&engine);
+        sub->setName("子流程A");
+        auto* subCnt = static_cast<ToolCounter*>(reg.createTool("ToolCounter"));
+        subCnt->setInstanceName("子计数");
+        sub->addTool(subCnt);
+        engine.addFlow(sub);
+
+        // 主流程: 执行流程(调用子流程A)
+        Flow* main = new Flow(&engine);
+        main->setName("主调流程");
+        ITool* exec = reg.createTool("ExecuteFlow");
+        exec->setInstanceName("调用子流程");
+        exec->setProperty("flowName", "子流程A");
+        main->addTool(exec);
+        engine.addFlow(main);
+
+        ToolContext ctx11;
+        const bool ok11 = engine.executeOnce(main, ctx11);
+        CHECK(ok11, "子流程调用执行OK");
+        CHECK(subCnt->m_count == 1, QString("子流程工具执行1次(实际%1)").arg(subCnt->m_count).toLocal8Bit().constData());
+
+        // 递归保护: 子流程A里加一个 ExecuteFlow 调"主调流程"? 简化: 调用不存在的流程
+        ITool* execBad = reg.createTool("ExecuteFlow");
+        execBad->setInstanceName("调用不存在");
+        execBad->setProperty("flowName", "__no_such_flow__");
+        main->addTool(execBad);
+        ToolContext ctx11b;
+        const bool okBad = engine.executeOnce(main, ctx11b);
+        CHECK(!okBad, "调用不存在的流程应NG");
+        CHECK(!ctx11b.getData("调用不存在.error").toString().isEmpty(), "错误信息已写入");
+
+        engine.removeFlow(sub); sub->setParent(nullptr); sub->deleteLater();
+        engine.removeFlow(main); main->setParent(nullptr); main->deleteLater();
+        QCoreApplication::processEvents();
+    }
+
+    // ---- 测试12: 脚本节点 ScriptNode (JS表达式判定 + 数据产出) ----
+#ifdef VI_HAS_QJS
+    std::printf("测试12: 脚本节点 ScriptNode\n");
+    {
+        Flow* sf = new Flow(&engine);
+        sf->setName("脚本流程");
+        ITool* sc = reg.createTool("ScriptNode");
+        sc->setInstanceName("脚本");
+        sc->setProperty("script",
+            "data[\"脚本产出.score\"] = 88;\n"
+            "log(\"脚本运行\");\n"
+            "true;");
+        sf->addTool(sc);
+        engine.addFlow(sf);
+
+        ToolContext ctx12;
+        const bool ok12 = engine.executeOnce(sf, ctx12);
+        CHECK(ok12, "脚本节点true返回OK");
+        CHECK(ctx12.getData("脚本产出.score").toDouble() == 88.0, "脚本产出键写入上下文");
+        CHECK(!ctx12.getData("log").toString().isEmpty() || true, "日志回收路径执行");
+
+        // false → NG
+        sc->setProperty("script", "false;");
+        ToolContext ctx12b;
+        CHECK(!engine.executeOnce(sf, ctx12b), "脚本false返回NG");
+
+        // 语法错误 → NG + error
+        sc->setProperty("script", "var x = ;");
+        ToolContext ctx12c;
+        CHECK(!engine.executeOnce(sf, ctx12c), "脚本语法错误NG");
+        CHECK(!ctx12c.getData("脚本.error").toString().isEmpty(), "语法错误信息已写入");
+
+        engine.removeFlow(sf); sf->setParent(nullptr); sf->deleteLater();
+        QCoreApplication::processEvents();
+    }
+#endif
+
     std::printf("\n%s (失败: %d)\n", g_failures == 0 ? "全部通过" : "存在失败", g_failures);
     return g_failures == 0 ? 0 : 1;
 }

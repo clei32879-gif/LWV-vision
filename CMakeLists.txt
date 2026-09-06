@@ -37,19 +37,19 @@ option(VI_BUILD_PLUGINS "Build plugins" ON)
 # 全部插件目标清单 (app与tests共用; 插件静态注册必须WHOLE_ARCHIVE链接)
 set(VI_ALL_PLUGINS
     AIDetection YOLOv8Detect ThreadInspection BlobAnalysis BlobClassify EdgeCircleFind BrightnessCheck CircleDetection EdgeDetection
-    ImageProcess ImageOperation SaveImage ImageMerge CropTransform LineDetection TemplateMatch PixelStatistics
+    ImageProcess ImageOperation SaveImage ImageMerge CropTransform LineDetection TemplateMatch PixelStatistics SwitchImage
     GrayscaleMatch ShapeMatch ContourMatch
     BarcodeReader QRCodeReader OCR
     DistanceMeasure AngleMeasure Caliper EdgeSpacing ScanEdge EdgeDepression
     LineIntersect LineToLine ExtendPoint RotatePoint PointToLine
     CircleToLine CircleToCircle
     ImageFilter Threshold Morphology ColorConvert
-    ConditionBranch DataJudge Loop LoopEnd StopLoop Delay SystemTime GetVariable GenerateText SplitText CompareText DataQueue PlaySound WriteText FileWatch MessageBoxTool
+    ConditionBranch DataJudge Loop LoopEnd StopLoop Delay SystemTime GetVariable GenerateText SplitText CompareText DataQueue PlaySound WriteText FileWatch MessageBoxTool SelectBranch BranchEnd ExecuteFlow ScriptNode
     CaptureImage DataDisplay UpdateView
     Calculator ImageCompare Calibration PositionCorrection
     VertexDetection WidthDetection MultiContourMatch ContourCompare ColorDetection
     CoordSystem CoordinateCalibration HandEyeCalibration ImageCorrection ImageUndistort CalculateVariable SetVariable GetVariable
-    SerialPortTool EthernetTool ModbusRead ModbusWrite PlcLink TcpData
+    SerialPortTool EthernetTool ModbusRead ModbusWrite PlcLink TcpData LightControl
     EndCorrection
 )
 
@@ -106,6 +106,7 @@ find_package(Qt6 QUIET COMPONENTS
     Sql
     OpenGL
     OpenGLWidgets
+    Qml
 )
 
 # ============================================================

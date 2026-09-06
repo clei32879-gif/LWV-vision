@@ -28,6 +28,7 @@ class ICameraDriver;
 class IPLCDriver;
 class IServoDriver;
 class GlobalVariables;
+class FlowEngine;
 
 /**
  * 工具执行上下文
@@ -229,6 +230,13 @@ public:
     IServoDriver* servoDriver() { return m_servo; }
 
     // --------------------------------------------------------
+    // 流程引擎 (执行流程工具需要按名调用其他流程)
+    // --------------------------------------------------------
+
+    void setFlowEngine(FlowEngine* engine) { m_flowEngine = engine; }
+    FlowEngine* flowEngine() { return m_flowEngine; }
+
+    // --------------------------------------------------------
     // 全局变量 (跨流程共享)
     // --------------------------------------------------------
 
@@ -271,6 +279,7 @@ private:
     QMap<QString, ICameraDriver*> m_namedCameras;   // 多相机: 别名→驱动 (非拥有)
     IPLCDriver* m_plc = nullptr;
     IServoDriver* m_servo = nullptr;
+    FlowEngine* m_flowEngine = nullptr;
     GlobalVariables* m_globalVars = nullptr;
 
     int m_runIndex = 0;  // 执行序号

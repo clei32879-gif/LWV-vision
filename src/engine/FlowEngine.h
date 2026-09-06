@@ -129,6 +129,13 @@ public:
     bool executeOnce(Flow* flow, ToolContext& context);
 
     /**
+     * 子流程执行 (执行流程工具用): 共享调用方上下文直接跑工具序列,
+     * 不抢 m_executing/m_execMutex (父流程已在执行中), 深度保护由调用方负责。
+     * @return true=子流程全部OK
+     */
+    bool executeSubFlow(Flow* flow, ToolContext& context);
+
+    /**
      * 开始连续运行 (后台工作线程循环执行)
      */
     void startRunning(Flow* flow);

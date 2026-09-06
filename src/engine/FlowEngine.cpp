@@ -241,6 +241,7 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
     context.setPLCDriver(m_plc);
     context.setServoDriver(m_servo);
     context.setGlobalVariables(m_globalVars);
+    context.setFlowEngine(this);   // 执行流程工具(子流程调用)需要按名查找其他流程
     context.setRunIndex(m_runIndex.fetch_add(1) + 1);
 
     // 重置流程控制状态 (防上一轮残留, 保证每轮干净)
@@ -270,6 +271,7 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
 
         // 回写当前索引供工具(Loop/LoopEnd等)感知自身位置
         context.setData("__engine_index", i);
+        context.setData("__engine_tool_count", tools.size());
 
         // 中止检查 (stopRunning后当前工具执行完即退出)
         if (m_abort) {
@@ -439,6 +441,12 @@ bool FlowEngine::executeOnce(Flow* flow, ToolContext& context) {
     bool ok = doExecute(flow, context);
     m_executing = false;
     return ok;
+}
+
+bool FlowEngine::executeSubFlow(Flow* flow, ToolContext& context) {
+    // 子流程: 不抢 m_executing/m_execMutex (父流程执行中), 共享上下文直接跑
+    if (!flow) return false;
+    return doExecute(flow, context);
 }
 
 void FlowEngine::startRunning(Flow* flow) {

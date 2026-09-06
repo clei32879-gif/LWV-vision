@@ -1,0 +1,6 @@
+add_library(ScriptNode STATIC)
+target_sources(ScriptNode PRIVATE ScriptNode.h ScriptNode.cpp)
+target_link_libraries(ScriptNode PUBLIC VICore VIEngine VIUtils Qt6::Core Qt6::Qml)
+if(TARGET Qt6::Qml)
+    target_compile_definitions(ScriptNode PRIVATE VI_HAS_QJS)
+endif()

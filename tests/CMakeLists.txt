@@ -25,6 +25,11 @@ target_link_libraries(test_engine PRIVATE
     Qt6::Core
     Qt6::Concurrent
 )
+# ScriptNode 插件用 Qt6::Qml (QJSEngine), 测试同样需要链接
+if(TARGET Qt6::Qml)
+    target_link_libraries(test_engine PRIVATE Qt6::Qml)
+    target_compile_definitions(test_engine PRIVATE VI_HAS_QJS)
+endif()
 foreach(_plugin ${VI_ALL_PLUGINS})
     if(TARGET ${_plugin})
         target_link_libraries(test_engine PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${_plugin}>)

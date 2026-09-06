@@ -190,9 +190,12 @@ public:
             QStringLiteral("ModbusRead"),
             QStringLiteral("ModbusWrite"),
             QStringLiteral("PlcLink"),
+            QStringLiteral("LightControl"),
             QStringLiteral("DataDisplay"),
             QStringLiteral("UpdateView"),
             QStringLiteral("MessageBoxTool"),
+            QStringLiteral("ScriptNode"),
+            QStringLiteral("ExecuteFlow"),
         };
         return !noImageTools.contains(typeName);
     }
