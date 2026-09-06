@@ -3,6 +3,7 @@
 #include "../engine/ToolRegistry.h"
 #include "../engine/DetectionRecorder.h"
 #include "../core/ConfigManager.h"
+#include "../core/DeviceTemplates.h"
 #include "../ui/DisplayArea.h"
 #include "../ui/FlowEditor.h"
 #include "../ui/Toolbox.h"
@@ -837,41 +838,17 @@ void MainWindow::onSaveAnnotatedImage() {
 }
 
 void MainWindow::onNewFromTemplate() {
-    // 按真实筛选机的标准工序建流程(蓝本见 docs/CKVision资料分析.md):
-    // 采集→预处理→定位→补正→检测组→结束补正→变量→判断→显示
+    // 按真实筛选机的标准工序建流程(蓝本见 docs/CKVision资料分析.md), 定义在 DeviceTemplates
     m_projectMgr->newProject();
 
-    static const QStringList seq = {
-        "CaptureImage",        "ImageFilter",   "ShapeMatch",
-        "PositionCorrection",  "BlobAnalysis",  "VertexDetection",
-        "EdgeDetection",       "DistanceMeasure","LineDetection",
-        "CircleDetection",     "Caliper",
-        "ThreadInspection",
-        "EndCorrection",       "CalculateVariable", "SetVariable",
-        "DataJudge",           "DataDisplay",   "UpdateView",
-    };
-
-    Flow* flow = new Flow(this);
-    flow->setName("主流程");
-    m_flowEngine->addFlow(flow);
-
-    QMap<QString, int> counts;
     int created = 0;
-    for (const QString& typeName : seq) {
-        ITool* tool = ToolRegistry::instance().createTool(typeName);
-        if (!tool) {
-            m_logPanel->appendLog(QString("模板工具缺失, 已跳过: %1").arg(typeName));
-            continue;
-        }
-        const QString disp = tool->displayName();
-        const int n = counts[disp]++;
-        tool->setInstanceName(n == 0 ? disp : QString("%1_%2").arg(disp).arg(n + 1));
-        flow->addTool(tool);
-        ++created;
+    if (!DeviceTemplates::build(QStringLiteral("sifter"), m_flowEngine, &created)) {
+        m_logPanel->appendLog("筛选机模板构建失败");
+        return;
     }
 
     if (m_flowEditor) {
-        m_flowEditor->setFlow(flow);
+        m_flowEditor->setFlow(m_flowEngine->flowCount() > 0 ? m_flowEngine->flows().first() : nullptr);
         m_flowEditor->refresh();
     }
     m_fileLabel->setText("筛选机模板(未保存)");
@@ -888,9 +865,25 @@ void MainWindow::onOpenTemplateGallery() {
     const TemplateDialog::Entry entry = dlg.selected();
     if (entry.title.isEmpty()) return;
 
-    if (entry.path.isEmpty()) {
-        // 内置筛选机模板
-        onNewFromTemplate();
+    if (entry.path.startsWith(QStringLiteral("builtin:"))) {
+        // 内置设备模板 (筛选机/贴标/计数/木业)
+        const QString tplId = entry.path.mid(QStringLiteral("builtin:").size());
+        int created = 0;
+        m_projectMgr->newProject();
+        if (!DeviceTemplates::build(tplId, m_flowEngine, &created)) {
+            QMessageBox::warning(this, QStringLiteral("模板"), QStringLiteral("内置模板构建失败"));
+            return;
+        }
+        if (m_flowEditor) {
+            m_flowEditor->setFlow(m_flowEngine->flowCount() > 0 ? m_flowEngine->flows().first() : nullptr);
+            m_flowEditor->refresh();
+        }
+        resetUndoState();
+        m_projectMgr->markModified();
+        m_fileLabel->setText(QStringLiteral("模板新建(未保存)"));
+        m_statusLabel->setText(QStringLiteral("已从模板创建: %1 (%2个工具)").arg(entry.title).arg(created));
+        m_logPanel->appendLog(QStringLiteral("已从内置模板[%1]创建工程 (%2个工具)")
+                                  .arg(entry.title).arg(created));
         return;
     }
     if (!m_projectMgr->loadTemplate(entry.path)) {

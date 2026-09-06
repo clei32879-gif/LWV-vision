@@ -2,6 +2,7 @@
 #include "TemplateDialog.h"
 #include "IconHelper.h"
 #include "../core/ProjectManager.h"
+#include "../core/DeviceTemplates.h"
 #include "../engine/FlowEngine.h"
 #include "../utils/Logger.h"
 
@@ -51,16 +52,18 @@ void TemplateDialog::loadEntries() {
     m_entries.clear();
     m_list->clear();
 
-    // 内置筛选机模板 (代码内建工序, 无文件)
-    {
+    // 内置设备模板 (代码内建工序, 无文件; path = "builtin:<id>")
+    for (const DeviceTemplate& t : DeviceTemplates::all()) {
         Entry e;
-        e.title = QStringLiteral("筛选机模板（内置）");
-        e.note = QStringLiteral("8工位转盘筛选机标准工序: 采集→预处理→定位→补正→检测组→结束补正→变量→判断→显示");
-        e.toolCount = 18;
+        e.title = t.name + QStringLiteral("（内置）");
+        e.note = t.note;
         e.flowCount = 1;
+        e.toolCount = t.tools.size();
+        e.path = QStringLiteral("builtin:") + t.id;
         m_entries.append(e);
-        auto* item = new QListWidgetItem(IconHelper::categoryIcon(ToolCategory::Special, 24), e.title, m_list);
-        item->setData(Qt::UserRole, 0);
+        auto* item = new QListWidgetItem(IconHelper::categoryIcon(ToolCategory::Special, 24),
+                                         e.title, m_list);
+        item->setData(Qt::UserRole, m_entries.size() - 1);
     }
 
     // 用户自定义模板: templates/*.vipj

@@ -43,6 +43,23 @@ target_link_libraries(test_stats PRIVATE
 )
 add_test(NAME stats_export COMMAND test_stats)
 
+# 内置设备模板回归 (阶段6: 工具注册齐全/无头构建/实例名去重)
+add_executable(test_device_templates test_device_templates.cpp)
+target_link_libraries(test_device_templates PRIVATE
+    VICore
+    VIEngine
+    VIUtils
+    Qt6::Core
+    Qt6::Concurrent
+)
+# 工具注册依赖插件静态对象的静态初始化, 必须 WHOLE_ARCHIVE 全量链入
+foreach(_plugin ${VI_ALL_PLUGINS})
+    if(TARGET ${_plugin})
+        target_link_libraries(test_device_templates PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${_plugin}>)
+    endif()
+endforeach()
+add_test(NAME device_templates COMMAND test_device_templates)
+
 # 检测记录SQLite持久化回归 (阶段6: 写入/查询/过滤/导出/清理)
 add_executable(test_detection_recorder test_detection_recorder.cpp)
 target_link_libraries(test_detection_recorder PRIVATE

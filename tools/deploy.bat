@@ -50,6 +50,16 @@ if exist "%SRC%\testdata\virtual_camera" (
     for %%F in (%SRC%\testdata\virtual_camera\*.png) do copy /y "%%F" "%DST%\testdata\virtual_camera\" >nul 2>&1
 )
 
+REM ---- Qt SQL driver plugin (SQLite persistence, must be in sqldrivers subdir) ----
+REM (windeployqt usually copies it once exe links Qt6::Sql; explicit copy as safety net)
+mkdir "%DST%\sqldrivers" 2>nul
+if exist "C:\Qt\6.10.3\mingw_64\plugins\sqldrivers\qsqlite.dll" copy /y "C:\Qt\6.10.3\mingw_64\plugins\sqldrivers\qsqlite.dll" "%DST%\sqldrivers\" >nul 2>&1
+if exist "%SRC%\sqldrivers\qsqlite.dll" copy /y "%SRC%\sqldrivers\qsqlite.dll" "%DST%\sqldrivers\" >nul 2>&1
+
+REM ---- templates/ data/ dirs (template gallery and records db location) ----
+mkdir "%DST%\templates" 2>nul
+mkdir "%DST%\data" 2>nul
+
 echo [5/5] Done.
 echo.
 echo ============================================================

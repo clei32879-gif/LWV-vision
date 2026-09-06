@@ -8,6 +8,10 @@ target_sources(VICore PRIVATE
     ProjectManager.h
     ProjectManager.cpp
 
+    # 内置设备模板 (阶段6)
+    DeviceTemplates.h
+    DeviceTemplates.cpp
+
     # 插件管理
     PluginManager.h
     PluginManager.cpp
