@@ -199,9 +199,17 @@ void PropertyDialog::buildUI() {
     buildJudgeSection();
 
     // ============ 页签4: 试执行 ============
-    // 是否具备图形化ROI编辑条件 (主流约定: roiCenterX/Y + roiWidth/Height [+roiAngle])
+    // 是否具备图形化ROI编辑条件
+    // 主流约定: roiCenterX/Y + roiWidth/Height [+roiAngle] (34个工具)
     m_hasRoi = m_editors.contains("roiCenterX") && m_editors.contains("roiCenterY")
             && m_editors.contains("roiWidth") && m_editors.contains("roiHeight");
+    m_roiCornerMode = false;
+    if (!m_hasRoi) {
+        // 角点约定: useROI + roiX/roiY/roiW/roiH (条码/二维码/OCR 等老工具)
+        m_hasRoi = m_editors.contains("roiX") && m_editors.contains("roiY")
+                && m_editors.contains("roiW") && m_editors.contains("roiH");
+        m_roiCornerMode = m_hasRoi;
+    }
 
     auto* tryPage = new QWidget(this);
     auto* tryLayout = new QVBoxLayout(tryPage);
@@ -219,10 +227,13 @@ void PropertyDialog::buildUI() {
         connect(m_roiEditBtn, &QPushButton::toggled, this, [this](bool on) {
             m_previewViewer->setRoiEditing(on);
             if (on) {
-                // ROI类型为"无"时自动切到"矩形", 拖拽立即有意义
+                // ROI类型为"无"时自动切到"矩形"; useROI未勾选时自动勾上
                 if (auto* typeCombo = qobject_cast<QComboBox*>(m_editors.value("roiType")))
                     if (typeCombo->currentIndex() == 0)
                         typeCombo->setCurrentIndex(1);
+                if (auto* useRoi = qobject_cast<QCheckBox*>(m_editors.value("useROI")))
+                    if (!useRoi->isChecked())
+                        useRoi->setChecked(true);
                 syncRoiToViewer();
             }
         });
@@ -299,10 +310,19 @@ void PropertyDialog::updatePreview() {
 
 void PropertyDialog::syncRoiToViewer() {
     auto spinVal = [this](const char* name) -> double {
-        if (auto* s = qobject_cast<QDoubleSpinBox*>(m_editors.value(name)))
+        if (auto* d = qobject_cast<QDoubleSpinBox*>(m_editors.value(name)))
+            return d->value();
+        if (auto* s = qobject_cast<QSpinBox*>(m_editors.value(name)))
             return s->value();
         return 0.0;
     };
+    if (m_roiCornerMode) { // 角点约定: 直接就是左上角+宽高
+        const double x = spinVal("roiX"), y = spinVal("roiY");
+        const double w = std::max(4.0, spinVal("roiW"));
+        const double h = std::max(4.0, spinVal("roiH"));
+        m_previewViewer->setRoiRect(QRectF(x, y, w, h));
+        return;
+    }
     const double cx = spinVal("roiCenterX"), cy = spinVal("roiCenterY");
     const double w = std::max(4.0, spinVal("roiWidth"));
     const double h = std::max(4.0, spinVal("roiHeight"));
@@ -312,9 +332,18 @@ void PropertyDialog::syncRoiToViewer() {
 
 void PropertyDialog::onRoiEdited(const QRectF& rect) {
     auto setSpin = [this](const char* name, double v) {
-        if (auto* s = qobject_cast<QDoubleSpinBox*>(m_editors.value(name)))
-            s->setValue(v); // 触发 valueChanged → 自动预览
+        if (auto* d = qobject_cast<QDoubleSpinBox*>(m_editors.value(name)))
+            d->setValue(v); // 触发 valueChanged → 自动预览
+        else if (auto* s = qobject_cast<QSpinBox*>(m_editors.value(name)))
+            s->setValue((int)std::lround(v));
     };
+    if (m_roiCornerMode) {
+        setSpin("roiX", rect.left());
+        setSpin("roiY", rect.top());
+        setSpin("roiW", rect.width());
+        setSpin("roiH", rect.height());
+        return;
+    }
     setSpin("roiCenterX", rect.center().x());
     setSpin("roiCenterY", rect.center().y());
     setSpin("roiWidth", rect.width());

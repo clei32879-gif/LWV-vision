@@ -60,9 +60,10 @@ private:
     // 页签4 试执行 (即改即显: 参数变化自动重跑)
     QTimer* m_previewTimer = nullptr;
     ImageViewWidget* m_previewViewer = nullptr;
-    // ROI 图形化编辑 (工具含 roiCenterX/Y + roiWidth/Height 参数时可用)
+    // ROI 图形化编辑 (中心约定 roiCenterX/Y+roiWidth/Height 或 角点约定 useROI+roiX/Y/W/H)
     class QPushButton* m_roiEditBtn = nullptr;
     bool m_hasRoi = false;
+    bool m_roiCornerMode = false; // true=角点约定 (条码/二维码/OCR 等老工具)
 
     void buildUI();
     void buildJudgeSection();

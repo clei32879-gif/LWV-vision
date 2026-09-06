@@ -1716,6 +1716,32 @@ int main(int argc, char* argv[]) {
         delete se;
     }
 
+    // --- 测试25: 条码识别 (OpenCV5 objdetect 内置一维码解码) ---
+    {
+        ITool* br = reg.createTool("BarcodeReader");
+        CHECK(br != nullptr, "条码识别: 注册");
+        if (br) {
+            // 合成无码图: 应优雅NG, 结果键齐全, 不崩溃
+            cv::Mat plain(240, 320, CV_8UC1, cv::Scalar(128));
+            cv::rectangle(plain, cv::Rect(40, 40, 240, 160), cv::Scalar(30), -1);
+            ToolContext ctx25;
+            ctx25.setCurrentImage(std::make_shared<CvImage>(plain));
+            const bool ok = br->execute(ctx25);
+            CHECK(!ok, "条码识别: 无码图应NG");
+            const auto& r25 = br->resultData();
+            CHECK(r25.contains("barcodeDetected"), "条码识别: 键barcodeDetected存在");
+            CHECK(r25.value("barcodeDetected").toBool() == false, "条码识别: 无码detected=false");
+            // ROI 路径: 裁剪区域执行同样不崩
+            br->setProperty("useROI", true);
+            br->setProperty("roiX", 40);
+            br->setProperty("roiY", 40);
+            br->setProperty("roiW", 240);
+            br->setProperty("roiH", 160);
+            CHECK(!br->execute(ctx25), "条码识别: ROI路径无码NG");
+            delete br;
+        }
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);

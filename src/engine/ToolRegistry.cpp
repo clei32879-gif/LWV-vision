@@ -21,7 +21,7 @@ QString builtinToolDescription(const QString& typeName) {
         // ---- 检测识别 ----
         { "AIDetection",        "加载ONNX模型做YOLO检测或分类推理并按规则判OK/NG；用于AI缺陷与目标检测" },
         { "YOLOv8Detect",       "内置ONNX Runtime运行YOLOv8检测或分割模型输出目标框；用于深度学习检测" },
-        { "BarcodeReader",      "一维条码识别(参数已预留, 解码库未接入, 执行恒NG)" },
+        { "BarcodeReader",      "用OpenCV条码检测器识别一维条码并输出文本/类型/位置；用于产线扫码读取" },
         { "QRCodeReader",       "用OpenCV检测解码二维码并输出文本与中心坐标；用于二维码内容读取" },
         { "OCR",                "分割字符后与教导模板做归一化匹配输出文本；适合固定印刷体喷码读取" },
         { "BlobAnalysis",       "二值化后按连通域统计斑点数量面积质心，可输出外接矩形椭圆；用于目标计数检测" },
