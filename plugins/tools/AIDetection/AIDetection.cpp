@@ -15,6 +15,7 @@
 #include "../../../src/ai/InferEngine.h"
 #endif
 #include <QCoreApplication>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QVariantMap>
 
@@ -54,6 +55,9 @@ PropertyDefList AIDetection::propertyDefs() const {
         PropertyDef::doubleProp("minScore", "最低置信度", 0.5, 0.01, 1.0, "判定"),
         // 缺陷检测场景: 检出(任一检测框)即判定NG; 勾选后忽略goodClasses
         PropertyDef::boolProp("detectionIsNG", "检出即NG(缺陷检测)", false, "判定"),
+        PropertyDef::stringProp("targetClasses", "目标类别(逗号分,空=全部)", QString(), "判定"),
+        PropertyDef::intProp("minCount", "最少目标数(0=不限)", 0, 0, 9999, "判定"),
+        PropertyDef::intProp("maxCount", "最多目标数(0=不限)", 0, 0, 9999, "判定"),
     };
 }
 
@@ -117,6 +121,8 @@ bool AIDetection::execute(ToolContext& context) {
     }
 
     // ===== 检测模型分支 (输出[1,4+nc,anchors]) =====
+    QElapsedTimer inferTimer; // 单帧推理总耗时
+    inferTimer.start();
     const float conf = (float)propertyValue("confThreshold").toDouble();
     const float iou = (float)propertyValue("iouThreshold").toDouble();
     const std::vector<AiDetection> dets = engine->detectYolo(*input, conf, iou, &err);
@@ -142,10 +148,39 @@ bool AIDetection::execute(ToolContext& context) {
     setResultData("detectionCount", (int)dets.size());
     m_lastOk = true;
 
-    // 判定: 检出即NG(缺陷检测场景) / 检出即OK(目标存在场景)
+    // 商用判定: 目标类别过滤(忽略非目标类, 如"良品") + 数量区间(漏检/多检都NG)
+    QStringList targetClasses;
+    for (const QString& s : propertyValue("targetClasses").toString()
+             .split(',', Qt::SkipEmptyParts))
+        targetClasses << s.trimmed();
+    int targetCount = 0;
+    if (!targetClasses.isEmpty()) {
+        for (const auto& d : dets) {
+            const QString clsName = (d.classId >= 0 && d.classId < 80)
+                ? QString::fromUtf8(kCocoNames[d.classId])
+                : QString("class%1").arg(d.classId);
+            if (targetClasses.contains(clsName)) ++targetCount;
+        }
+    } else {
+        targetCount = (int)dets.size();
+    }
+    setResultData("targetCount", targetCount);
+    setResultData("inferenceMs", static_cast<double>(inferTimer.elapsed()));
+
+    // 判定: 检出即NG(缺陷检测场景) / 检出即OK(目标存在场景) + 数量区间
     const bool detIsNG = propertyValue("detectionIsNG").toBool();
     const bool hasDet = !dets.empty();
-    const bool pass = detIsNG ? !hasDet : hasDet;
+    const int minCount = propertyValue("minCount").toInt();
+    const int maxCount = propertyValue("maxCount").toInt();
+    bool pass;
+    if (minCount == 0 && maxCount == 0) {
+        pass = detIsNG ? !hasDet : hasDet;
+    } else {
+        const bool countInRange = targetCount >= minCount
+                                  && (maxCount == 0 || targetCount <= maxCount);
+        pass = detIsNG ? !countInRange : countInRange;
+        setResultData("countOk", countInRange);
+    }
     setResultData("pass", pass);
     setStatus(pass ? ToolStatus::OK : ToolStatus::NG);
     return pass;

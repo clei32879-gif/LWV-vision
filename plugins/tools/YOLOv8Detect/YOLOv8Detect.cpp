@@ -13,6 +13,7 @@
 #include "YOLOv8Detect.h"
 #include "../../../src/engine/ToolRegistry.h"
 #include "../../../src/core/LicenseManager.h"
+#include <QElapsedTimer>
 
 #ifdef VI_HAS_OPENCV
 #include <opencv2/imgproc.hpp>
@@ -500,6 +501,14 @@ PropertyDefList YOLOv8Detect::propertyDefs() const
             0.5, 0.01, 1.0, "检测参数"),
         PropertyDef::doubleProp("nmsThreshold", "NMS阈值",
             0.45, 0.01, 1.0, "检测参数"),
+
+        // 判定参数 (商用级: 类别过滤 + 数量区间, 漏检/多检都判NG)
+        PropertyDef::stringProp("targetClasses", "目标类别(逗号分,空=全部)",
+            QString(), "判定参数"),
+        PropertyDef::intProp("minCount", "最少目标数(0=不限)",
+            0, 0, 9999, "判定参数"),
+        PropertyDef::intProp("maxCount", "最多目标数(0=不限)",
+            0, 0, 9999, "判定参数"),
     };
 }
 
@@ -627,6 +636,8 @@ bool YOLOv8Detect::execute(ToolContext& context)
     }
 
     try {
+        QElapsedTimer inferTimer; // 单帧总耗时: 预处理+推理+后处理
+        inferTimer.start();
         // 3. 预处理
         cv::Mat preprocessed = m->preprocess(*input);
 
@@ -702,13 +713,28 @@ bool YOLOv8Detect::execute(ToolContext& context)
         }
 
         // 7. 写入结果
-        int count = static_cast<int>(m->lastDetections.size());
+        // 类别过滤 (商用判定): 目标类别之外的检出不计入判定 — 如忽略"良品"类
+        QStringList targetClasses;
+        for (const QString& s : propertyValue("targetClasses").toString()
+                 .split(',', Qt::SkipEmptyParts))
+            targetClasses << s.trimmed();
+        std::vector<YoloDetection> filtered;
+        for (const auto& det : m->lastDetections) {
+            if (targetClasses.isEmpty() ||
+                targetClasses.contains(QString::fromStdString(det.className)))
+                filtered.push_back(det);
+        }
+
+        int count = static_cast<int>(filtered.size());
+        setResultData("inferenceMs", static_cast<double>(inferTimer.elapsed()));
         setResultData("count", count);
         setResultData("found", count > 0);
+        setResultData("rawCount", static_cast<int>(m->lastDetections.size()));
 
-        // JSON 格式检测结果
+        // JSON 格式检测结果 + 逐目标平铺键 (defN_*, 供数据判定/显示逐个引用)
         QJsonArray detectionsJson;
-        for (const auto& det : m->lastDetections) {
+        int flat = 0;
+        for (const auto& det : filtered) {
             QJsonObject obj;
             obj["classId"] = det.classId;
             obj["className"] = QString::fromStdString(det.className);
@@ -718,12 +744,22 @@ bool YOLOv8Detect::execute(ToolContext& context)
             obj["width"] = det.bbox.width;
             obj["height"] = det.bbox.height;
             detectionsJson.append(obj);
+            if (flat < 50) {
+                setResultData(QString("def%1_class").arg(flat),
+                              QString::fromStdString(det.className));
+                setResultData(QString("def%1_confidence").arg(flat), det.confidence);
+                setResultData(QString("def%1_x").arg(flat), det.bbox.x);
+                setResultData(QString("def%1_y").arg(flat), det.bbox.y);
+                setResultData(QString("def%1_w").arg(flat), det.bbox.width);
+                setResultData(QString("def%1_h").arg(flat), det.bbox.height);
+                ++flat;
+            }
         }
         setResultData("detections", detectionsJson);
 
-        // 类别统计
+        // 类别统计 (过滤后)
         QMap<int, int> classCount;
-        for (const auto& det : m->lastDetections) {
+        for (const auto& det : filtered) {
             classCount[det.classId]++;
         }
         QJsonObject classStats;
@@ -737,12 +773,22 @@ bool YOLOv8Detect::execute(ToolContext& context)
             QJsonDocument(classStats).toJson(QJsonDocument::Compact));
 
         if (count > 0) {
-            setResultData("topClass", m->lastDetections[0].classId);
-            setResultData("topConfidence", m->lastDetections[0].confidence);
+            setResultData("topClass", filtered[0].classId);
+            setResultData("topConfidence", filtered[0].confidence);
         }
 
-        setStatus(count > 0 ? ToolStatus::OK : ToolStatus::NG);
-        return count > 0;
+        // 数量区间判定 (商用级): 漏检/多检都NG; min=max=0 保持旧行为(检出即OK)
+        const int minCount = propertyValue("minCount").toInt();
+        const int maxCount = propertyValue("maxCount").toInt();
+        bool ok;
+        if (minCount == 0 && maxCount == 0)
+            ok = count > 0;
+        else {
+            ok = count >= minCount && (maxCount == 0 || count <= maxCount);
+            setResultData("countOk", ok);
+        }
+        setStatus(ok ? ToolStatus::OK : ToolStatus::NG);
+        return ok;
     }
     catch (const Ort::Exception& e) {
         setResultData("error", QString("ONNX Runtime 异常: %1").arg(e.what()));
