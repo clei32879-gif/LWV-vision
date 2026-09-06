@@ -13,6 +13,7 @@
 #include <QNetworkInterface>
 #include <QElapsedTimer>
 #include <QProcess>
+#include <QThread>
 #include <cstring>
 #include <QtEndian>
 
@@ -413,16 +414,16 @@ bool GigECamera::readRegister(uint32_t address, uint32_t& value)
             quint16 senderPort;
             m_ctrlSocket->readDatagram(resp.data(), resp.size(), &sender, &senderPort);
 
-            // GVCP ACK头: status(2) + ack_cmd(2) + ack_length(2) + packet_id(2) = 8字节,
-            // 后随寄存器值(4字节). 必须校验发送方是目标相机 (否则读到自己的广播回显).
-            if (sender == m_deviceIp && resp.size() >= 12) {
+            // GVCP ACK: 8字节头 [0]=类型0x00 [1]=flag [2-3]=ack_cmd [4-5]=length [6-7]=ack_id,
+            // 之后是 status(2)+reserved(2)+寄存器值(4) → 值在偏移12.
+            // (与 DISCOVERY_ACK 解析同基准: ack_cmd 在 2-3, 载荷从 8 开始)
+            if (sender == m_deviceIp && resp.size() >= 16) {
                 quint16 ackCmd = read16(resp, 2);
                 if (ackCmd == GVCP_READREG_ACK) {
-                    if (resp.size() >= 12) {
-                        value = read32(resp, 8);
-                        return true;
-                    }
+                    value = read32(resp, 12);
+                    return true;
                 }
+                // 不匹配的包(如迟到的 DISCOVERY_ACK)丢弃, 由重试循环继续等待
             }
         }
     }
@@ -450,13 +451,12 @@ bool GigECamera::writeRegister(uint32_t address, uint32_t value)
         QHostAddress sender;
         m_ctrlSocket->readDatagram(resp.data(), resp.size(), &sender);
 
-        // WRITEREG_ACK: status(2)+ack_cmd(2)+length(2)+packet_id(2)+index(2)+reserved(2)=12字节头,
-        // 状态字在偏移12. 同样必须校验来源是相机.
-        if (sender == m_deviceIp && resp.size() >= 16) {
+        // WRITEREG_ACK: 8字节头(同上) + status(2)+reserved(2) = 12字节, status 在偏移8.
+        // 标准应答总长12字节, 不要用 >=16 判断 (会永远失败).
+        if (sender == m_deviceIp && resp.size() >= 12) {
             quint16 ackCmd = read16(resp, 2);
             if (ackCmd == GVCP_WRITEREG_ACK) {
-                quint32 status = read32(resp, 12);
-                return status == 0; // 0=成功
+                return read16(resp, 8) == 0; // 0=GVCP_STATUS_SUCCESS
             }
         }
     }
