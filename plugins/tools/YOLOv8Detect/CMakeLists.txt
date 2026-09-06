@@ -10,6 +10,7 @@ if(VI_HAS_ONNXRT)
         VIEngine
         VIHAL
         VIUtils
+        VIAI
         ${OpenCV_LIBS}
         Qt6::Core
         Qt6::Gui

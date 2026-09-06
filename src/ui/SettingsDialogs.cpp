@@ -65,6 +65,13 @@ SystemSettingsDialog::SystemSettingsDialog(QWidget* parent)
         QStringLiteral("逗号分隔; 留空=自动CCD1..CCDN. 例: 上视,下视,侧视1,侧视2,左斜视,右斜视,顶视,底视"));
     form->addRow(QStringLiteral("工位名称:"), m_stationNames);
 
+    // AI推理设备 (DirectML: 任意DX12显卡可用 — NVIDIA/AMD/Intel; 模型加载失败自动回退CPU)
+    m_aiDevice = new QComboBox(this);
+    m_aiDevice->addItem(QStringLiteral("自动 (优先GPU加速)"), int(0));
+    m_aiDevice->addItem(QStringLiteral("仅CPU"), int(1));
+    m_aiDevice->addItem(QStringLiteral("仅GPU (DirectML)"), int(2));
+    form->addRow(QStringLiteral("AI推理设备(重启生效):"), m_aiDevice);
+
     // 读取当前配置
     QSettings s("VisionInspector", "VisionInspector");
     m_autoSaveNG->setChecked(s.value("autoSaveNGImages", false).toBool());
@@ -75,6 +82,7 @@ SystemSettingsDialog::SystemSettingsDialog(QWidget* parent)
 
     m_cameraCount->setValue(ConfigManager::instance().cameraCount());
     m_stationNames->setText(ConfigManager::instance().get("camera.stationNames", "").toString());
+    m_aiDevice->setCurrentIndex(s.value("aiDevice", 0).toInt());
 
     auto* buttons = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -93,6 +101,7 @@ void SystemSettingsDialog::onAccept() {
     ConfigManager::instance().setCameraCount(m_cameraCount->value());
     const QStringList names = m_stationNames->text().split(',', Qt::SkipEmptyParts);
     ConfigManager::instance().setStationNames(names);
+    s.setValue("aiDevice", m_aiDevice->currentIndex());
 
     accept();
 }

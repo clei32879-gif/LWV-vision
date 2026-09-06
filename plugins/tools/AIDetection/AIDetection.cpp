@@ -86,6 +86,7 @@ bool AIDetection::execute(ToolContext& context) {
         setStatus(ToolStatus::NG);
         return false;
     }
+    setResultData("device", engine->executionProvider());
 
     m_boxes.clear();
     m_lastOk = false;

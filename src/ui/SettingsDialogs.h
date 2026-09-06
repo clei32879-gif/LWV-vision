@@ -35,6 +35,7 @@ private:
     QCheckBox* m_autoSaveNG = nullptr;
     QSpinBox* m_cameraCount = nullptr;
     QLineEdit* m_stationNames = nullptr;
+    QComboBox* m_aiDevice = nullptr;   // AI推理设备 (自动/CPU/GPU-DirectML, 重启生效)
 };
 
 // ============================================================

@@ -5,6 +5,7 @@
 #include "../core/ConfigManager.h"
 #include "../core/DeviceTemplates.h"
 #include "../core/LicenseManager.h"
+#include "../ai/InferEngine.h"
 #include "../ui/DisplayArea.h"
 #include "../ui/FlowEditor.h"
 #include "../ui/Toolbox.h"
@@ -110,6 +111,16 @@ MainWindow::MainWindow(QWidget* parent)
     m_licenseLabel->setText(LicenseManager::instance().statusText());
     if (LicenseManager::instance().state() == LicenseManager::State::Expired)
         showLicenseWatermark();
+
+#ifdef VI_HAS_ONNXRT
+    // AI推理设备偏好 (系统设置里配置, 重启生效; Auto=优先DirectML GPU)
+    const int aiDev = QSettings(QStringLiteral("VisionInspector"),
+                                QStringLiteral("VisionInspector"))
+                          .value(QStringLiteral("aiDevice"), 0).toInt();
+    InferEngine::setDevicePreference(aiDev == 1 ? InferEngine::Device::Cpu
+                                 : aiDev == 2 ? InferEngine::Device::Dml
+                                              : InferEngine::Device::Auto);
+#endif
 
     // 连接流程执行信号到FlowEditor状态更新（必须在setupUI之后）
     connect(m_flowEngine, &FlowEngine::toolStatusChanged, this,

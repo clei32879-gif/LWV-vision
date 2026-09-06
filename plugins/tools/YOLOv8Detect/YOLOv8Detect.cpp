@@ -13,6 +13,7 @@
 #include "YOLOv8Detect.h"
 #include "../../../src/engine/ToolRegistry.h"
 #include "../../../src/core/LicenseManager.h"
+#include "../../../src/ai/InferEngine.h"
 #include <QElapsedTimer>
 
 #ifdef VI_HAS_OPENCV
@@ -23,6 +24,10 @@
 // ONNX Runtime C++ API
 #ifdef VI_HAS_ONNXRT
 #include <onnxruntime_cxx_api.h>
+
+// DirectML EP (仅 DirectML 版 onnxruntime.dll 导出; 与 InferEngine.cpp 同款手工声明)
+extern "C" OrtStatusPtr OrtSessionOptionsAppendExecutionProvider_DML(
+    OrtSessionOptions* options, int device_id);
 #endif
 
 #endif // VI_HAS_OPENCV
@@ -61,6 +66,7 @@ struct YOLOv8Detect::YOLOv8Impl {
     // --- 运行时缓存 ---
     std::vector<std::string> classNames;
     std::vector<YoloDetection> lastDetections;
+    QString provider;                // 实际执行提供器: "CPU" / "DirectML"
 
     // Letterbox 参数
     float scale = 1.0f;
@@ -97,10 +103,39 @@ struct YOLOv8Detect::YOLOv8Impl {
             sessionOptions.SetGraphOptimizationLevel(
                 GraphOptimizationLevel::ORT_ENABLE_ALL);
 
+            // GPU 加速: 按 InferEngine 的全局设备偏好尝试 DirectML EP, 失败回退 CPU
+            provider = QStringLiteral("CPU");
+            const auto devPref = InferEngine::devicePreference();
+            if (devPref != InferEngine::Device::Cpu) {
+                OrtStatus* dmlSt = OrtSessionOptionsAppendExecutionProvider_DML(
+                    sessionOptions, 0);
+                if (!dmlSt) {
+                    provider = QStringLiteral("DirectML");
+                } else {
+                    Ort::GetApi().ReleaseStatus(dmlSt);
+                }
+            }
+
             // 加载模型 (ORT 1.18: 路径用 wstring, 命名用 Allocated 接口)
             const std::wstring modelPathW = modelPath.toStdWString();
-            session = std::make_unique<Ort::Session>(
-                env, modelPathW.c_str(), sessionOptions);
+            try {
+                session = std::make_unique<Ort::Session>(
+                    env, modelPathW.c_str(), sessionOptions);
+            } catch (const Ort::Exception&) {
+                // Auto 模式下 DML 会话创建失败(模型算子不支持等) → 纯CPU重建
+                if (provider == QStringLiteral("DirectML")
+                    && devPref == InferEngine::Device::Auto) {
+                    Ort::SessionOptions cpuOpts;
+                    cpuOpts.SetIntraOpNumThreads(4);
+                    cpuOpts.SetGraphOptimizationLevel(
+                        GraphOptimizationLevel::ORT_ENABLE_ALL);
+                    session = std::make_unique<Ort::Session>(
+                        env, modelPathW.c_str(), cpuOpts);
+                    provider = QStringLiteral("CPU");
+                } else {
+                    throw;
+                }
+            }
 
             // 获取分配器
             Ort::AllocatorWithDefaultOptions allocator;
@@ -727,6 +762,7 @@ bool YOLOv8Detect::execute(ToolContext& context)
 
         int count = static_cast<int>(filtered.size());
         setResultData("inferenceMs", static_cast<double>(inferTimer.elapsed()));
+        setResultData("device", m->provider);
         setResultData("count", count);
         setResultData("found", count > 0);
         setResultData("rawCount", static_cast<int>(m->lastDetections.size()));
