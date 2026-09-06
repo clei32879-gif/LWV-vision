@@ -595,8 +595,9 @@ void MainWindow::onToolCopy(int index) {
     Flow* flow = m_flowEngine->flows().first();
     ITool* tool = flow->toolAt(index);
     if (!tool) return;
-    if (m_flowEditor) m_flowEditor->setClipboardTypeName(tool->typeName());
-    m_statusLabel->setText(QString("已复制: %1").arg(tool->typeName()));
+    // 复制完整工具(类型+参数+判定), 粘贴时还原 — 调好参数再复制是高频操作
+    if (m_flowEditor) m_flowEditor->setClipboardTool(tool->typeName(), tool->toJson());
+    m_statusLabel->setText(QString("已复制: %1 (含参数)").arg(tool->instanceName()));
 }
 
 void MainWindow::onToolPaste(int index) {
@@ -607,6 +608,10 @@ void MainWindow::onToolPaste(int index) {
         m_logPanel->appendLog(QString("无法创建工具: %1").arg(typeName));
         return;
     }
+    // 还原剪贴板中的参数/判定/注释 (空JSON则保持默认参数)
+    const QJsonObject clipJson = m_flowEditor->clipboardToolJson();
+    if (!clipJson.isEmpty())
+        tool->fromJson(clipJson);
 
     Flow* flow = nullptr;
     if (m_flowEngine->flowCount() > 0) {
@@ -624,15 +629,22 @@ void MainWindow::onToolPaste(int index) {
         flow->addTool(tool);
     }
 
-    // 命名: 统计同类型数量, 粘贴副本加 _N 后缀
-    int sameTypeCount = 0;
-    for (int i = 0; i < flow->toolCount(); ++i) {
-        ITool* t = flow->toolAt(i);
-        if (t && t != tool && t->typeName() == typeName) sameTypeCount++;
+    // 命名: 沿用复制的名字(fromJson已还原), 与流程内既有工具重名时加 _N 后缀
+    QString baseName = tool->instanceName().isEmpty() ? tool->displayName()
+                                                      : tool->instanceName();
+    auto nameExists = [&](const QString& n) {
+        for (int i = 0; i < flow->toolCount(); ++i) {
+            ITool* t = flow->toolAt(i);
+            if (t && t != tool && t->instanceName() == n) return true;
+        }
+        return false;
+    };
+    if (nameExists(baseName)) {
+        int n = 2;
+        while (nameExists(QString("%1_%2").arg(baseName).arg(n))) ++n;
+        baseName = QString("%1_%2").arg(baseName).arg(n);
     }
-    tool->setInstanceName(sameTypeCount == 0
-                              ? tool->displayName()
-                              : QString("%1_%2").arg(tool->displayName()).arg(sameTypeCount + 1));
+    tool->setInstanceName(baseName);
 
     m_flowEditor->setFlow(flow);
     m_flowEditor->refresh();

@@ -226,6 +226,12 @@ public:
 
     QString clipboardTypeName() const { return m_clipboardTypeName; }
     void setClipboardTypeName(const QString& name) { m_clipboardTypeName = name; }
+    /** 复制工具剪贴板: 类型名 + 完整属性JSON (粘贴时还原全部参数/判定) */
+    QJsonObject clipboardToolJson() const { return m_clipboardToolJson; }
+    void setClipboardTool(const QString& typeName, const QJsonObject& json) {
+        m_clipboardTypeName = typeName;
+        m_clipboardToolJson = json;
+    }
 
     void getCorrectionRange(int startIdx, int& endIdx) const;
 
@@ -265,6 +271,7 @@ private:
     FlowView* m_view;
     Flow* m_flow = nullptr;
     QString m_clipboardTypeName;
+    QJsonObject m_clipboardToolJson;
 
     QList<ToolNode*> m_nodes;
     QList<ConnectionItem*> m_connections;
