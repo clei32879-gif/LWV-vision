@@ -16,6 +16,9 @@
 #include <QNetworkInterface>
 #include <QInputDialog>
 #include <QApplication>
+#include <QSettings>
+#include <QDoubleSpinBox>
+#include <QSpinBox>
 
 namespace VisionInspector {
 
@@ -84,17 +87,19 @@ void CameraManagerDialog::setupUI()
     topRow->addStretch();
     mainLayout->addLayout(topRow);
 
-    // CCD1~CCD8 表格
-    auto* table = new QTableWidget(MAX_CAMERAS, 7, this);
-    table->setHorizontalHeaderLabels({"槽位", "别名", "相机IP", "芯片编号", "状态", "操作", "测试"});
+    // CCD1~CCD8 表格 (启用列: 标配N台也可只启用其中几台, 禁用=断开且不参与检测)
+    auto* table = new QTableWidget(MAX_CAMERAS, 9, this);
+    table->setHorizontalHeaderLabels({"槽位", "启用", "别名", "相机IP", "芯片编号", "状态", "操作", "参数", "测试"});
     table->horizontalHeader()->setStretchLastSection(false);
     table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-    table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
-    table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
     table->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
     table->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(7, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(8, QHeaderView::ResizeToContents);
     table->verticalHeader()->setVisible(false);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
@@ -108,6 +113,7 @@ void CameraManagerDialog::setupUI()
         defaultNames << QString("CCD%1").arg(i + 1);
         m_configs[i].name = defaultNames[i];
     }
+    loadStationSettings();
 
     for (int i = 0; i < MAX_CAMERAS; i++) {
         auto& w = m_slotWidgets[i];
@@ -116,28 +122,38 @@ void CameraManagerDialog::setupUI()
         // 0: 槽位
         table->setCellWidget(row, 0, new QLabel(QString("CCD%1").arg(i + 1)));
 
-        // 1: 别名
+        // 1: 工位启用
+        w.enableCheck = new QCheckBox;
+        w.enableCheck->setChecked(m_configs[i].enabled);
+        w.enableCheck->setToolTip(QStringLiteral(
+            "工位启用: 取消勾选后该工位断开且不参与检测 (如标配4台只用1/2/4号, 禁用3号)"));
+        connect(w.enableCheck, &QCheckBox::toggled, this, [this, i](bool on) {
+            onEnableToggled(i, on);
+        });
+        table->setCellWidget(row, 1, w.enableCheck);
+
+        // 2: 别名
         w.nameEdit = new QLineEdit(defaultNames[i]);
         connect(w.nameEdit, &QLineEdit::textChanged, this, [this, i](const QString& text) {
             m_configs[i].name = text;
         });
-        table->setCellWidget(row, 1, w.nameEdit);
+        table->setCellWidget(row, 2, w.nameEdit);
 
-        // 2: IP
+        // 3: IP
         w.ipEdit = new QLineEdit;
         w.ipEdit->setPlaceholderText("192.168.1.100");
-        table->setCellWidget(row, 2, w.ipEdit);
+        table->setCellWidget(row, 3, w.ipEdit);
 
-        // 3: 芯片编号
+        // 4: 芯片编号
         w.serialLabel = new QLabel("-");
-        table->setCellWidget(row, 3, w.serialLabel);
+        table->setCellWidget(row, 4, w.serialLabel);
 
-        // 4: 状态
+        // 5: 状态
         w.statusLabel = new QLabel("未连接");
         w.statusLabel->setStyleSheet("color: gray;");
-        table->setCellWidget(row, 4, w.statusLabel);
+        table->setCellWidget(row, 5, w.statusLabel);
 
-        // 5: 连接/断开
+        // 6: 连接/断开
         auto* btnWidget = new QWidget;
         auto* btnLayout = new QHBoxLayout(btnWidget);
         btnLayout->setContentsMargins(2, 2, 2, 2);
@@ -147,18 +163,31 @@ void CameraManagerDialog::setupUI()
         w.disconnectBtn->setEnabled(false);
         btnLayout->addWidget(w.connectBtn);
         btnLayout->addWidget(w.disconnectBtn);
-        table->setCellWidget(row, 5, btnWidget);
+        table->setCellWidget(row, 6, btnWidget);
 
-        // 6: 测试拍照
+        // 7: 相机参数
+        w.paramsBtn = new QPushButton("参数");
+        w.paramsBtn->setEnabled(false);
+        w.paramsBtn->setToolTip(QStringLiteral("曝光/增益/分辨率/触发模式/像素格式"));
+        table->setCellWidget(row, 7, w.paramsBtn);
+
+        // 8: 测试拍照
         w.testBtn = new QPushButton("拍照");
         w.testBtn->setEnabled(false);
-        table->setCellWidget(row, 6, w.testBtn);
+        table->setCellWidget(row, 8, w.testBtn);
 
         // 信号连接
         int idx = i;  // 捕获用
         connect(w.connectBtn, &QPushButton::clicked, this, [this, idx]() { onConnectClicked(idx); });
         connect(w.disconnectBtn, &QPushButton::clicked, this, [this, idx]() { onDisconnectClicked(idx); });
         connect(w.testBtn, &QPushButton::clicked, this, [this, idx]() { onTestGrab(idx); });
+        connect(w.paramsBtn, &QPushButton::clicked, this, [this, idx]() { onParamsClicked(idx); });
+
+        // 禁用状态下的控件初始可见性
+        if (!m_configs[i].enabled) {
+            w.ipEdit->setEnabled(false);
+            w.connectBtn->setEnabled(false);
+        }
     }
 
     mainLayout->addWidget(table);
@@ -219,6 +248,7 @@ void CameraManagerDialog::onConnectClicked(int index)
         w.serialLabel->setText(serial);
         w.connectBtn->setEnabled(false);
         w.disconnectBtn->setEnabled(true);
+        w.paramsBtn->setEnabled(true);
         w.testBtn->setEnabled(true);
         w.ipEdit->setReadOnly(true);
 
@@ -269,11 +299,156 @@ void CameraManagerDialog::onDisconnectClicked(int index)
     w.serialLabel->setText("-");
     w.connectBtn->setEnabled(true);
     w.disconnectBtn->setEnabled(false);
+    w.paramsBtn->setEnabled(false);
     w.testBtn->setEnabled(false);
     w.ipEdit->setReadOnly(false);
 
     m_configs[index].connected = false;
     emit cameraStatusChanged(index, false, "");
+}
+
+// ============================================================
+// 工位启用/禁用 (标配N台也可只启用其中几台)
+// ============================================================
+
+void CameraManagerDialog::onEnableToggled(int index, bool on)
+{
+    if (index < 0 || index >= MAX_CAMERAS) return;
+    m_configs[index].enabled = on;
+    saveStationSetting(index);
+
+    auto& w = m_slotWidgets[index];
+    if (!on) {
+        // 禁用: 断开连接 → 检测链路查不到该相机, 天然不参与检测
+        if (m_cameras[index] && m_cameras[index]->isOpen())
+            onDisconnectClicked(index);
+        w.ipEdit->setEnabled(false);
+        w.connectBtn->setEnabled(false);
+        w.statusLabel->setText("已禁用");
+        w.statusLabel->setStyleSheet("color: #888;");
+    } else {
+        w.ipEdit->setEnabled(true);
+        w.connectBtn->setEnabled(true);
+        w.statusLabel->setText("未连接");
+        w.statusLabel->setStyleSheet("color: gray;");
+    }
+}
+
+void CameraManagerDialog::loadStationSettings()
+{
+    QSettings s("VisionInspector", "VisionInspector");
+    for (int i = 0; i < MAX_CAMERAS; ++i)
+        m_configs[i].enabled = s.value(QStringLiteral("stationEnabled/%1").arg(i), true).toBool();
+}
+
+void CameraManagerDialog::saveStationSetting(int index) const
+{
+    QSettings s("VisionInspector", "VisionInspector");
+    s.setValue(QStringLiteral("stationEnabled/%1").arg(index), m_configs[index].enabled);
+}
+
+// ============================================================
+// 相机参数编辑 (曝光/增益/分辨率/触发模式/像素格式)
+// ============================================================
+
+void CameraManagerDialog::onParamsClicked(int index)
+{
+    if (index < 0 || index >= MAX_CAMERAS) return;
+    auto* cam = m_cameras[index];
+    if (!cam || !cam->isOpen()) return;
+    auto& w = m_slotWidgets[index];
+
+    CameraParams p = cam->getParams();
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(QStringLiteral("相机参数 - %1").arg(w.nameEdit->text()));
+    auto* form = new QFormLayout(&dlg);
+
+    auto* exposure = new QDoubleSpinBox(&dlg);
+    exposure->setRange(1.0, 1000000.0);
+    exposure->setDecimals(0);
+    exposure->setSuffix(QStringLiteral(" μs"));
+    exposure->setValue(p.exposureTime > 0 ? p.exposureTime : 5000.0);
+    form->addRow(QStringLiteral("曝光时间:"), exposure);
+
+    auto* gain = new QDoubleSpinBox(&dlg);
+    gain->setRange(0.0, 48.0);
+    gain->setDecimals(1);
+    gain->setSuffix(QStringLiteral(" dB"));
+    gain->setValue(p.gain >= 0 ? p.gain : 0.0);
+    form->addRow(QStringLiteral("增益:"), gain);
+
+    auto* width = new QSpinBox(&dlg);
+    width->setRange(1, 24576);
+    width->setValue(p.width);
+    auto* height = new QSpinBox(&dlg);
+    height->setRange(1, 20480);
+    height->setValue(p.height);
+    auto* roi = new QHBoxLayout;
+    roi->addWidget(width);
+    roi->addWidget(new QLabel("×", &dlg));
+    roi->addWidget(height);
+    roi->addStretch();
+    form->addRow(QStringLiteral("分辨率:"), roi);
+
+    auto* trigger = new QComboBox(&dlg);
+    trigger->addItem(QStringLiteral("连续采集 (内部自由触发)"), 0);
+    trigger->addItem(QStringLiteral("外部触发 (硬触发/软触发)"), 1);
+    trigger->setCurrentIndex(p.triggerMode ? 1 : 0);
+    form->addRow(QStringLiteral("触发模式:"), trigger);
+
+    auto* pixel = new QComboBox(&dlg);
+    pixel->addItems(cam->supportedPixelFormats());
+    if (!p.pixelFormat.isEmpty()) {
+        const int idx = pixel->findText(p.pixelFormat);
+        if (idx >= 0) pixel->setCurrentIndex(idx);
+    }
+    form->addRow(QStringLiteral("像素格式:"), pixel);
+
+    auto* btnRow = new QHBoxLayout;
+    auto* refreshBtn = new QPushButton(QStringLiteral("从相机回读"), &dlg);
+    auto* applyBtn = new QPushButton(QStringLiteral("应用"), &dlg);
+    auto* closeBtn = new QPushButton(QStringLiteral("关闭"), &dlg);
+    btnRow->addWidget(refreshBtn);
+    btnRow->addWidget(applyBtn);
+    btnRow->addStretch();
+    btnRow->addWidget(closeBtn);
+    form->addRow(btnRow);
+
+    auto apply = [&]() -> QString {
+        CameraParams np = p;
+        np.exposureTime = exposure->value();
+        np.gain = gain->value();
+        np.width = width->value();
+        np.height = height->value();
+        np.triggerMode = trigger->currentIndex() == 1;
+        np.pixelFormat = pixel->currentText();
+        if (!cam->setParams(np))
+            return QStringLiteral("写入失败 (相机拒绝部分参数)");
+        CameraParams cur = cam->getParams();
+        exposure->setValue(cur.exposureTime > 0 ? cur.exposureTime : exposure->value());
+        gain->setValue(cur.gain >= 0 ? cur.gain : gain->value());
+        width->setValue(cur.width > 0 ? cur.width : width->value());
+        height->setValue(cur.height > 0 ? cur.height : height->value());
+        return {};
+    };
+
+    connect(refreshBtn, &QPushButton::clicked, &dlg, [&]() {
+        CameraParams cur = cam->getParams();
+        exposure->setValue(cur.exposureTime > 0 ? cur.exposureTime : exposure->value());
+        gain->setValue(cur.gain >= 0 ? cur.gain : gain->value());
+        width->setValue(cur.width > 0 ? cur.width : width->value());
+        height->setValue(cur.height > 0 ? cur.height : height->value());
+        trigger->setCurrentIndex(cur.triggerMode ? 1 : 0);
+    });
+    connect(applyBtn, &QPushButton::clicked, &dlg, [&]() {
+        const QString err = apply();
+        if (!err.isEmpty())
+            QMessageBox::warning(&dlg, QStringLiteral("应用参数"), err);
+    });
+    connect(closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+
+    dlg.exec();
 }
 
 void CameraManagerDialog::onTestGrab(int index)

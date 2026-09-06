@@ -631,20 +631,57 @@ CameraParams GigECamera::getParams() const
     params.height = m_imageHeight;
 
     uint32_t v = 0;
-    const_cast<GigECamera*>(this)->readRegister(REG_EXPOSURE_TIME, v);
-    params.exposureTime = (double)v;
-    const_cast<GigECamera*>(this)->readRegister(REG_GAIN, v);
-    params.gain = (double)v;
-
+    auto* self = const_cast<GigECamera*>(this);
+    if (self->readRegister(REG_EXPOSURE_TIME, v)) params.exposureTime = (double)v;
+    if (self->readRegister(REG_GAIN, v)) params.gain = (double)v;
+    if (self->readRegister(REG_TRIGGER_MODE, v)) params.triggerMode = (v != 0);
+    if (self->readRegister(REG_PIXEL_FORMAT, v)) {
+        // GigE SFNC 像素格式枚举值 → 名称
+        switch (v) {
+        case 0x01080001: params.pixelFormat = "Mono8";  break;
+        case 0x01100003: params.pixelFormat = "Mono16"; break;
+        case 0x02180014: params.pixelFormat = "RGB8";   break;
+        case 0x02180015: params.pixelFormat = "BGR8";   break;
+        default: params.pixelFormat = QString("0x%1").arg(v, 8, 16, QChar('0')); break;
+        }
+    }
     return params;
 }
 
 bool GigECamera::setParams(const CameraParams& params)
 {
     if (!m_isOpen) return false;
-    writeRegister(REG_EXPOSURE_TIME, (uint32_t)params.exposureTime);
-    writeRegister(REG_GAIN, (uint32_t)params.gain);
-    return true;
+
+    // 宽高/像素格式属采集参数, 需停流后修改, 完成后恢复
+    const bool wasAcquiring = m_isAcquiring;
+    if (wasAcquiring) stopAcquisition();
+
+    bool ok = true;
+    if (params.width  > 0 && params.width  != m_imageWidth)
+        ok = writeRegister(REG_WIDTH,  (uint32_t)params.width) && ok;
+    if (params.height > 0 && params.height != m_imageHeight)
+        ok = writeRegister(REG_HEIGHT, (uint32_t)params.height) && ok;
+    if (params.exposureTime >= 0)
+        ok = writeRegister(REG_EXPOSURE_TIME, (uint32_t)params.exposureTime) && ok;
+    if (params.gain >= 0)
+        ok = writeRegister(REG_GAIN, (uint32_t)params.gain) && ok;
+    ok = writeRegister(REG_TRIGGER_MODE, params.triggerMode ? 1 : 0) && ok;
+
+    // 像素格式: 名称 → GigE SFNC 枚举值
+    uint32_t pf = 0;
+    if      (params.pixelFormat == "Mono8")  pf = 0x01080001;
+    else if (params.pixelFormat == "Mono16") pf = 0x01100003;
+    else if (params.pixelFormat == "RGB8")   pf = 0x02180014;
+    else if (params.pixelFormat == "BGR8")   pf = 0x02180015;
+    if (pf) ok = writeRegister(REG_PIXEL_FORMAT, pf) && ok;
+
+    // 回读尺寸 (相机可能裁剪到传感器范围)
+    uint32_t w = 0, h = 0;
+    if (readRegister(REG_WIDTH, w) && w > 0)  m_imageWidth  = (int)w;
+    if (readRegister(REG_HEIGHT, h) && h > 0) m_imageHeight = (int)h;
+
+    if (wasAcquiring) startAcquisition();
+    return ok;
 }
 
 // ============================================================

@@ -9,6 +9,7 @@
 #include <QLabel>
 #include <QComboBox>
 #include <QGridLayout>
+#include <QCheckBox>
 #include <QVector>
 #include <QMap>
 #include "../hal/ICameraDriver.h"
@@ -20,12 +21,13 @@ namespace VisionInspector {
 /**
  * 单个相机位配置
  */
-struct CameraSlotConfig {
-    QString name;          // 别名 (如 "CCD1-正面检测")
-    QString ipAddress;     // 相机 IP
-    QString serialNumber;  // 芯片编号 (只读, 连接后自动读取)
-    bool connected = false;
-};
+    struct CameraSlotConfig {
+        QString name;          // 别名 (如 "CCD1-正面检测")
+        QString ipAddress;     // 相机 IP
+        QString serialNumber;  // 芯片编号 (只读, 连接后自动读取)
+        bool connected = false;
+        bool enabled = true;   // 工位启用 (标配N台也可只启用其中几台)
+    };
 
 class CameraManagerDialog : public QDialog {
     Q_OBJECT
@@ -54,21 +56,27 @@ private slots:
     void onConnectClicked(int index);
     void onDisconnectClicked(int index);
     void onTestGrab(int index);
+    void onParamsClicked(int index);   // 相机参数编辑 (曝光/增益/分辨率/触发)
+    void onEnableToggled(int index, bool on); // 工位启用/禁用
 
 private:
     void setupUI();
     void updateStatus(int index);
+    void loadStationSettings();
+    void saveStationSetting(int index) const;
 
     static constexpr int MAX_CAMERAS = 8;
 
     struct SlotWidgets {
         QLabel* nameLabel = nullptr;
+        QCheckBox* enableCheck = nullptr;   // 工位启用
         QLineEdit* nameEdit = nullptr;
         QLineEdit* ipEdit = nullptr;
         QLabel* serialLabel = nullptr;
         QLabel* statusLabel = nullptr;
         QPushButton* connectBtn = nullptr;
         QPushButton* disconnectBtn = nullptr;
+        QPushButton* paramsBtn = nullptr;   // 相机参数
         QPushButton* testBtn = nullptr;
     };
 
