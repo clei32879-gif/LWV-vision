@@ -20,6 +20,8 @@
 
 class QTabWidget;
 class QCheckBox;
+class QTimer;
+class QVBoxLayout;
 
 namespace VisionInspector {
 
@@ -51,12 +53,21 @@ private:
     QFormLayout* m_formLayout = nullptr;
     QDialogButtonBox* m_buttonBox = nullptr;
     QMap<QString, QWidget*> m_editors;
-    // 页签3 数据判定
+    // 页签3 数据判定 (容器+布局, 支持试执行后重建)
+    QWidget* m_judgeContainer = nullptr;
+    QVBoxLayout* m_judgeLayout = nullptr;
     QTableWidget* m_judgeTable = nullptr;
+    // 页签4 试执行 (即改即显: 参数变化自动重跑)
+    QTimer* m_previewTimer = nullptr;
+    ImageViewWidget* m_previewViewer = nullptr;
 
     void buildUI();
     void buildJudgeSection();
     void onTryRun();
+    /** 试执行并把结果叠加到预览视图 (参数变化自动触发) */
+    void updatePreview();
+    /** 把参数编辑器的变化信号接到预览防抖定时器 */
+    void connectAutoPreview(QWidget* editor);
     void accept() override;
 
     /** 创建带浏览按钮的路径输入框 */

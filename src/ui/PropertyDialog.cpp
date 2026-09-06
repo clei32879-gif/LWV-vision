@@ -16,6 +16,7 @@
 #include <QHeaderView>
 #include <QMenu>
 #include <QTabWidget>
+#include <QTimer>
 
 namespace VisionInspector {
 
@@ -28,6 +29,13 @@ PropertyDialog::PropertyDialog(ITool* tool, const QStringList& availableTools,
     setWindowTitle(QString("属性编辑 - %1").arg(tool->displayName()));
     setWindowIcon(IconHelper::categoryIcon(tool->category(), 32));
     setMinimumSize(560, 520);
+
+    // 即改即显: 参数变化后 300ms 防抖自动试执行
+    m_previewTimer = new QTimer(this);
+    m_previewTimer->setSingleShot(true);
+    m_previewTimer->setInterval(300);
+    connect(m_previewTimer, &QTimer::timeout, this, &PropertyDialog::updatePreview);
+
     buildUI();
 }
 
@@ -62,7 +70,7 @@ void PropertyDialog::buildUI() {
     auto* paramLayout = new QVBoxLayout(paramPage);
     // 使用提示: 让用户一眼知道怎么操作
     auto* hint = new QLabel(
-        QStringLiteral("说明：修改下方参数后，点[试执行]可预览效果；确认无误后点[确定]。"), paramPage);
+        QStringLiteral("说明：修改参数后会自动在[试执行]页预览效果；数值/下拉项带悬浮说明。"), paramPage);
     hint->setStyleSheet("color: #4a9eff; background: #1e2a3a; padding: 6px; border-radius: 3px;");
     hint->setWordWrap(true);
     paramLayout->addWidget(hint);
@@ -85,6 +93,7 @@ void PropertyDialog::buildUI() {
         if (idx >= 0) combo->setCurrentIndex(idx);
         m_formLayout->addRow("图像来源:", combo);
         m_editors["inputImage"] = combo;
+        connectAutoPreview(combo);
     } else if (needsImage) {
         auto* combo = new QComboBox(paramPage);
         combo->setMinimumWidth(200);
@@ -96,6 +105,7 @@ void PropertyDialog::buildUI() {
         if (idx >= 0) combo->setCurrentIndex(idx);
         m_formLayout->addRow("输入图像:", combo);
         m_editors["inputImage"] = combo;
+        connectAutoPreview(combo);
     }
 
     const PropertyDefList defs = m_tool->propertyDefs();
@@ -152,8 +162,15 @@ void PropertyDialog::buildUI() {
         if (editor) {
             QString label = def.label;
             if (!def.group.isEmpty()) label += QString(" [%1]").arg(def.group);
-            m_formLayout->addRow(label + ":", editor);
+            auto* labelWidget = new QLabel(label + ":", paramPage);
+            // 悬浮说明: PropertyDef.tooltip 声明的参数含义, 标签与编辑器都可见
+            if (!def.tooltip.isEmpty()) {
+                labelWidget->setToolTip(def.tooltip);
+                editor->setToolTip(def.tooltip);
+            }
+            m_formLayout->addRow(labelWidget, editor);
             m_editors[def.name] = editor;
+            connectAutoPreview(editor);
         }
     }
 
@@ -161,33 +178,26 @@ void PropertyDialog::buildUI() {
     auto* judgePage = new QWidget(this);
     auto* judgeLayout = new QVBoxLayout(judgePage);
     judgeLayout->addWidget(new QLabel(
-        QStringLiteral("勾选启用后, 对应结果超出上下限即判NG (结果键来自最近一次执行):"), judgePage));
-    m_judgeTable = nullptr;
-    buildJudgeSection();
-    if (m_judgeTable)
-        judgeLayout->addWidget(m_judgeTable);
-    else
-        judgeLayout->addWidget(new QLabel(
-            QStringLiteral("(尚无结果键 — 先执行一次流程后此处可配置判定)"), judgePage));
+        QStringLiteral("勾选启用后, 对应结果超出上下限即判NG (结果键来自试执行/最近一次执行):"), judgePage));
+    m_judgeContainer = new QWidget(judgePage);
+    m_judgeLayout = new QVBoxLayout(m_judgeContainer);
+    m_judgeLayout->setContentsMargins(0, 0, 0, 0);
+    judgeLayout->addWidget(m_judgeContainer);
     m_tabs->addTab(judgePage, QStringLiteral("数据判定"));
+    buildJudgeSection();
 
     // ============ 页签4: 试执行 ============
     auto* tryPage = new QWidget(this);
     auto* tryLayout = new QVBoxLayout(tryPage);
-    auto* tryBtn = new QPushButton(QStringLiteral("▶ 用最近一帧图像试执行当前参数"), tryPage);
+    auto* tryHint = new QLabel(
+        QStringLiteral("修改任何参数后自动试执行 (0.3秒防抖); 也可点按钮立即重跑。"), tryPage);
+    tryHint->setStyleSheet("color: #9aa0a6; font-size: 12px;");
+    tryLayout->addWidget(tryHint);
+    auto* tryBtn = new QPushButton(QStringLiteral("▶ 立即试执行当前参数"), tryPage);
     tryLayout->addWidget(tryBtn);
-    auto* viewer = new ImageViewWidget(tryPage);
-    tryLayout->addWidget(viewer, 1);
-    connect(tryBtn, &QPushButton::clicked, this, [this, viewer]() {
-        // 先把界面上的参数写入工具副本再试跑 (不动正式配置)
-        onTryRun();
-        viewer->setImage(cvMatToQImage(m_lastImage ? *m_lastImage : CvImage()));
-        QVariantList overlays;
-        if (m_tool->status() == ToolStatus::OK)
-            overlays = QVector<QVariant>(m_tool->overlays().begin(),
-                                         m_tool->overlays().end()).toList();
-        viewer->setOverlays(overlays);
-    });
+    m_previewViewer = new ImageViewWidget(tryPage);
+    tryLayout->addWidget(m_previewViewer, 1);
+    connect(tryBtn, &QPushButton::clicked, this, [this]() { updatePreview(); });
     m_tabs->addTab(tryPage, QStringLiteral("试执行"));
 
     // 默认定位到"参数设置", 让用户先看到该工具最关键的配置
@@ -233,7 +243,51 @@ void PropertyDialog::onTryRun() {
     (void)r;
 }
 
+void PropertyDialog::updatePreview() {
+    if (!m_lastImage || m_lastImage->empty()) return; // 无图像时不自动预览
+    onTryRun();
+    if (!m_previewViewer) return;
+    m_previewViewer->setImage(cvMatToQImage(*m_lastImage));
+    QVariantList overlays;
+    if (m_tool->status() == ToolStatus::OK)
+        overlays = QVector<QVariant>(m_tool->overlays().begin(),
+                                     m_tool->overlays().end()).toList();
+    m_previewViewer->setOverlays(overlays);
+    // 判定表此前为空(无结果键)时, 试执行拿到结果键后立即补建, 不用先跑整条流程
+    if (!m_judgeTable && !m_tool->resultData().isEmpty())
+        buildJudgeSection();
+}
+
+void PropertyDialog::connectAutoPreview(QWidget* editor) {
+    if (!editor) return;
+    auto kick = [this]() { m_previewTimer->start(); };
+    if (auto* s = qobject_cast<QSpinBox*>(editor))
+        connect(s, &QSpinBox::valueChanged, this, kick);
+    else if (auto* d = qobject_cast<QDoubleSpinBox*>(editor))
+        connect(d, &QDoubleSpinBox::valueChanged, this, kick);
+    else if (auto* c = qobject_cast<QCheckBox*>(editor))
+        connect(c, &QCheckBox::toggled, this, kick);
+    else if (auto* cb = qobject_cast<QComboBox*>(editor))
+        connect(cb, &QComboBox::currentIndexChanged, this, kick);
+    else if (auto* le = qobject_cast<QLineEdit*>(editor))
+        connect(le, &QLineEdit::textChanged, this, kick);
+    else // 路径/数据链接容器: 接内部 QLineEdit
+        if (auto* inner = editor->findChild<QLineEdit*>())
+            connect(inner, &QLineEdit::textChanged, this, kick);
+}
+
 void PropertyDialog::buildJudgeSection() {
+    // 清空旧内容(表或占位提示), 支持试执行后重建
+    if (m_judgeTable) {
+        m_judgeTable->deleteLater();
+        m_judgeTable = nullptr;
+    }
+    QLayoutItem* child;
+    while ((child = m_judgeLayout->takeAt(0)) != nullptr) {
+        if (child->widget()) child->widget()->deleteLater();
+        delete child;
+    }
+
     QList<ResultJudgment> judges = m_tool->judgments();
     const QStringList resultKeys = m_tool->resultData().keys();
     for (const QString& key : resultKeys) {
@@ -246,7 +300,11 @@ void PropertyDialog::buildJudgeSection() {
             judges.append(j);
         }
     }
-    if (judges.isEmpty()) return;
+    if (judges.isEmpty()) {
+        m_judgeLayout->addWidget(new QLabel(
+            QStringLiteral("(尚无结果键 — 切到[试执行]页跑一次, 或先执行一次流程)"), m_judgeContainer));
+        return;
+    }
 
     m_judgeTable = new QTableWidget(judges.size(), 4, this);
     m_judgeTable->setHorizontalHeaderLabels({"结果键", "启用", "下限", "上限"});
@@ -268,6 +326,7 @@ void PropertyDialog::buildJudgeSection() {
         m_judgeTable->setItem(r, 3, new QTableWidgetItem(
             j.upper >= 1e17 ? QString() : QString::number(j.upper)));
     }
+    m_judgeLayout->addWidget(m_judgeTable);
 }
 
 QWidget* PropertyDialog::createLinkEditor(const QString& name, const QString& value) {
