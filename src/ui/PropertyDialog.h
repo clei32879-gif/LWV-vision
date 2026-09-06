@@ -60,6 +60,9 @@ private:
     // 页签4 试执行 (即改即显: 参数变化自动重跑)
     QTimer* m_previewTimer = nullptr;
     ImageViewWidget* m_previewViewer = nullptr;
+    // ROI 图形化编辑 (工具含 roiCenterX/Y + roiWidth/Height 参数时可用)
+    class QPushButton* m_roiEditBtn = nullptr;
+    bool m_hasRoi = false;
 
     void buildUI();
     void buildJudgeSection();
@@ -68,6 +71,10 @@ private:
     void updatePreview();
     /** 把参数编辑器的变化信号接到预览防抖定时器 */
     void connectAutoPreview(QWidget* editor);
+    /** 编辑器数值 → 预览图ROI框 */
+    void syncRoiToViewer();
+    /** 图上拖拽ROI → 写回数值编辑器 (触发自动预览) */
+    void onRoiEdited(const QRectF& rect);
     void accept() override;
 
     /** 创建带浏览按钮的路径输入框 */

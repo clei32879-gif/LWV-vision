@@ -18,6 +18,7 @@
 #include <QMenu>
 #include <QTabWidget>
 #include <QTimer>
+#include <algorithm>
 
 namespace VisionInspector {
 
@@ -198,6 +199,10 @@ void PropertyDialog::buildUI() {
     buildJudgeSection();
 
     // ============ 页签4: 试执行 ============
+    // 是否具备图形化ROI编辑条件 (主流约定: roiCenterX/Y + roiWidth/Height [+roiAngle])
+    m_hasRoi = m_editors.contains("roiCenterX") && m_editors.contains("roiCenterY")
+            && m_editors.contains("roiWidth") && m_editors.contains("roiHeight");
+
     auto* tryPage = new QWidget(this);
     auto* tryLayout = new QVBoxLayout(tryPage);
     auto* tryHint = new QLabel(
@@ -206,8 +211,28 @@ void PropertyDialog::buildUI() {
     tryLayout->addWidget(tryHint);
     auto* tryBtn = new QPushButton(QStringLiteral("▶ 立即试执行当前参数"), tryPage);
     tryLayout->addWidget(tryBtn);
+
+    if (m_hasRoi) {
+        m_roiEditBtn = new QPushButton(QStringLiteral("▣ 在图上拖拽编辑ROI (移动/缩放)"), tryPage);
+        m_roiEditBtn->setCheckable(true);
+        tryLayout->addWidget(m_roiEditBtn);
+        connect(m_roiEditBtn, &QPushButton::toggled, this, [this](bool on) {
+            m_previewViewer->setRoiEditing(on);
+            if (on) {
+                // ROI类型为"无"时自动切到"矩形", 拖拽立即有意义
+                if (auto* typeCombo = qobject_cast<QComboBox*>(m_editors.value("roiType")))
+                    if (typeCombo->currentIndex() == 0)
+                        typeCombo->setCurrentIndex(1);
+                syncRoiToViewer();
+            }
+        });
+    }
+
     m_previewViewer = new ImageViewWidget(tryPage);
     tryLayout->addWidget(m_previewViewer, 1);
+    if (m_hasRoi)
+        connect(m_previewViewer, &ImageViewWidget::roiEdited,
+                this, &PropertyDialog::onRoiEdited);
     connect(tryBtn, &QPushButton::clicked, this, [this]() { updatePreview(); });
     m_tabs->addTab(tryPage, QStringLiteral("试执行"));
 
@@ -264,9 +289,36 @@ void PropertyDialog::updatePreview() {
         overlays = QVector<QVariant>(m_tool->overlays().begin(),
                                      m_tool->overlays().end()).toList();
     m_previewViewer->setOverlays(overlays);
+    // ROI编辑开启时保持数值→框同步 (拖拽中由setRoiRect内部忽略, 不会打架)
+    if (m_roiEditBtn && m_roiEditBtn->isChecked())
+        syncRoiToViewer();
     // 判定表此前为空(无结果键)时, 试执行拿到结果键后立即补建, 不用先跑整条流程
     if (!m_judgeTable && !m_tool->resultData().isEmpty())
         buildJudgeSection();
+}
+
+void PropertyDialog::syncRoiToViewer() {
+    auto spinVal = [this](const char* name) -> double {
+        if (auto* s = qobject_cast<QDoubleSpinBox*>(m_editors.value(name)))
+            return s->value();
+        return 0.0;
+    };
+    const double cx = spinVal("roiCenterX"), cy = spinVal("roiCenterY");
+    const double w = std::max(4.0, spinVal("roiWidth"));
+    const double h = std::max(4.0, spinVal("roiHeight"));
+    const double angle = m_editors.contains("roiAngle") ? spinVal("roiAngle") : 0.0;
+    m_previewViewer->setRoiRect(QRectF(cx - w / 2.0, cy - h / 2.0, w, h), angle);
+}
+
+void PropertyDialog::onRoiEdited(const QRectF& rect) {
+    auto setSpin = [this](const char* name, double v) {
+        if (auto* s = qobject_cast<QDoubleSpinBox*>(m_editors.value(name)))
+            s->setValue(v); // 触发 valueChanged → 自动预览
+    };
+    setSpin("roiCenterX", rect.center().x());
+    setSpin("roiCenterY", rect.center().y());
+    setSpin("roiWidth", rect.width());
+    setSpin("roiHeight", rect.height());
 }
 
 void PropertyDialog::connectAutoPreview(QWidget* editor) {
