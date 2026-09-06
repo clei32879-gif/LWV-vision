@@ -76,43 +76,72 @@ bool ProjectManager::loadProject(const QString& path) {
     m_projectName = json.value("projectName").toString("Untitled");
     m_projectNote = json.value("projectNote").toString();
 
-    // 重建流程与工具 (H-2: 先停引擎等待工作线程结束, 再删旧流程/工具)
-    if (m_engine) {
-        m_engine->shutdownAndWait(3000);
-        for (Flow* f : m_engine->flows()) {
-            m_engine->removeFlow(f);
-            // 先脱离 QObject 父子关系再延迟删除, 避免引擎析构时二次释放
-            f->setParent(nullptr);
-            f->deleteLater();
-        }
-        const QJsonArray flows = json.value("flows").toArray();
-        int rebuiltTools = 0, missingTypes = 0;
-        for (const QJsonValue& fv : flows) {
-            const QJsonObject flowJson = fv.toObject();
-            Flow* flow = new Flow(m_engine);
-            flow->setName(flowJson.value("name").toString(QStringLiteral("流程%1")
-                                                             .arg(m_engine->flowCount() + 1)));
-            flow->setAutoExecute(flowJson.value("autoExecute").toBool(true));
-            flow->setDelayMs(flowJson.value("delayMs").toInt(0));
+    // 流程/工具/全局变量重建与撤销恢复共用同一条路径
+    restoreStateJson(json);
 
-            const QJsonArray tools = flowJson.value("tools").toArray();
-            for (const QJsonValue& tv : tools) {
-                const QJsonObject toolJson = tv.toObject();
-                const QString typeName = toolJson.value("typeName").toString();
-                ITool* tool = ToolRegistry::instance().createTool(typeName);
-                if (!tool) {
-                    VI_LOG_WARN(QString("项目中的工具类型未注册, 跳过: %1").arg(typeName));
-                    ++missingTypes;
-                    continue;
-                }
-                tool->fromJson(toolJson);
-                flow->addTool(tool);
-                ++rebuiltTools;
+    m_currentPath = path;
+    m_modified = false;
+
+    emit projectLoaded(path);
+    VI_LOG_INFO("Project loaded: " + path);
+    return true;
+}
+
+QJsonObject ProjectManager::currentStateJson() const {
+    QJsonObject json;
+    if (m_engine) {
+        QJsonArray flows;
+        for (Flow* f : m_engine->flows())
+            flows.append(f->toJson());
+        json["flows"] = flows;
+    }
+    if (m_globals) {
+        // all() 返回副本, 先拷贝再迭代 (见 saveProject 内注释)
+        const QMap<QString, QVariant> allmap = m_globals->all();
+        QJsonObject gv;
+        for (auto it = allmap.begin(); it != allmap.end(); ++it)
+            gv[it.key()] = QJsonValue::fromVariant(it.value());
+        json["globalVariables"] = gv;
+    }
+    return json;
+}
+
+bool ProjectManager::restoreStateJson(const QJsonObject& json) {
+    if (!m_engine) return false;
+
+    // 重建流程与工具 (H-2: 先停引擎等待工作线程结束, 再删旧流程/工具)
+    m_engine->shutdownAndWait(3000);
+    for (Flow* f : m_engine->flows()) {
+        m_engine->removeFlow(f);
+        // 先脱离 QObject 父子关系再延迟删除, 避免引擎析构时二次释放
+        f->setParent(nullptr);
+        f->deleteLater();
+    }
+    const QJsonArray flows = json.value("flows").toArray();
+    int rebuiltTools = 0, missingTypes = 0;
+    for (const QJsonValue& fv : flows) {
+        const QJsonObject flowJson = fv.toObject();
+        Flow* flow = new Flow(m_engine);
+        flow->setName(flowJson.value("name").toString(QStringLiteral("流程%1")
+                                                         .arg(m_engine->flowCount() + 1)));
+        flow->setAutoExecute(flowJson.value("autoExecute").toBool(true));
+        flow->setDelayMs(flowJson.value("delayMs").toInt(0));
+
+        const QJsonArray tools = flowJson.value("tools").toArray();
+        for (const QJsonValue& tv : tools) {
+            const QJsonObject toolJson = tv.toObject();
+            const QString typeName = toolJson.value("typeName").toString();
+            ITool* tool = ToolRegistry::instance().createTool(typeName);
+            if (!tool) {
+                VI_LOG_WARN(QString("项目中的工具类型未注册, 跳过: %1").arg(typeName));
+                ++missingTypes;
+                continue;
             }
-            m_engine->addFlow(flow);
+            tool->fromJson(toolJson);
+            flow->addTool(tool);
+            ++rebuiltTools;
         }
-        VI_LOG_INFO(QString("流程重建完成: %1个流程, %2个工具 (缺失类型%3个)")
-                    .arg(flows.size()).arg(rebuiltTools).arg(missingTypes));
+        m_engine->addFlow(flow);
     }
 
     // 全局变量
@@ -123,11 +152,10 @@ bool ProjectManager::loadProject(const QString& path) {
             m_globals->set(it.key(), it.value().toVariant());
     }
 
-    m_currentPath = path;
-    m_modified = false;
-
-    emit projectLoaded(path);
-    VI_LOG_INFO("Project loaded: " + path);
+    m_modified = true;
+    emit projectModified();
+    VI_LOG_INFO(QString("流程快照恢复完成: %1个流程, %2个工具 (缺失类型%3个)")
+                .arg(flows.size()).arg(rebuiltTools).arg(missingTypes));
     return true;
 }
 

@@ -65,8 +65,9 @@ MainWindow::MainWindow(QWidget* parent)
     qDebug() << "MainWindow: About to call setupUI...";
     setupUI();
     qDebug() << "MainWindow: setupUI completed";
-    
+
     loadSettings();
+    resetUndoState(); // 撤销基线: 启动时的空/默认工程状态
 
     // 连接流程执行信号到FlowEditor状态更新（必须在setupUI之后）
     connect(m_flowEngine, &FlowEngine::toolStatusChanged, this,
@@ -291,6 +292,12 @@ void MainWindow::createMenus() {
     camMenu->addAction(QString::fromUtf8("\u4f7f\u7528\u865a\u62df\u76f8\u673a"), this, &MainWindow::onUseVirtualCamera);
 
     QMenu* opMenu = menuBar()->addMenu(QString::fromUtf8("\u64cd\u4f5c(&O)"));
+    // 撤销/重做: 工程级快照 (误删工具/调错参数一键回退)
+    opMenu->addAction(QStringLiteral("撤销(Ctrl+Z)"), this, &MainWindow::onUndo,
+                      QKeySequence::Undo);
+    opMenu->addAction(QStringLiteral("重做(Ctrl+Y)"), this, &MainWindow::onRedo,
+                      QKeySequence::Redo);
+    opMenu->addSeparator();
     // UI排查 P0-5: F5单次执行/F6连续运行/F7停止
     opMenu->addAction(QString::fromUtf8("\u6267\u884c\u7a0b\u5e8f(F5)"), this, &MainWindow::onExecuteOnce,
                       QKeySequence(Qt::Key_F5));
@@ -509,6 +516,7 @@ void MainWindow::onToolAdded(const QString& typeName) {
     m_flowEditor->refresh();
     m_logPanel->appendLog(QString("已添加工具: %1").arg(tool->instanceName()));
     m_statusLabel->setText(QString("已添加: %1").arg(tool->displayName()));
+    pushUndoState();
 
     // 添加后自动打开属性框, 让用户立刻知道怎么配置(双击节点也可再次打开)
     if (newIndex >= 0 && newIndex < flow->toolCount()) {
@@ -539,6 +547,7 @@ void MainWindow::onEditToolProperties(int index) {
         if (m_flowEditor) m_flowEditor->refresh();
         m_projectMgr->markModified();
         m_statusLabel->setText(QString("已修改工具: %1").arg(tool->instanceName()));
+        pushUndoState();
     }
 }
 
@@ -557,6 +566,7 @@ void MainWindow::onToolToggleActive(int index) {
         m_flowEditor->refresh();
     }
     m_projectMgr->markModified();
+    pushUndoState();
     m_statusLabel->setText(QString("%1: %2").arg(tool->instanceName())
                                .arg(tool->isActive() ? "已启用" : "已禁用"));
 }
@@ -572,6 +582,7 @@ void MainWindow::onToolDelete(int index) {
     flow->removeTool(index);   // Flow 拥有工具, removeTool 即删除
     if (m_flowEditor) m_flowEditor->refresh();
     m_projectMgr->markModified();
+    pushUndoState();
     m_statusLabel->setText(QString("已删除: %1").arg(name));
 }
 
@@ -582,6 +593,7 @@ void MainWindow::onToolMoveUp(int index) {
     flow->moveTool(index, index - 1);
     if (m_flowEditor) m_flowEditor->refresh();
     m_projectMgr->markModified();
+    pushUndoState();
 }
 
 void MainWindow::onToolMoveDown(int index) {
@@ -591,6 +603,7 @@ void MainWindow::onToolMoveDown(int index) {
     flow->moveTool(index, index + 1);
     if (m_flowEditor) m_flowEditor->refresh();
     m_projectMgr->markModified();
+    pushUndoState();
 }
 
 void MainWindow::onToolRename(int index, const QString& newName) {
@@ -601,6 +614,7 @@ void MainWindow::onToolRename(int index, const QString& newName) {
     tool->setInstanceName(newName);
     if (m_flowEditor) m_flowEditor->refresh();
     m_projectMgr->markModified();
+    pushUndoState();
     m_statusLabel->setText(QString("已重命名为: %1").arg(newName));
 }
 
@@ -663,7 +677,70 @@ void MainWindow::onToolPaste(int index) {
     m_flowEditor->setFlow(flow);
     m_flowEditor->refresh();
     m_projectMgr->markModified();
+    pushUndoState();
     m_logPanel->appendLog(QString("已粘贴工具: %1").arg(tool->instanceName()));
+}
+
+// ============================================================
+// 撤销/重做 (工程级快照: 误删工具/调错参数一键回退)
+// ============================================================
+
+void MainWindow::resetUndoState() {
+    m_undoStates.clear();
+    m_undoStates.append(m_projectMgr ? m_projectMgr->currentStateJson() : QJsonObject());
+    m_undoIndex = 0;
+}
+
+void MainWindow::pushUndoState() {
+    if (!m_projectMgr) return;
+    const QJsonObject st = m_projectMgr->currentStateJson();
+    if (m_undoIndex >= 0 && m_undoIndex < m_undoStates.size() &&
+        m_undoStates[m_undoIndex] == st)
+        return; // 状态无变化不重复入栈
+    m_undoStates.resize(m_undoIndex + 1); // 丢弃重做分支
+    m_undoStates.append(st);
+    if (m_undoStates.size() > 50) {
+        m_undoStates.removeFirst(); // 上限50步, 防大工程撑内存
+        --m_undoIndex;
+    }
+    m_undoIndex = m_undoStates.size() - 1;
+}
+
+bool MainWindow::applyUndoState(const QJsonObject& st) {
+    if (!m_projectMgr->restoreStateJson(st)) return false;
+    if (m_flowEditor) {
+        m_flowEditor->setFlow(m_flowEngine->flowCount() > 0
+                                  ? m_flowEngine->flows().first() : nullptr);
+        m_flowEditor->refresh();
+    }
+    return true;
+}
+
+void MainWindow::onUndo() {
+    if (m_flowEngine->isRunning()) {
+        m_statusLabel->setText(QStringLiteral("运行中不能撤销, 请先停止(F7)"));
+        return;
+    }
+    if (m_undoIndex <= 0) {
+        m_statusLabel->setText(QStringLiteral("没有可撤销的操作"));
+        return;
+    }
+    --m_undoIndex;
+    if (applyUndoState(m_undoStates[m_undoIndex]))
+        m_statusLabel->setText(QStringLiteral("已撤销 (%1/%2)")
+                                   .arg(m_undoIndex).arg(m_undoStates.size() - 1));
+}
+
+void MainWindow::onRedo() {
+    if (m_flowEngine->isRunning()) return;
+    if (m_undoIndex >= m_undoStates.size() - 1) {
+        m_statusLabel->setText(QStringLiteral("没有可重做的操作"));
+        return;
+    }
+    ++m_undoIndex;
+    if (applyUndoState(m_undoStates[m_undoIndex]))
+        m_statusLabel->setText(QStringLiteral("已重做 (%1/%2)")
+                                   .arg(m_undoIndex).arg(m_undoStates.size() - 1));
 }
 
 void MainWindow::toggleFullscreen() {
@@ -713,6 +790,7 @@ void MainWindow::onNewProject() {
         m_flowEditor->setFlow(nullptr);
         m_flowEditor->refresh();
     }
+    resetUndoState();
     m_fileLabel->setText("无项目");
     m_statusLabel->setText("新项目已创建");
 }
@@ -781,6 +859,7 @@ void MainWindow::onNewFromTemplate() {
     m_statusLabel->setText(QString("已按筛选机模板创建流程 (%1 步)").arg(created));
     m_logPanel->appendLog("已按筛选机模板创建流程: 采集→预处理→定位→补正→检测组→结束补正→变量→判断→显示");
     m_projectMgr->markModified();
+    resetUndoState();
 }
 
 void MainWindow::onOpenProject() {
@@ -792,6 +871,7 @@ void MainWindow::onOpenProject() {
             m_flowEditor->setFlow(m_flowEngine->flows().first());
             m_flowEditor->refresh();
         }
+        resetUndoState();
         m_fileLabel->setText(QFileInfo(path).fileName());
         m_statusLabel->setText("已加载: " + QFileInfo(path).fileName());
         m_logPanel->appendLog("项目已加载: " + path);

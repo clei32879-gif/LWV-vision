@@ -81,6 +81,8 @@ private slots:
     void onToolRename(int index, const QString& newName);
     void onToolCopy(int index);
     void onToolPaste(int index);
+    void onUndo();
+    void onRedo();
     void toggleFullscreen();
     void onZoomIn();
     void onZoomOut();
@@ -96,6 +98,13 @@ private:
     void loadSettings();
     void saveSettings();
     void applyUserRole(UserRole role);
+
+    // 撤销/重做: 工程级快照栈 (每次结构/参数变更后压入当前状态)
+    void resetUndoState();
+    void pushUndoState();
+    bool applyUndoState(const QJsonObject& st);
+    QVector<QJsonObject> m_undoStates;
+    int m_undoIndex = -1;
 
     // Core components
     ProjectManager* m_projectMgr = nullptr;

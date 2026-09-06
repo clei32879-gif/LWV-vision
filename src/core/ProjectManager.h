@@ -39,6 +39,12 @@ public:
     /** 保存项目 (序列化全部流程与工具) */
     bool saveProject(const QString& path);
 
+    /** 当前全部流程+全局变量快照 (撤销/重做用; 不含项目路径/名称) */
+    QJsonObject currentStateJson() const;
+
+    /** 从快照恢复流程与全局变量 (重建工具, 不改项目路径; 与加载走同一重建路径) */
+    bool restoreStateJson(const QJsonObject& json);
+
     /** 当前项目路径 */
     QString currentPath() const { return m_currentPath; }
 
