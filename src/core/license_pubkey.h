@@ -1,0 +1,6 @@
+/** @file license_pubkey.h - 授权验签公钥 (license_gen keygen 生成) */
+#pragma once
+// RSA-2048 公钥 CNG blob, 私钥由供应商离线保管 (D:\LWVision-keys\license_private.key, 永不入仓库)
+// 密钥对生成于 2026-09-05 (RSA_SIGN + RSAFULLPRIVATE), 丢失私钥 = 需换公钥重新发布并重签全部授权
+static const char kLicensePublicKeyBlobHex[] =
+    "525341310008000003000000000100000000000000000000010001f599cb60afbaa23bf729ea152ea01342e16316376fd0d8e947342be797d4bffeee22c2b46a6e2608d2591ab38e50b66ed9f7dec1f1ff1573ba5d708f0d14b1acc8cdb864b13cf73afe13c3010aade060183b5dcde0bce0489a5419d708aeb6fc9e40f6e05ae3f6daa90b484d8f04b3de38877bc3ec6df40e2e3f342bed7798f68d361023b36e26988961f18be2aecde5ffa12ea613cd17dd4c66ce9044da06ed9ba8f1976c45b28c970033c17641bd312ddec5d1a36f5ed21acff9aa140d44a9026b8401c77cadf430061cc6375b9da2d8a37f29760868b94b22c42555fa6a00118b7bcbddb80d7b82bb13f816d194778c185ff7157e85ab3e584beb22af86f9";

@@ -12,6 +12,7 @@
 
 #include "YOLOv8Detect.h"
 #include "../../../src/engine/ToolRegistry.h"
+#include "../../../src/core/LicenseManager.h"
 
 #ifdef VI_HAS_OPENCV
 #include <opencv2/imgproc.hpp>
@@ -594,6 +595,14 @@ void YOLOv8Detect::fromJson(const QJsonObject& json)
 
 bool YOLOv8Detect::execute(ToolContext& context)
 {
+    // 授权门禁: AI模块未授权时停用推理 (试用期/有效授权内全开)
+    if (!LicenseManager::instance().moduleEnabled(QStringLiteral("ai"))) {
+        setStatus(ToolStatus::NG);
+        setResultData("error", QStringLiteral("AI模块未授权 — 帮助→关于 中导入授权文件"));
+        setResultData("found", false);
+        setResultData("count", 0);
+        return false;
+    }
 #if defined(VI_HAS_OPENCV) && defined(VI_HAS_ONNXRT)
     m->lastDetections.clear();
     setStatus(ToolStatus::Running);

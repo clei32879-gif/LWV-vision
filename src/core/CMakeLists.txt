@@ -20,6 +20,11 @@ target_sources(VICore PRIVATE
     UserManager.h
     UserManager.cpp
 
+    # 授权管理 (阶段6: 机器码+签名授权+试用期, Windows CNG)
+    LicenseManager.h
+    LicenseManager.cpp
+    license_pubkey.h
+
     # 全局变量
     GlobalVariables.h
     GlobalVariables.cpp
@@ -32,8 +37,14 @@ target_sources(VICore PRIVATE
 target_link_libraries(VICore PUBLIC
     Qt6::Core
     Qt6::Widgets
+    Qt6::Network
     nlohmann_json::nlohmann_json  # JSON库 (后续通过FetchContent引入)
 )
+
+# 授权验签用 Windows CNG (系统组件)
+if(WIN32)
+    target_link_libraries(VICore PUBLIC bcrypt)
+endif()
 
 # 公开头文件路径 (供其他模块引用)
 target_include_directories(VICore PUBLIC

@@ -10,6 +10,7 @@
  */
 #include "AIDetection.h"
 #include "../../../src/engine/ToolRegistry.h"
+#include "../../../src/core/LicenseManager.h"
 #ifdef VI_HAS_ONNXRT
 #include "../../../src/ai/InferEngine.h"
 #endif
@@ -57,6 +58,12 @@ PropertyDefList AIDetection::propertyDefs() const {
 }
 
 bool AIDetection::execute(ToolContext& context) {
+    // 授权门禁: AI模块未授权时停用推理 (试用期/有效授权内全开)
+    if (!LicenseManager::instance().moduleEnabled(QStringLiteral("ai"))) {
+        setStatus(ToolStatus::NG);
+        setResultData("error", QStringLiteral("AI模块未授权 — 帮助→关于 中导入授权文件"));
+        return false;
+    }
 #ifndef VI_HAS_ONNXRT
     setResultData("error", "未集成ONNX Runtime, AI功能不可用");
     setStatus(ToolStatus::NG);

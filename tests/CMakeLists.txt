@@ -43,6 +43,21 @@ target_link_libraries(test_stats PRIVATE
 )
 add_test(NAME stats_export COMMAND test_stats)
 
+# 授权系统回归 (阶段6: 密钥对/验签/篡改检测/机器码)
+add_executable(test_license test_license.cpp)
+target_link_libraries(test_license PRIVATE
+    VICore
+    VIEngine
+    VIHAL
+    VIUtils
+    Qt6::Core
+    Qt6::Network
+)
+if(WIN32)
+    target_link_libraries(test_license PRIVATE bcrypt)
+endif()
+add_test(NAME license COMMAND test_license)
+
 # 内置设备模板回归 (阶段6: 工具注册齐全/无头构建/实例名去重)
 add_executable(test_device_templates test_device_templates.cpp)
 target_link_libraries(test_device_templates PRIVATE

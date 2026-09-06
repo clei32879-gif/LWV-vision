@@ -4,6 +4,7 @@
 #include "../engine/DetectionRecorder.h"
 #include "../core/ConfigManager.h"
 #include "../core/DeviceTemplates.h"
+#include "../core/LicenseManager.h"
 #include "../ui/DisplayArea.h"
 #include "../ui/FlowEditor.h"
 #include "../ui/Toolbox.h"
@@ -52,6 +53,26 @@
 #include <QIcon>
 #include <QStandardPaths>
 
+// 过期水印: 非交互覆盖层, 提醒"未授权"但不打断生产 (阶段6授权策略: 不断产, 打标)
+// 全局作用域 — 与 MainWindow.h 的前置声明一致
+class LicenseWatermark : public QWidget {
+public:
+    using QWidget::QWidget;
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        QFont f = p.font();
+        f.setPixelSize(26);
+        f.setBold(true);
+        p.setFont(f);
+        p.setPen(QColor(255, 64, 64, 88));
+        p.drawText(rect().adjusted(0, 0, 0, -18), Qt::AlignHCenter | Qt::AlignBottom,
+                   QStringLiteral("未授权版本 — 试用已结束 (帮助→关于 导入授权)"));
+        p.setPen(QPen(QColor(255, 64, 64, 110), 5));
+        p.drawRect(rect().adjusted(2, 2, -2, -2));
+    }
+};
+
 namespace VisionInspector {
 
 MainWindow::MainWindow(QWidget* parent)
@@ -83,6 +104,12 @@ MainWindow::MainWindow(QWidget* parent)
         m_logPanel->appendLog(QStringLiteral("检测记录数据库已打开: data/records.db"));
     else
         m_logPanel->appendLog(QStringLiteral("检测记录数据库打开失败, 历史记录不可用"));
+
+    // 阶段6: 授权初始化 (试用期/授权文件)
+    LicenseManager::instance().initialize();
+    m_licenseLabel->setText(LicenseManager::instance().statusText());
+    if (LicenseManager::instance().state() == LicenseManager::State::Expired)
+        showLicenseWatermark();
 
     // 连接流程执行信号到FlowEditor状态更新（必须在setupUI之后）
     connect(m_flowEngine, &FlowEngine::toolStatusChanged, this,
@@ -378,6 +405,7 @@ void MainWindow::onAbout() {
 #ifdef VI_HAS_OPENCV
     cvVer = QString::fromLatin1(CV_VERSION);
 #endif
+    const LicenseManager& lic = LicenseManager::instance();
     const QString html = QStringLiteral(
         "<h3 style='margin-bottom:2px;'>LW Vision</h3>"
         "<p style='margin-top:2px;'>通用工业机器视觉检测平台<br/>"
@@ -390,12 +418,45 @@ void MainWindow::onAbout() {
         "视觉算法库：OpenCV %3<br/>"
         "AI 推理引擎：ONNX Runtime 1.18.1（CPU）"
         "</p>"
+        "<hr/>"
+        "<p style='color:#4a9eff;'>授权状态：%4</p>"
         "<p style='color:#888;'>LW Vision · 学习研究用途</p>")
         .arg(versionString())
         .arg(QStringLiteral(QT_VERSION_STR))
-        .arg(cvVer);
+        .arg(cvVer)
+        .arg(lic.statusText().toHtmlEscaped());
 
-    QMessageBox::about(this, QStringLiteral("关于 LW Vision"), html);
+    QMessageBox box(this);
+    box.setWindowTitle(QStringLiteral("关于 LW Vision"));
+    box.setTextFormat(Qt::RichText);
+    box.setText(html);
+    QPushButton* importBtn = box.addButton(QStringLiteral("导入授权文件..."),
+                                           QMessageBox::ActionRole);
+    box.addButton(QStringLiteral("确定"), QMessageBox::AcceptRole);
+    box.exec();
+
+    if (box.clickedButton() == importBtn) {
+        const QString f = QFileDialog::getOpenFileName(
+            this, QStringLiteral("导入授权文件"), QString(),
+            QStringLiteral("授权文件 (*.lic);;所有文件 (*)"));
+        if (f.isEmpty()) return;
+        const QString err = LicenseManager::instance().importLicense(f);
+        if (err.isEmpty()) {
+            m_licenseLabel->setText(LicenseManager::instance().statusText());
+            if (LicenseManager::instance().state() == LicenseManager::State::Licensed
+                && m_licenseWatermark) {
+                m_licenseWatermark->deleteLater();
+                m_licenseWatermark = nullptr;
+            }
+            m_logPanel->appendLog(QStringLiteral("授权已更新: %1")
+                                      .arg(LicenseManager::instance().statusText()));
+            QMessageBox::information(this, QStringLiteral("导入授权"),
+                                     QStringLiteral("授权导入成功！\n%1")
+                                         .arg(LicenseManager::instance().statusText()));
+        } else {
+            QMessageBox::warning(this, QStringLiteral("导入授权"), err);
+        }
+    }
 }
 
 void MainWindow::onExportCsv() {
@@ -466,9 +527,11 @@ void MainWindow::createStatusBar() {
     m_yieldLabel = new QLabel("良率: 100%");
     m_fileLabel = new QLabel("无项目");
     m_posLabel = new QLabel(" X: -  Y: - ");
+    m_licenseLabel = new QLabel("");
 
     statusBar()->addWidget(m_statusLabel, 1);
     statusBar()->addPermanentWidget(m_posLabel);
+    statusBar()->addPermanentWidget(m_licenseLabel);
     statusBar()->addPermanentWidget(m_userLabel);
     statusBar()->addPermanentWidget(m_connectionLabel);
     statusBar()->addPermanentWidget(m_fileLabel);
@@ -956,6 +1019,26 @@ void MainWindow::onSaveAsTemplate() {
 void MainWindow::onHistoryQuery() {
     HistoryDialog dlg(m_recorder, this);
     dlg.exec();
+}
+
+// ── 授权: 过期水印 + 状态同步 ──
+
+void MainWindow::showLicenseWatermark() {
+    if (!m_licenseWatermark && centralWidget()) {
+        m_licenseWatermark = new LicenseWatermark(centralWidget());
+        m_licenseWatermark->setAttribute(Qt::WA_TransparentForMouseEvents);
+        centralWidget()->installEventFilter(this);
+        m_licenseWatermark->setGeometry(centralWidget()->rect());
+        m_licenseWatermark->raise();
+        m_licenseWatermark->show();
+    }
+}
+
+bool MainWindow::eventFilter(QObject* obj, QEvent* event) {
+    // 水印跟随中央控件尺寸 (窗口缩放/分栏拖动/界面切换)
+    if (m_licenseWatermark && obj == centralWidget() && event->type() == QEvent::Resize)
+        m_licenseWatermark->setGeometry(centralWidget()->rect());
+    return QMainWindow::eventFilter(obj, event);
 }
 
 // 阶段6: DIY运行界面 (标准界面 ↔ 编辑器保存的布局 切换)

@@ -27,6 +27,7 @@ class QMenu;
 class QAction;
 class QLabel;
 class QStackedWidget;
+class LicenseWatermark;
 
 namespace VisionInspector {
 
@@ -154,6 +155,12 @@ private:
     QLabel* m_yieldLabel = nullptr;
     QLabel* m_fileLabel = nullptr;
     QLabel* m_posLabel = nullptr;   // 鼠标像素坐标读数
+    QLabel* m_licenseLabel = nullptr;   // 授权状态 (阶段6)
+    LicenseWatermark* m_licenseWatermark = nullptr; // 过期水印
+
+protected:
+    bool eventFilter(QObject* obj, QEvent* event) override;
+    void showLicenseWatermark();
 };
 
 } // namespace VisionInspector

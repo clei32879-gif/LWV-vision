@@ -67,3 +67,8 @@ config/global.json
 # ===== 调研资料PDF(15MB级大文件不入库, 仅保留报告md) =====
 docs/调研/**/资料/*.pdf
 docs/调研/**/资料/*.PDF
+# ===== 授权私钥 (阶段6: 供应商侧离线保管, 永不入仓库) =====
+license_private.key
+**/license_private.key
+LWVision-keys/
+config/license.lic
