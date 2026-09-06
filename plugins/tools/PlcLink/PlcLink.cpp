@@ -40,10 +40,17 @@ PropertyDefList PlcLink::propertyDefs() const {
                 "设置自动速度",
                 "相机使能/禁用",
                 "读剔除位置",
+                "读良率与UPH",
+                "轴正反转点动",
+                "写运行参数(吹气/延时)",
             }, 3, "操作"),
         PropertyDef::intProp("cameraIndex", "相机编号(1-8)", 1, 1, 8, "操作"),
         PropertyDef::intProp("speedValue", "速度值", 500, 0, 100000, "操作"),
         PropertyDef::enumProp("enableState", "使能状态", {"禁用", "使能"}, 1, "操作"),
+        PropertyDef::enumProp("axisDir", "轴动作",
+            {"正转开(M50=1)", "正转停(M50=0)", "反转开(M52=1)", "反转停(M52=0)"}, 0, "操作"),
+        PropertyDef::enumProp("paramSelect", "运行参数",
+            {"OK吹气时间(HD18)", "NG吹气时间(HD14)", "停止延时(HD110)", "无料报警延时(HD6)"}, 0, "操作"),
     };
 }
 
@@ -180,6 +187,35 @@ bool PlcLink::execute(ToolContext& context) {
             setResultData("ngBlowPos", r[1]);
             context.setData("plc.okBlowPos", r[0]);
             context.setData("plc.ngBlowPos", r[1]);
+            break;
+        }
+        case 13: { // 读良率 HD122 与 UPH D196
+            QVector<quint16> y, u;
+            if (!readRegs(kRegYield, 1, &y)) return fail(err);
+            if (!readRegs(kRegUph, 1, &u)) return fail(err);
+            setResultData("yield", y[0]);
+            setResultData("uph", u[0]);
+            context.setData("plc.yield", y[0]);
+            context.setData("plc.uph", u[0]);
+            break;
+        }
+        case 14: { // 轴正反转点动 M50/M52 (伺服/转盘手动微动)
+            const int dir = propertyValue("axisDir").toInt();
+            const int coil = (dir <= 1) ? kCoilFwd : kCoilRev;
+            const bool on = (dir == 0 || dir == 2);
+            if (!writeCoil(coil, on)) return fail(err);
+            setResultData("axisAction", (dir <= 1) ? "正转" : "反转");
+            setResultData("axisOn", on);
+            break;
+        }
+        case 15: { // 写运行参数: 吹气时间/停止延时/无料报警延时
+            const int sel = propertyValue("paramSelect").toInt();
+            const quint16 val = quint16(propertyValue("speedValue").toInt());
+            static constexpr int kParamRegs[4] = { kRegOKBlowTime, kRegNGBlowTime,
+                                                   kRegStopDelay, kRegNoMatDelay };
+            if (!writeReg(kParamRegs[sel], val)) return fail(err);
+            setResultData("paramIndex", sel);
+            setResultData("paramValue", val);
             break;
         }
         default:

@@ -94,8 +94,8 @@ static void rtuMasterWorker(const QString& pipeName, std::atomic<bool>* serverRe
     CHECK(regs.isEmpty() && e.contains("异常"), "收到异常码且不崩溃");
 
     std::printf("RTU测试6: 契约高地址读写 (模拟信捷XD5 41088+D)\n");
-    // 契约: D6命令=41094, OK产量=41258
-    CHECK(master.writeRegister(41094, 1, slaveId, &e), "写 D6命令=1(启动)");
+    // 契约: D6命令=6(直连), OK产量=41258
+    CHECK(master.writeRegister(6, 1, slaveId, &e), "写 D6命令=1(启动)");
     e.clear();
     regs = master.readRegisters(3, 41258, 1, slaveId, &e);
     CHECK(regs.size() == 1 && regs[0] == 0, "读 OK产量初值0");
@@ -213,10 +213,10 @@ int main(int argc, char* argv[]) {
             CHECK(plc.isConnected(), "PLC驱动已连接");
             CHECK(plc.driverName().contains("XD"), "驱动名含XD");
 
-            // 契约: D6命令=41094, HD170 OK产量=41258, HD0 手动速度=41088
+            // 契约: D6命令=6(直连), HD170 OK产量=41258, HD0 手动速度=41088
             CHECK(plc.sendCommand(1), "写 D6=1(启动命令)");
             QThread::msleep(30);
-            CHECK(slave.holding(41094) == 1, "从站D6==1");
+            CHECK(slave.holding(6) == 1, "从站D6==1");
 
             CHECK(plc.setManualSpeed(800), "写 HD0=800 手动速度");
             QThread::msleep(30);

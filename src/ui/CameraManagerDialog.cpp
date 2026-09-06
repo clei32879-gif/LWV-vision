@@ -397,6 +397,19 @@ void CameraManagerDialog::onParamsClicked(int index)
     trigger->setCurrentIndex(p.triggerMode ? 1 : 0);
     form->addRow(QStringLiteral("触发模式:"), trigger);
 
+    // 软触发一次: 触发模式下测试触发链路 (对标度申DvpCam"软件触发"按钮)
+    auto* softTrigRow = new QHBoxLayout;
+    auto* softTrigBtn = new QPushButton(QStringLiteral("软件触发一次"), &dlg);
+    softTrigBtn->setToolTip(QStringLiteral("触发模式下发一次软触发, 验证触发采集链路"));
+    softTrigRow->addWidget(softTrigBtn);
+    softTrigRow->addStretch();
+    form->addRow(QString(), softTrigRow);
+    connect(softTrigBtn, &QPushButton::clicked, &dlg, [cam, &dlg]() {
+        if (!cam->triggerOnce())
+            QMessageBox::warning(&dlg, QStringLiteral("软触发"),
+                QStringLiteral("软触发失败 (请确认已切换到外部触发模式)"));
+    });
+
     auto* pixel = new QComboBox(&dlg);
     pixel->addItems(cam->supportedPixelFormats());
     if (!p.pixelFormat.isEmpty()) {

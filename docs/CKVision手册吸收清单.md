@@ -42,6 +42,8 @@ CKVision 10 个 3D 工具（获取3D表面/拟合平面/检测高度/体积/向�
 
 ## 三、其他资料吸收记录
 
+- **软件整体画面.png**（CkvsRunCtrl demo）：右侧"获取数据"面板（工具名+数据ID手动查询结果值）是调试利器 → 待做：数据栏/RuntimeUI 加结果查询小面板
+- **相机触发设置.png**（度申 DvpCam）：触发来源(软/硬) + "软件触发"按钮 + ROI裁剪(左上宽高) + 十字线显示 → **软触发按钮已做**（相机参数对话框，2026-09-05）；ROI偏移裁剪与十字线显示待做（偏移寄存器地址需按相机型号确认）
 - **筛选相机驱动服务.txt**：JAI GigE 过滤驱动（FilterDriver）安装进网卡属性→服务→从磁盘安装 inf，可显著降低高帧率丢帧。已补入 工控机部署指南.md
 - **异常情况处理方案.txt**：加密狗/相机/部署 20+ 现场坑（已在阶段5吸收）
 - **CkvsRunCtrl开发手册.txt**：运行控件 API 面（LoadProject/Execute/GetResultDouble/十字线偏移/OnNotifyTool 消息）——印证我们 RuntimeUI + DetectionRecorder 的方向；"通知控件"消息机制值得做成工具（NotifyTool→触发 DIY 界面动作）

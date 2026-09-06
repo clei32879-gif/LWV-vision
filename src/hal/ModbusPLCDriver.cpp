@@ -9,17 +9,18 @@
 
 namespace VisionInspector {
 
-// 契约地址常量 (保持寄存器 = 41088 + D号)
+// 契约地址常量 (与真机《与上位机通讯.txt》核对 2026-09-05:
+//   D类直连: D6→6, D196→196;  HD类 = 41088 + HD号;  线圈 = M号)
 namespace {
 constexpr int kRegBaseD = 41088;
 constexpr int kRegManualSpeed = kRegBaseD + 0;     // HD0  手动速度
-constexpr int kRegCmd = kRegBaseD + 6;             // D6   上位机命令
+constexpr int kRegCmd = 6;                         // D6   上位机命令 (直连! 旧值41094实为HD6无料报警)
 constexpr int kRegAutoSpeed = kRegBaseD + 8;       // HD8  自动速度
 constexpr int kRegYield = kRegBaseD + 122;         // HD122 良率
 constexpr int kRegOKCount = kRegBaseD + 170;       // HD170 OK产量
 constexpr int kRegNGCount = kRegBaseD + 172;       // HD172 NG产量
 constexpr int kRegTotalCount = kRegBaseD + 174;    // HD174 总产量
-constexpr int kRegUph = kRegBaseD + 196;           // D196  UPH
+constexpr int kRegUph = 196;                       // D196  UPH (直连!)
 constexpr int kRegServoPos = kRegBaseD + 220;      // HD220 伺服位置(2字)
 
 constexpr int kCoilServoFwd = 50;                  // M50
