@@ -43,6 +43,24 @@ target_link_libraries(test_stats PRIVATE
 )
 add_test(NAME stats_export COMMAND test_stats)
 
+# 检测记录SQLite持久化回归 (阶段6: 写入/查询/过滤/导出/清理)
+add_executable(test_detection_recorder test_detection_recorder.cpp)
+target_link_libraries(test_detection_recorder PRIVATE
+    VIEngine
+    VIUtils
+    Qt6::Core
+    Qt6::Sql
+)
+# SQLite驱动插件需在 <exeDir>/sqldrivers/ 下才能被Qt加载
+if(TARGET Qt6::QSQLiteDriverPlugin)
+    add_custom_command(TARGET test_detection_recorder POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:test_detection_recorder>/sqldrivers"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:Qt6::QSQLiteDriverPlugin>"
+            "$<TARGET_FILE_DIR:test_detection_recorder>/sqldrivers/")
+endif()
+add_test(NAME detection_recorder COMMAND test_detection_recorder)
+
 # 用户管理密码安全存储回归 (H-7: 哈希落盘/旧明文升级/登录)
 add_executable(test_usermanager test_usermanager.cpp)
 target_link_libraries(test_usermanager PRIVATE

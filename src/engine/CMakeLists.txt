@@ -27,6 +27,10 @@ target_sources(VIEngine PRIVATE
     InspectionResult.h
     InspectionResult.cpp
 
+    # 检测记录SQLite持久化 (阶段6, 可选依赖Qt6::Sql)
+    DetectionRecorder.h
+    DetectionRecorder.cpp
+
     # ROI区域定义
     ROI.h
     ROI.cpp
@@ -47,6 +51,12 @@ target_link_libraries(VIEngine PUBLIC
     Qt6::Gui
     Qt6::Concurrent
 )
+
+# 检测记录持久化: 有Qt6::Sql则启用 (DetectionRecorder, 阶段6)
+if(TARGET Qt6::Sql)
+    target_link_libraries(VIEngine PUBLIC Qt6::Sql)
+    target_compile_definitions(VIEngine PUBLIC VI_HAS_QTSQL)
+endif()
 
 target_include_directories(VIEngine PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}

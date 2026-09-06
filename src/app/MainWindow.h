@@ -51,6 +51,7 @@ private slots:
     void onNewFromTemplate();
     void onOpenTemplateGallery();
     void onSaveAsTemplate();
+    void onHistoryQuery();
     void onOpenProject();
     void onSaveProject();
     void onSaveAsProject();
@@ -115,6 +116,7 @@ private:
     FlowEngine* m_flowEngine = nullptr;
     GlobalStats* m_stats = nullptr;
     HardwareManager* m_hardware = nullptr;
+    class DetectionRecorder* m_recorder = nullptr;  // 检测记录SQLite持久化 (阶段6)
     ICameraDriver* m_camera = nullptr;      // 当前相机驱动
     CameraManagerDialog* m_cameraManager = nullptr; // 相机管理对话框
 

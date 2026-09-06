@@ -42,6 +42,10 @@ target_sources(VIUI PRIVATE
     TemplateDialog.h
     TemplateDialog.cpp
 
+    # 检测记录历史查询 (阶段6数据记录与报表)
+    HistoryDialog.h
+    HistoryDialog.cpp
+
     # PLC模拟器对话框 (Modbus TCP从站)
     PlcSimulatorDialog.h
     PlcSimulatorDialog.cpp

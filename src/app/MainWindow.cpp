@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "../utils/Logger.h"
 #include "../engine/ToolRegistry.h"
+#include "../engine/DetectionRecorder.h"
 #include "../core/ConfigManager.h"
 #include "../ui/DisplayArea.h"
 #include "../ui/FlowEditor.h"
@@ -16,6 +17,7 @@
 #include "../ui/LoginDialog.h"
 #include "../ui/AnnotationDialog.h"
 #include "../ui/TemplateDialog.h"
+#include "../ui/HistoryDialog.h"
 #include "../ui/TeachWizard.h"
 #include "../ui/YoloTeachWizard.h"
 #include "../ui/UIEditor.h"
@@ -72,6 +74,13 @@ MainWindow::MainWindow(QWidget* parent)
     loadSettings();
     resetUndoState(); // 撤销基线: 启动时的空/默认工程状态
 
+    // 阶段6: 检测记录SQLite持久化 (打开失败自动降级为仅内存)
+    m_recorder = new DetectionRecorder(this);
+    if (m_recorder->open())
+        m_logPanel->appendLog(QStringLiteral("检测记录数据库已打开: data/records.db"));
+    else
+        m_logPanel->appendLog(QStringLiteral("检测记录数据库打开失败, 历史记录不可用"));
+
     // 连接流程执行信号到FlowEditor状态更新（必须在setupUI之后）
     connect(m_flowEngine, &FlowEngine::toolStatusChanged, this,
         [this](Flow* flow, int index, ToolStatus status) {
@@ -108,6 +117,10 @@ MainWindow::MainWindow(QWidget* parent)
                     rec.values[it.key()] = v;
             }
             m_stats->addRecord(rec);
+
+            // 阶段6: 检测记录落库 (data/records.db, 关机不丢)
+            if (m_recorder && m_recorder->isOpen())
+                m_recorder->record(rec);
 
             // UI排查 P0-6: 底部检测项目表按工位显示当前结果
             if (m_dataPanel) {
@@ -312,6 +325,8 @@ void MainWindow::createMenus() {
 
     QMenu* dataMenu = menuBar()->addMenu(QString::fromUtf8("\u6570\u636e(&D)"));
     dataMenu->addAction(QString::fromUtf8("\u5bfc\u51fa\u68c0\u6d4b\u8bb0\u5f55(CSV)..."), this, &MainWindow::onExportCsv);
+    // 阶段6: SQLite持久化历史记录查询
+    dataMenu->addAction(QStringLiteral("历史记录查询..."), this, &MainWindow::onHistoryQuery);
 
     // View菜单会在createDockWidgets之后添加
 }
@@ -921,6 +936,12 @@ void MainWindow::onSaveAsTemplate() {
     } else {
         QMessageBox::warning(this, QStringLiteral("保存为模板"), QStringLiteral("保存失败: %1").arg(path));
     }
+}
+
+// 阶段6: 检测记录历史查询 (SQLite持久化)
+void MainWindow::onHistoryQuery() {
+    HistoryDialog dlg(m_recorder, this);
+    dlg.exec();
 }
 
 void MainWindow::onOpenProject() {

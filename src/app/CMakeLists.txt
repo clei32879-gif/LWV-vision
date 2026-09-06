@@ -55,3 +55,13 @@ if(VI_HAS_DVP2)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DVP2_DLL_DIR}/dvpir64.dll" "$<TARGET_FILE_DIR:LWVision>"
         COMMENT "Copying DVP2 DLLs...")
 endif()
+
+# Qt SQL驱动插件: 检测记录SQLite持久化需要 (Qt要求位于 <exeDir>/sqldrivers/ 子目录)
+if(TARGET Qt6::QSQLiteDriverPlugin)
+    add_custom_command(TARGET LWVision POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:LWVision>/sqldrivers"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:Qt6::QSQLiteDriverPlugin>"
+            "$<TARGET_FILE_DIR:LWVision>/sqldrivers/"
+        COMMENT "Copying Qt SQLite driver plugin...")
+endif()
