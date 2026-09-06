@@ -49,6 +49,8 @@ protected:
 private slots:
     void onNewProject();
     void onNewFromTemplate();
+    void onOpenTemplateGallery();
+    void onSaveAsTemplate();
     void onOpenProject();
     void onSaveProject();
     void onSaveAsProject();

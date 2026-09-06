@@ -45,6 +45,17 @@ public:
     /** 从快照恢复流程与全局变量 (重建工具, 不改项目路径; 与加载走同一重建路径) */
     bool restoreStateJson(const QJsonObject& json);
 
+    // ---- 设备模板 (阶段6: 模板=工程JSON, 存于 templates/ 目录, 用户可自建) ----
+
+    /** 保存当前工程为模板文件 (不动当前项目路径, 与另存为的区别) */
+    bool saveTemplate(const QString& path);
+
+    /** 从模板新建: 重建全部流程/工具/全局变量, 但当前项目路径清空(未保存状态) */
+    bool loadTemplate(const QString& path);
+
+    /** 模板目录 (exe旁 templates/, 部署包随包携带) */
+    static QString templateDir();
+
     /** 当前项目路径 */
     QString currentPath() const { return m_currentPath; }
 

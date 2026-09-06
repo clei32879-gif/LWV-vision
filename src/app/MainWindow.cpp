@@ -15,6 +15,7 @@
 #include "../ui/SettingsDialogs.h"
 #include "../ui/LoginDialog.h"
 #include "../ui/AnnotationDialog.h"
+#include "../ui/TemplateDialog.h"
 #include "../ui/TeachWizard.h"
 #include "../ui/YoloTeachWizard.h"
 #include "../ui/UIEditor.h"
@@ -36,6 +37,8 @@
 #include <QFileInfo>
 #include <QDateTime>
 #include <QDir>
+#include <QInputDialog>
+#include <QRegularExpression>
 #include <QCloseEvent>
 #include <QSettings>
 #include <QApplication>
@@ -260,7 +263,8 @@ void MainWindow::createMenus() {
     // UI排查 P0-5: 全应用此前无任何快捷键, 补高频快捷键
     fileMenu->addAction(QString::fromUtf8("\u65b0\u5efa\u9879\u76ee(Ctrl+N)"), this, &MainWindow::onNewProject,
                         QKeySequence::New);
-    fileMenu->addAction(QString::fromUtf8("\u4ece\u6a21\u677f\u65b0\u5efa(\u7b5b\u9009\u673a)"), this, &MainWindow::onNewFromTemplate);
+    fileMenu->addAction(QString::fromUtf8("\u4ece\u6a21\u677f\u65b0\u5efa..."), this, &MainWindow::onOpenTemplateGallery);
+    fileMenu->addAction(QString::fromUtf8("\u4fdd\u5b58\u4e3a\u6a21\u677f..."), this, &MainWindow::onSaveAsTemplate);
     fileMenu->addAction(QString::fromUtf8("\u6253\u5f00\u9879\u76ee(Ctrl+O)"), this, &MainWindow::onOpenProject,
                         QKeySequence::Open);
     fileMenu->addAction(QString::fromUtf8("\u4fdd\u5b58\u9879\u76ee(Ctrl+S)"), this, &MainWindow::onSaveProject,
@@ -860,6 +864,63 @@ void MainWindow::onNewFromTemplate() {
     m_logPanel->appendLog("已按筛选机模板创建流程: 采集→预处理→定位→补正→检测组→结束补正→变量→判断→显示");
     m_projectMgr->markModified();
     resetUndoState();
+}
+
+// 阶段6 设备模板系统: 模板库画廊 + 存为模板
+void MainWindow::onOpenTemplateGallery() {
+    TemplateDialog dlg(this);
+    if (dlg.exec() != QDialog::Accepted) return;
+    const TemplateDialog::Entry entry = dlg.selected();
+    if (entry.title.isEmpty()) return;
+
+    if (entry.path.isEmpty()) {
+        // 内置筛选机模板
+        onNewFromTemplate();
+        return;
+    }
+    if (!m_projectMgr->loadTemplate(entry.path)) {
+        QMessageBox::warning(this, QStringLiteral("模板"), QStringLiteral("模板文件无法加载:\n%1").arg(entry.path));
+        return;
+    }
+    if (m_flowEditor) {
+        m_flowEditor->setFlow(m_flowEngine->flowCount() > 0 ? m_flowEngine->flows().first() : nullptr);
+        m_flowEditor->refresh();
+    }
+    resetUndoState();
+    m_fileLabel->setText(QStringLiteral("模板新建(未保存)"));
+    m_statusLabel->setText(QStringLiteral("已从模板创建: %1").arg(entry.title));
+    m_logPanel->appendLog(QStringLiteral("已从模板[%1]创建工程 (%2个工具)")
+                              .arg(entry.title).arg(entry.toolCount));
+}
+
+void MainWindow::onSaveAsTemplate() {
+    if (m_flowEngine->flowCount() == 0 || m_flowEngine->flows().first()->toolCount() == 0) {
+        QMessageBox::information(this, QStringLiteral("保存为模板"),
+                                 QStringLiteral("当前工程没有工具, 没有可保存的模板内容。"));
+        return;
+    }
+    const QString defName = m_projectMgr->projectName().isEmpty()
+                                ? QStringLiteral("我的模板") : m_projectMgr->projectName();
+    QString name = QInputDialog::getText(this, QStringLiteral("保存为模板"),
+        QStringLiteral("模板名称 (将保存到 templates/ 目录):"), QLineEdit::Normal, defName);
+    name = name.trimmed();
+    if (name.isEmpty()) return;
+    // 文件名安全: 替换路径非法字符
+    name.replace(QRegularExpression(R"([\\/:*?"<>|])"), QStringLiteral("_"));
+
+    QDir().mkpath(ProjectManager::templateDir());
+    const QString path = ProjectManager::templateDir() + QStringLiteral("/%1.vipj").arg(name);
+    if (QFileInfo::exists(path)) {
+        if (QMessageBox::question(this, QStringLiteral("保存为模板"),
+                QStringLiteral("模板[%1]已存在, 覆盖?").arg(name)) != QMessageBox::Yes)
+            return;
+    }
+    if (m_projectMgr->saveTemplate(path)) {
+        m_statusLabel->setText(QStringLiteral("已保存模板: %1").arg(name));
+        m_logPanel->appendLog(QStringLiteral("工程已存为模板: %1").arg(path));
+    } else {
+        QMessageBox::warning(this, QStringLiteral("保存为模板"), QStringLiteral("保存失败: %1").arg(path));
+    }
 }
 
 void MainWindow::onOpenProject() {

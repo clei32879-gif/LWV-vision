@@ -17,7 +17,10 @@
 #include "../utils/Logger.h"
 #include "../utils/Common.h"
 
+#include <QCoreApplication>
+#include <QDateTime>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -156,6 +159,64 @@ bool ProjectManager::restoreStateJson(const QJsonObject& json) {
     emit projectModified();
     VI_LOG_INFO(QString("流程快照恢复完成: %1个流程, %2个工具 (缺失类型%3个)")
                 .arg(flows.size()).arg(rebuiltTools).arg(missingTypes));
+    return true;
+}
+
+// ============================================================
+// 设备模板 (阶段6): 模板=工程JSON, 用户可把调好的工程存为模板复用
+// ============================================================
+
+QString ProjectManager::templateDir() {
+    return QCoreApplication::applicationDirPath() + QStringLiteral("/templates");
+}
+
+bool ProjectManager::saveTemplate(const QString& path) {
+    QJsonObject json;
+    json["projectName"] = m_projectName;
+    json["projectNote"] = m_projectNote;
+    json["version"] = versionString();
+    json["savedAt"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    QJsonArray flows;
+    if (m_engine)
+        for (Flow* f : m_engine->flows())
+            flows.append(f->toJson());
+    json["flows"] = flows;
+
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        VI_LOG_ERROR("Cannot write template file: " + path);
+        return false;
+    }
+    file.write(QJsonDocument(json).toJson(QJsonDocument::Indented));
+    file.close();
+    VI_LOG_INFO("Template saved: " + path);
+    return true;
+}
+
+bool ProjectManager::loadTemplate(const QString& path) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        VI_LOG_ERROR("Cannot open template file: " + path);
+        return false;
+    }
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
+    file.close();
+    if (error.error != QJsonParseError::NoError) {
+        VI_LOG_ERROR("Template file format error: " + error.errorString());
+        return false;
+    }
+    const QJsonObject json = doc.object();
+    // 模板里带的名字优先, 无则用文件名
+    const QString name = json.value("projectName").toString(QFileInfo(path).completeBaseName());
+    m_projectName = name;
+    m_projectNote = json.value("projectNote").toString();
+    restoreStateJson(json);
+    // 关键区别: 当前项目路径清空 — 从模板新建的是"未保存的新工程"
+    m_currentPath.clear();
+    m_modified = true;
+    emit projectModified();
+    VI_LOG_INFO("Project created from template: " + path);
     return true;
 }
 

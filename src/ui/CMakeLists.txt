@@ -38,6 +38,10 @@ target_sources(VIUI PRIVATE
     PropertyDialog.h
     PropertyDialog.cpp
 
+    # 模板库画廊 (阶段6设备模板系统)
+    TemplateDialog.h
+    TemplateDialog.cpp
+
     # PLC模拟器对话框 (Modbus TCP从站)
     PlcSimulatorDialog.h
     PlcSimulatorDialog.cpp
