@@ -69,6 +69,7 @@ set(OpenCV_LIBRARY_DIRS "${OpenCV_DIR}/lib")
 
 # ONNX Runtime (AI推理, 可选)
 include(${CMAKE_SOURCE_DIR}/cmake/FindOnnxRuntime.cmake)
+include(${CMAKE_SOURCE_DIR}/cmake/FindZXing.cmake)
 
 # ============================================================
 # DVP2 SDK (度申相机，可选；未安装时以模拟模式编译)

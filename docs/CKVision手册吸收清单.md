@@ -82,3 +82,16 @@ CKVision 10 个 3D 工具（获取3D表面/拟合平面/检测高度/体积/向�
 2. "光源控制器接线"高热 → 印证 P0 光源控制工具的产线需求优先级
 3. "传统CV vs AI"话题 → 双路线节点（传统工具+AI节点）是行业共识，我们架构已具备
 4. 线阵相机是高热教程题材 → ICameraDriver 架构可扩展线阵驱动（待硬件到位）
+
+## 六、anomalib 无监督缺陷检测实验（2026-09-07，实践验证全记录）
+
+**管线已打通**（tools/train_anomalib.py）：
+- anomalib 2.6.0（用户机已装）+ Padim/Patchcore/EfficientAd 多模型可切换
+- **关键坑（实测发现）**：anomalib 2.x 导出 ONNX 会把 post_processor（归一化+clip）固化进去 → OK/NG 分数全变 1.0 不可用。解法：导出前临时摘掉 post_processor，ONNX 输出原始 pred_score + anomaly_map，阈值存 metadata.json 供 C++ 端使用
+- EfficientAd 需 batch=1；Folder datamodule 用 val_split_mode="synthetic" 保证 memory bank 见全部 OK 图
+
+**实验结论（诚实记录：合成螺纹图上不可分）**：
+- 24 张合成螺纹 OK 图训练 Padim，OK 分数 382~760、NG 分数 528~740，**重叠不可分**（对齐/收紧裁剪/Patchcore/EfficientAd 均试过）
+- 根因：**合成螺纹是周期性纹理，每张图相位不同 → 无监督模型把"相位差"当异常**，这是无监督方法在周期纹理上的经典盲区（与对齐无关——圆对齐后纹理相位仍随机）
+- 行业对策（军哥方法论印证）：周期纹理类(螺纹/齿类)用**传统算法**（我们的 ThreadInspection 极坐标展开就是正确路线）；无监督方案适用于**非周期纹理+固定对齐**场景（木业板材/布匹/PCB/玻璃）
+- **行动项**：管线保留，等真实木业图到位（非周期木纹+固定传送带对齐）直接 `python tools/train_anomalib.py --model EfficientAd --align --data <木业图目录>` 即可训练部署
