@@ -41,6 +41,7 @@ bool EdgeDetection::execute(ToolContext& context) {
     m_roi.width = propertyValue("roiWidth").toDouble();
     m_roi.height = propertyValue("roiHeight").toDouble();
     m_roi.angle = propertyValue("roiAngle").toDouble();
+    m_roi.type = (ROIType)propertyValue("roiType").toInt();   // 形状ROI激活(菱形/圆形/环形)
     applyCorrection(context, m_roi.centerX, m_roi.centerY, m_roi.angle);   // 位置补正跟随
 
     int polarity = propertyValue("edgePolarity").toInt();

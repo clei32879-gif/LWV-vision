@@ -19,7 +19,7 @@ namespace VisionInspector {
 
 PropertyDefList EdgeDepression::propertyDefs() const {
     return {
-        PropertyDef::enumProp("roiType", "ROI类型", {"无", "矩形", "菱形", "圆形", "环形"}, 0, "ROI"),
+        PropertyDef::enumProp("roiType", "ROI类型", {"无", "矩形"}, 0, "ROI"),
         PropertyDef::doubleProp("roiCenterX", "扫描中心X", 320, 0, 10000, "ROI"),
         PropertyDef::doubleProp("roiCenterY", "扫描中心Y", 240, 0, 10000, "ROI"),
         PropertyDef::doubleProp("roiWidth", "扫描宽度", 200, 1, 10000, "ROI"),

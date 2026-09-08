@@ -8,7 +8,6 @@ namespace VisionInspector {
 
 PropertyDefList EthernetTool::propertyDefs() const {
     return {
-        PropertyDef::enumProp("protocol", "传输协议", {"TCP"}, 0),
         PropertyDef::stringProp("ipAddress", "IP地址", "192.168.1.100"),
         PropertyDef::intProp("port", "端口号", 502, 1, 65535),
         PropertyDef::enumProp("role", "角色", {"客户端", "服务器"}, 0),

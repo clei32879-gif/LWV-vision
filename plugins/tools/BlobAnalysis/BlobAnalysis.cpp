@@ -36,6 +36,7 @@ bool BlobAnalysis::execute(ToolContext& context) {
     m_roi.centerY = propertyValue("roiCenterY").toDouble();
     m_roi.width = propertyValue("roiWidth").toDouble();
     m_roi.height = propertyValue("roiHeight").toDouble();
+    m_roi.type = (ROIType)propertyValue("roiType").toInt();   // 形状ROI激活
     {
         double ang = 0;   // Blob 无角度
         applyCorrection(context, m_roi.centerX, m_roi.centerY, ang);   // 位置补正跟随

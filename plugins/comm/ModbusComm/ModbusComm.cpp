@@ -19,6 +19,7 @@
 #include "ModbusComm.h"
 #include "../../../src/engine/ToolRegistry.h"
 #include "../../../src/hal/IPLCDriver.h"
+#include "../../../src/hal/ModbusPLCDriver.h"
 #include "../../../src/core/PluginManager.h"
 #include <QDebug>
 #include <cstring>
@@ -127,6 +128,12 @@ bool ModbusComm::execute(ToolContext& context)
         setStatus(ToolStatus::NG);
         return false;
     }
+
+    // slaveId 覆盖 (激活: >0 时切换驱动的从站地址, 0=保持驱动默认)
+    const int slaveOverride = propertyValue("slaveId").toInt();
+    setResultData("slaveIdUsed", slaveOverride > 0 ? slaveOverride : -1);
+    if (auto* xd = dynamic_cast<ModbusPLCDriver*>(plc); xd && slaveOverride > 0)
+        xd->setSlaveId(slaveOverride);
 
     // 根据读写方向执行
     int direction = propertyValue("direction").toInt();

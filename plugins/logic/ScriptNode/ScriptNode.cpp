@@ -17,7 +17,6 @@ PropertyDefList ScriptNode::propertyDefs() const {
             "var cnt = data[\"检测宽窄.width\"];\n"
             "log(\"宽度=\" + cnt);\n"
             "true;", "脚本"),
-        PropertyDef::intProp("timeoutMs", "执行超时(ms, 预留)", 500, 50, 10000, "安全"),
     };
 }
 

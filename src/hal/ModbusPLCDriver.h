@@ -66,6 +66,8 @@ public:
     bool servoReverse(bool on);                     // M52
 
     int slaveId() const { return m_slaveId; }
+    /** 运行时切换从站地址 (ModbusComm 工具的 slaveId 属性覆盖用; 0=恢复默认) */
+    void setSlaveId(int id) { if (id > 0) m_slaveId = id; }
 
 private:
     void releaseMaster();

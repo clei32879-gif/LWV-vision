@@ -98,7 +98,8 @@ bool ModbusWrite::execute(ToolContext& context) {
                               : rtuMaster->writeRegister(startAddr, values[0], slaveId, &err))
                  : (tcpMaster ? tcpMaster->writeRegisters(startAddr, values, slaveId, &err)
                               : rtuMaster->writeRegisters(startAddr, values, slaveId, &err));
-        if (ok) setResultData("written", values[0]);
+        if (ok) setResultData("note", propertyValue("note").toString());
+        setResultData("written", values[0]);
         setResultData("count", ok ? values.size() : 0);
     } else {
         // 线圈: 值为 0/1/off/on

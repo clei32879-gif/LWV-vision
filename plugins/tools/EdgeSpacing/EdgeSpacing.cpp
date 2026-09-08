@@ -26,7 +26,6 @@ PropertyDefList EdgeSpacing::propertyDefs() const {
         PropertyDef::doubleProp("roiCenterX", "扫描中心X", 320, 0, 10000, "卡尺"),
         PropertyDef::doubleProp("roiCenterY", "扫描中心Y", 240, 0, 10000, "卡尺"),
         PropertyDef::doubleProp("roiWidth", "扫描长度", 120, 1, 10000, "卡尺"),
-        PropertyDef::doubleProp("roiHeight", "扫描宽度(平均高)", 10, 1, 1000, "卡尺"),
         PropertyDef::doubleProp("roiAngle", "扫描角度", 0, -180, 180, "卡尺"),
         PropertyDef::boolProp("useCorrection", "跟随位置补正", false, "卡尺"),
         PropertyDef::enumProp("edgePolarity", "边缘极性", {"任意", "亮到暗", "暗到亮"}, 0, "检测"),

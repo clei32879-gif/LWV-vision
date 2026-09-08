@@ -55,6 +55,7 @@ bool CircleDetection::execute(ToolContext& context) {
     m_roi.thickness = propertyValue("roiThickness").toDouble();
     m_roi.startAngle = propertyValue("roiStartAngle").toDouble();
     m_roi.sweepAngle = propertyValue("roiSweepAngle").toDouble();
+    m_roi.type = (ROIType)propertyValue("roiType").toInt();   // 圆/环声明与几何一致
     applyCorrection(context, m_roi.centerX, m_roi.centerY, m_roi.startAngle);   // 位置补正跟随
 
     ScanOptions opt;

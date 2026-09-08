@@ -413,6 +413,30 @@ bool OCR::execute(ToolContext& context) {
             minScore = std::min(minScore, m.second);
         }
     }
+    // charType 过滤激活: 识别文本不符合声明类型的部分记为 '?'
+    const int charType = propertyValue("charType").toInt();
+    auto typeOk = [charType](QChar c) -> bool {
+        // 常见工业分隔符放行 (型号/日期编码必备)
+        if (c == '-' || c == '.' || c == '/' || c == ' ') return true;
+        const bool isDigit = c.isDigit();
+        const bool isAlpha = c.isLetter();
+        switch (charType) {
+        case 1: return isDigit;                       // 数字
+        case 2: return isAlpha;                       // 字母
+        case 3: return isDigit || isAlpha;            // 数字+字母
+        default: return true;                          // 全部
+        }
+    };
+    if (charType != 0) {
+        QString filtered;
+        for (QChar c : text)
+            filtered += (c == '?' || typeOk(c)) ? c : QChar('?');
+        if (filtered != text)
+            setResultData("charTypeFiltered", true);
+        m_lastText = filtered;
+        text = filtered;
+    }
+
     m_lastText = text;
     setResultData("recognizedText", text);
     setResultData("minMatchScore", minScore);
