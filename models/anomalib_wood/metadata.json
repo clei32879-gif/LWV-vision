@@ -1,0 +1,23 @@
+{
+  "model": "Patchcore",
+  "image_size": [
+    512,
+    512
+  ],
+  "imagenet_mean": [
+    0.485,
+    0.456,
+    0.406
+  ],
+  "imagenet_std": [
+    0.229,
+    0.224,
+    0.225
+  ],
+  "note": "\u9608\u503c\u9700\u7528 OK/NG \u5404\u82e5\u5e72\u5f20\u8dd1\u63a8\u7406\u540e\u6309 F1 \u6700\u4f18\u9009",
+  "image_threshold": 17.19257926940918,
+  "pixel_threshold": 10.6892728805542,
+  "enable_normalization": true,
+  "dataset": "\u6728\u6750\u6d82\u5c42 Patchcore(59\u7eaf\u51c0\u8bad\u7ec3/133\u91cd\u5ea6\u9a8c\u8bc1, F1=0.821, AUROC=0.363)",
+  "score_output": "max(anomaly_map)"
+}
