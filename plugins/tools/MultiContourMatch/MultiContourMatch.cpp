@@ -55,6 +55,12 @@ bool MultiContourMatch::execute(ToolContext& context) {
     cv::Mat roiImg = src(cv::Rect(rx, ry, rw, rh)).clone();
     cv::Mat binary;
     cv::threshold(roiImg, binary, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+    // 形状ROI: 只统计形状内部(菱形/圆形)的轮廓
+    if (cv::Mat shapeMask = makeRoiShapeMask(m_roi, roiRect); !shapeMask.empty()) {
+        cv::Mat u8;
+        shapeMask.convertTo(u8, CV_8U);
+        cv::bitwise_and(binary, u8, binary);
+    }
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(binary, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
     // 先取面积区间内的面积集合, 计算中位数

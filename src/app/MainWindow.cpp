@@ -316,6 +316,23 @@ void MainWindow::setupUI() {
     connect(m_flowEditor, &FlowEditor::toolRename, this, &MainWindow::onToolRename);
     connect(m_flowEditor, &FlowEditor::toolCopy, this, &MainWindow::onToolCopy);
     connect(m_flowEditor, &FlowEditor::toolPaste, this, &MainWindow::onToolPaste);
+
+    // 连线创建: 连线=数据流顺序参考, 提示用 $(上游工具.键) 引用 (此前信号无消费方=空壳交互)
+    connect(m_flowEditor, &FlowEditor::connectionCreated, this,
+            [this](int fromIdx, int toIdx) {
+        if (m_flowEngine->flowCount() == 0) return;
+        Flow* flow = m_flowEngine->flows().first();
+        ITool* from = flow->toolAt(fromIdx);
+        ITool* to = flow->toolAt(toIdx);
+        if (!from || !to) return;
+        const QStringList keys = from->resultData().keys();
+        const QString hint = keys.isEmpty()
+            ? QString(" (上游暂无结果键, 执行一次后可引用 $(%1.键))").arg(from->instanceName())
+            : QString(" (可引用 $(%1.%2))").arg(from->instanceName(), keys.first());
+        m_logPanel->appendLog(QString("已连线: %1 → %2%3")
+            .arg(from->instanceName(), to->instanceName(), hint));
+        m_projectMgr->markModified();
+    });
     
     setWindowTitle("LW Vision v1.0.0");
     resize(1400, 900);

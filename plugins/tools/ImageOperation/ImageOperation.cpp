@@ -64,7 +64,21 @@ bool ImageOperation::execute(ToolContext& context) {
         const int y = std::max(0, (int)rr.y());
         const int w = std::min((int)rr.width(), a.cols - x);
         const int h = std::min((int)rr.height(), a.rows - y);
-        if (w > 0 && h > 0) a = a(cv::Rect(x, y, w, h)).clone();
+        if (w > 0 && h > 0) {
+            a = a(cv::Rect(x, y, w, h)).clone();
+            // 形状ROI: 形状外像素置零(运算只发生在菱形/圆形内)
+            if (cv::Mat shapeMask = makeRoiShapeMask(m_roi, rr); !shapeMask.empty()) {
+                if (shapeMask.size() != a.size()) 
+                    cv::resize(shapeMask, shapeMask, a.size());
+                cv::Mat u8; shapeMask.convertTo(u8, CV_8U);
+                if (a.channels() == 1) cv::bitwise_and(a, u8, a);
+                else {
+                    cv::Mat chs[3]; cv::split(a, chs);
+                    for (int c = 0; c < a.channels(); ++c) cv::bitwise_and(chs[c], u8, chs[c]);
+                    cv::merge(chs, a.channels(), a);
+                }
+            }
+        }
     }
 
     // 尺寸对齐: 以图像1为准
