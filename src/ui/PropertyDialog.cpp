@@ -171,6 +171,26 @@ void PropertyDialog::buildUI() {
         }
         }
 
+        // 位置补正"匹配工具名": 自动变为上游定位类工具下拉框 (CKVision式一键跟随)
+        if (m_tool->typeName() == "PositionCorrection" && def.name == "matchTool") {
+            auto* combo = new QComboBox(paramPage);
+            combo->addItem(QStringLiteral("(自动: 向前找匹配结果)"), QString());
+            const QStringList locateTypes = {"ShapeMatch", "GrayscaleMatch", "TemplateMatch",
+                                             "EdgeCircleFind", "CircleDetection", "ContourMatch"};
+            for (const QString& toolName : m_availableTools) {
+                // availableTools 是实例名; 需类型判断 — 通过 linkableData 键粗判或全列
+                combo->addItem(toolName, toolName);
+            }
+            combo->setCurrentIndex(combo->findData(currentVal.toString()) < 0
+                                       ? 0 : combo->findData(currentVal.toString()));
+            editor = combo;
+            // 写回: 存 data 角色的字符串
+            connect(combo, &QComboBox::currentIndexChanged, this, [combo, currentVal]() {
+                combo->setProperty("__pick", combo->currentData().toString());
+            });
+            editor->setProperty("__isComboData", true);
+        }
+
         if (editor) {
             QString label = def.label;
             if (!def.group.isEmpty()) label += QString(" [%1]").arg(def.group);
@@ -266,6 +286,11 @@ void PropertyDialog::onTryRun() {
         case PropertyType::Boolean:v = qobject_cast<QCheckBox*>(editor)->isChecked(); break;
         case PropertyType::Enum:   v = qobject_cast<QComboBox*>(editor)->currentIndex(); break;
         default: {
+            if (editor->property("__isComboData").toBool()) {
+                if (auto* cb = qobject_cast<QComboBox*>(editor))
+                    v = cb->currentData().toString();
+                break;
+            }
             auto* container = qobject_cast<QWidget*>(editor);
             QLineEdit* line = container ? container->findChild<QLineEdit*>() : nullptr;
             if (!line) line = qobject_cast<QLineEdit*>(editor);
@@ -519,6 +544,12 @@ void PropertyDialog::accept() {
             break;
         case PropertyType::String:
         default: {
+            // combo-data 型字符串 (如 PositionCorrection.matchTool): 取 currentData
+            if (editor->property("__isComboData").toBool()) {
+                auto* cb = qobject_cast<QComboBox*>(editor);
+                if (cb) m_tool->setProperty(def.name, cb->currentData().toString());
+                break;
+            }
             auto* container = qobject_cast<QWidget*>(editor);
             if (container) {
                 auto* lineEdit = container->findChild<QLineEdit*>();
