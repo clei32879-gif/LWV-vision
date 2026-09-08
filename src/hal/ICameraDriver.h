@@ -22,6 +22,7 @@
 #include <QStringList>
 #include <QImage>
 #include <QVariantMap>
+#include <limits>
 #include <memory>
 #include <functional>
 
@@ -37,6 +38,19 @@ struct CameraInfo {
     QString ipAddress;
     QString serialNumber;
     bool isConnected = false;
+    // ---- 多类型相机适配 (阶段6: 面向 高像素/3D/线扫/红外 等品类) ----
+    enum class SensorKind {
+        Area,       // 面阵 2D (绝大多数场景)
+        LineScan,   // 线阵 (行扫描, 传送带/大幅面)
+        Stereo3D,   // 3D 双目/结构光 (高度图/点云)
+        Laser3D,    // 激光轮廓仪 (3D 线扫, 高度剖面)
+        Thermal,    // 红外热成像 (温度场, 短波/长波红外)
+        SWIR,       // 短波红外 (水分/材质分选)
+    };
+    SensorKind sensorKind = SensorKind::Area;
+    // 高像素支持: 用 double 容纳 1.5亿级 (10000x10000)
+    // 分辨率信息由 getParams().width/height 承载 (int 上限 2^31 已够)
+    QString sensorInfo;             // 传感器描述 (如 "IMX540 1.27亿" / "线阵8K" / "640x512 LWIR")
 };
 
 /**
@@ -53,6 +67,20 @@ struct CameraParams {
     int triggerDelay = 0;           // 触发延迟(微秒)
     QString pixelFormat = "Mono8";  // 像素格式
     double frameRate = 30.0;        // 帧率
+
+    // ---- 线阵相机专属 (LineScan) ----
+    double lineRate = 20000.0;      // 行频 (Hz, 线阵替代 frameRate 的核心参数)
+    int scanLineCount = 0;          // 每帧行数 (0=由height决定)
+    QString encoderSource = "";     // 编码器触发源 (外触发时行频跟随传送带)
+
+    // ---- 3D 专属 (Stereo3D/Laser3D) ----
+    double zRangeMin = 0.0;         // Z 量程下限 (mm)
+    double zRangeMax = 100.0;       // Z 量程上限 (mm)
+    int profileCount = 0;           // 每帧轮廓线数 (激光3D)
+
+    // ---- 红外专属 (Thermal/SWIR) ----
+    double emissivity = 1.0;        // 发射率 (测温校准)
+    bool temperatureDisplay = false; // 伪彩/测温模式
 };
 
 /**
@@ -145,6 +173,25 @@ public:
      * 获取支持的像素格式列表
      */
     virtual QStringList supportedPixelFormats() const = 0;
+
+    // ============================================================
+    // 多类型相机扩展 (默认实现: 面阵相机返回空/False, 各类驱动按需覆写)
+    // ============================================================
+
+    /** 传感器品类 (线扫/3D/红外驱动必须覆写) */
+    virtual CameraInfo::SensorKind sensorKind() const { return CameraInfo::SensorKind::Area; }
+
+    /** 线阵相机: 设置行频 (Hz); 面阵相机返回 false */
+    virtual bool setLineRate(double /*hz*/) { return false; }
+
+    /** 线阵相机: 编码器外触发模式 (行频跟随传送带); 面阵返回 false */
+    virtual bool setEncoderTrigger(const QString& /*source*/) { return false; }
+
+    /** 3D 相机: 获取当前帧的高度图 (CV_32F, mm); 非3D返回空 */
+    virtual CvImage grabHeightMap(int /*timeoutMs = 3000*/) { return {}; }
+
+    /** 红外相机: 获取当前帧中心区域温度 (℃); 非测温型返回 NaN */
+    virtual double readCenterTemperature() { return std::numeric_limits<double>::quiet_NaN(); }
 
 signals:
     /**

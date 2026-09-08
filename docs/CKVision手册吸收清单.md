@@ -104,3 +104,25 @@ CKVision 10 个 3D 工具（获取3D表面/拟合平面/检测高度/体积/向�
 **根因**：开裂/发黑与正常头部纹理在 resnet18 浅层特征空间本身相近，全图/patch 分数无响应；且同类缺陷外观差异大（min/max 跨度大），无监督"记忆正常"模式抓不住这种"与正常相似但语义为缺陷"的目标。
 **实践结论**：该数据走**有监督分类**路线正确——阶段4 自训的"缺陷分类.onnx"（263张7类，Top-1 79.7%）已经验证成功。无监督(Padim/Patchcore)适用前提是"缺陷与正常在纹理特征上可分"（划痕/污点/异物类），不适用"形状相似但语义缺陷"（开裂/发黑类）。
 **管线资产保留**：tools/train_anomalib.py 对真实数据直接可用（含中文路径 np.fromfile+imdecode 解码），未来划痕/污点/木业类缺陷场景即插即训。
+
+## 八、相机多类型适配架构（2026-09-08，面阵→全线扩展）
+
+**目标**（用户明确要求）：适配不限于品牌，还包括 高像素/高分辨率/2D/3D/线扫/红外短波 各品类。
+
+**已落地（接口层）**：
+- `CameraInfo::SensorKind` 六品类：Area(面阵2D) / LineScan(线阵) / Stereo3D(双目结构光) / Laser3D(激光轮廓仪) / Thermal(红外热成像) / SWIR(短波红外)
+- `CameraInfo.sensorInfo` 传感器描述字段（如"线阵8K"/"640×512 LWIR"）
+- `CameraParams` 扩展：线阵（lineRate 行频 / scanLineCount / encoderSource 编码器触发）、3D（zRange 量程 / profileCount）、红外（emissivity 发射率 / temperatureDisplay）
+- `ICameraDriver` 新增虚接口（默认实现=面阵行为，各驱动按需覆写）：sensorKind() / setLineRate() / setEncoderTrigger() / grabHeightMap() / readCenterTemperature()
+- 相机参数对话框：线阵相机自动出现"行频"行（写 setLineRate 即时生效）；连接状态标注品类（[线阵]/[3D双目]/[激光3D]/[红外]/[短波红外]）
+
+**驱动实现路径**（按优先级，等硬件到位）：
+| 品类 | 推荐接入方式 | 参考实现 |
+|---|---|---|
+| 多品牌GigE/USB3 | **Aravis 0.8.31**（LGPL, 1272★, GenICam通用）| E:\图片素材\Aravis源码.zip 已下载解压 |
+| 高像素面阵 | GigE 10GigE/25GigE 或 CoaXPress；现有 GigE 驱动寄存器协议通用，**大图带宽需巨型帧+过滤驱动** | 现有 GigECamera + JAI FilterDriver 文档 |
+| 线阵 | GenICam 行频/编码器寄存器（接口已预留 setLineRate/setEncoderTrigger） | Aravis arvcamera.c |
+| 激光3D | 厂商SDK（SICK/Gocator等）+ grabHeightMap 接口对接 | ICameraDriver::grabHeightMap |
+| 红外/短波 | 厂商SDK（FLIR/Seek）或 GigE Vision 红外机型 | readCenterTemperature 接口 |
+
+**协议资料**：GenICam SFNC（特征命名标准）确保各品类寄存器语义统一——线阵行频=LineScanLineRate、编码器=LineScanEncoderSource 等。

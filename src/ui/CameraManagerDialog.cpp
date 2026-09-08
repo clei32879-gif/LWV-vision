@@ -244,6 +244,19 @@ void CameraManagerDialog::onConnectClicked(int index)
         QString serial = info.serialNumber.isEmpty() ? "-" : info.serialNumber;
 
         w.statusLabel->setText(QString("已连接: %1").arg(model));
+        // 传感器品类标注 (面阵不重复显示, 特殊品类让用户一眼看到)
+        const auto kind = cam->sensorKind();
+        QString kindTag;
+        switch (kind) {
+        case CameraInfo::SensorKind::LineScan:  kindTag = " [线阵]"; break;
+        case CameraInfo::SensorKind::Stereo3D:  kindTag = " [3D双目]"; break;
+        case CameraInfo::SensorKind::Laser3D:   kindTag = " [激光3D]"; break;
+        case CameraInfo::SensorKind::Thermal:   kindTag = " [红外]"; break;
+        case CameraInfo::SensorKind::SWIR:      kindTag = " [短波红外]"; break;
+        default: break;
+        }
+        if (!kindTag.isEmpty())
+            w.statusLabel->setText(QString("已连接: %1%2").arg(model, kindTag));
         w.statusLabel->setStyleSheet("color: green; font-weight: bold;");
         w.serialLabel->setText(serial);
         w.connectBtn->setEnabled(false);
@@ -391,6 +404,19 @@ void CameraManagerDialog::onParamsClicked(int index)
     roi->addStretch();
     form->addRow(QStringLiteral("分辨率:"), roi);
 
+    // 线阵相机: 行频 (面阵相机隐藏)
+    auto* lineRate = new QDoubleSpinBox(&dlg);
+    lineRate->setRange(100.0, 2000000.0);
+    lineRate->setDecimals(0);
+    lineRate->setSuffix(QStringLiteral(" Hz"));
+    lineRate->setValue(p.lineRate);
+    const bool isLineScan = (cam->sensorKind() == CameraInfo::SensorKind::LineScan);
+    if (isLineScan) {
+        connect(lineRate, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
+                [cam](double v) { cam->setLineRate(v); });
+        form->addRow(QStringLiteral("行频:"), lineRate);
+    }
+
     auto* trigger = new QComboBox(&dlg);
     trigger->addItem(QStringLiteral("连续采集 (内部自由触发)"), 0);
     trigger->addItem(QStringLiteral("外部触发 (硬触发/软触发)"), 1);
@@ -436,6 +462,7 @@ void CameraManagerDialog::onParamsClicked(int index)
         np.height = height->value();
         np.triggerMode = trigger->currentIndex() == 1;
         np.pixelFormat = pixel->currentText();
+        if (isLineScan) np.lineRate = lineRate->value();
         if (!cam->setParams(np))
             return QStringLiteral("写入失败 (相机拒绝部分参数)");
         CameraParams cur = cam->getParams();
