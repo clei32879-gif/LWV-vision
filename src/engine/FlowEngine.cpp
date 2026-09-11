@@ -273,6 +273,10 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
         context.setData("__engine_index", i);
         context.setData("__engine_tool_count", tools.size());
 
+        // 括号式补正作用域 (对标CKVision): 位置补正→结束补正之间的工具自动跟随,
+        // 免勾选 useCorrection. 位置补正执行时置位, 结束补正执行时复位 (见各工具 execute).
+        // 此处仅维护继承: 上一工具的自动标志延续到本工具 (EndCorrection 自己复位).
+
         // 中止检查 (stopRunning后当前工具执行完即退出)
         if (m_abort) {
             VI_LOG_WARN("收到中止请求, 提前结束流程");

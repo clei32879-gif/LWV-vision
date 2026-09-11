@@ -48,6 +48,23 @@ target_link_libraries(test_stats PRIVATE
 )
 add_test(NAME stats_export COMMAND test_stats)
 
+# 括号式位置补正回归 (位置补正→结束补正区间内自动跟随, 免勾选)
+add_executable(test_bracket_correction test_bracket_correction.cpp)
+target_link_libraries(test_bracket_correction PRIVATE
+    VIEngine
+    VIUtils
+    ${OpenCV_LIBS}
+    Qt6::Core
+    Qt6::Concurrent
+)
+# 工具注册依赖插件静态对象初始化, 必须 WHOLE_ARCHIVE 全量链入
+foreach(_plugin ${VI_ALL_PLUGINS})
+    if(TARGET ${_plugin})
+        target_link_libraries(test_bracket_correction PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${_plugin}>)
+    endif()
+endforeach()
+add_test(NAME bracket_correction COMMAND test_bracket_correction)
+
 # 授权系统回归 (阶段6: 密钥对/验签/篡改检测/机器码)
 add_executable(test_license test_license.cpp)
 target_link_libraries(test_license PRIVATE

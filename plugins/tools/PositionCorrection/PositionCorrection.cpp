@@ -58,12 +58,19 @@ bool PositionCorrection::execute(ToolContext& context) {
             originY = context.getDouble("matchY", 0);
             angle = context.hasData("matchAngle") ? context.getDouble("matchAngle", 0)
                                                   : context.getDouble("angle", 0);
-            got = true; matchedTool = "(通用键)";
+            got = true; matchedTool = "(匹配键)";
         }
         if (!got && context.hasData("centerX")) {
             originX = context.getDouble("centerX", 0);
             originY = context.getDouble("centerY", 0);
             got = true; matchedTool = "(找圆键)";
+        }
+        // 斑点分析等质心类: mainCenterX/mainCenterY + bboxAngle (轮廓方向)
+        if (!got && context.hasData("mainCenterX")) {
+            originX = context.getDouble("mainCenterX", 0);
+            originY = context.getDouble("mainCenterY", 0);
+            angle = context.hasData("bboxAngle") ? context.getDouble("bboxAngle", 0) : 0;
+            got = true; matchedTool = "(斑点质心)";
         }
         if (!got) {
             setResultData("error", QStringLiteral(
@@ -107,6 +114,8 @@ bool PositionCorrection::execute(ToolContext& context) {
     context.setData("coord_originY", correctedY);
     // 坐标系服务: 后续检测工具的ROI自动跟随本补正坐标系
     context.setCoordinateFrame(std::cos(rad), std::sin(rad), correctedX, correctedY);
+    // 括号式补正: 从本工具到结束补正之间的工具自动跟随 (免勾选 useCorrection)
+    context.setData("__auto_correction", true);
 
     setResultData("correctedX", correctedX);
     setResultData("correctedY", correctedY);

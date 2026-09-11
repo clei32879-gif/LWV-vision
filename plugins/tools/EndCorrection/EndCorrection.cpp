@@ -20,6 +20,7 @@ bool EndCorrection::execute(ToolContext& context) {
     context.setData("coord_sin", 0.0);
     context.setData("coord_originX", 0.0);
     context.setData("coord_originY", 0.0);
+    context.setData("__auto_correction", false);   // 括号闭合: 之后不再自动跟随
 
     setResultData("status", "坐标系已恢复");
     setStatus(ToolStatus::OK);

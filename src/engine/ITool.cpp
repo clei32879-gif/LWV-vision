@@ -124,8 +124,9 @@ void ITool::setOutputImage(ToolContext& context, const CvImagePtr& img) {
 
 bool ITool::applyCorrection(const ToolContext& context,
                             double& x, double& y, double& angleDeg) const {
-    // 未开启跟随则原样返回
-    if (!propertyValue("useCorrection").toBool()) return false;
+    // 跟随判定: 括号式自动(位置补正~结束补正区间内) OR 手动勾选 useCorrection
+    const bool inAutoScope = context.getBool("__auto_correction", false);
+    if (!inAutoScope && !propertyValue("useCorrection").toBool()) return false;
 
     // 上下文不存在补正数据 (位置补正/坐标系统未执行, 或已被结束补正清除)
     if (!context.hasData("coord_cos") || !context.hasData("coord_sin") ||
