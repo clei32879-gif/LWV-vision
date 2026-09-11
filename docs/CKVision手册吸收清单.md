@@ -141,3 +141,16 @@ CKVision 10 个 3D 工具（获取3D表面/拟合平面/检测高度/体积/向�
 
 **根因（对比成功案例的反思）**：该数据集每张图木纹走向/密度差异极大（无监督需要"正常纹理单一"），且拍摄包含多角度多光源；anomalib 官方 MVTec 协议里每类的好图来自**同一工位同一视角**。这不是算法问题，是**数据采集一致性**问题——正如真实螺钉数据的教训：**无监督检测对拍摄一致性要求极高，产线固定工位+固定光源是前置条件**。
 **结论**：管线与脚本全部就绪且经过 4 轮实战检验（含数据划分/训练/导出/验证工具链），真实落地必须满足：①固定工位拍摄 ②同一光照 ③OK 图 50+ 张。用户产线满足这三个条件后，`python tools/train_anomalib.py --model Patchcore --align --data <目录>` 一步出模型。
+
+## 九、外接相机DLL体系（2026-09-09，像创科那样"添加对应相机dll"）
+
+**可行性研究结论（实测定案）**：
+- CKVision 各品牌相机 DLL (CvsDSCamTool/CvsBaslerTool 等) 导出的是 **MSVC C++ 类 mangled 符号** (CreateTool/InitLibrary 工厂 + CvsVisionTool 虚类), MinGW 无法按 C++ ABI 直接调用 — **不能直接复用创科相机 DLL 本体**。
+- 但本机已验证 **Basler PylonC_v8_0.dll 是纯 C 接口 (279 导出, 含 Enumerate/Open/Grab/Feature 全套)** — 厂商 SDK 的 C 接口 DLL 动态加载完全可行。
+
+**已落地：统一外接相机 DLL 约定（`tools/camera_dll_sdk/lwcam_sdk.h`）**：
+- 7 个 C 导出函数: LWCam_GetInfo / Enumerate / Open / Close / Grab / SetParam / GetParam
+- 软件启动自动扫描 `cameras/` 目录加载；关键导出缺失自动跳过不影响主程序
+- 厂商 SDK 封装成薄 DLL 即接入 (内部可用任意 SDK/语言约定, 静态链接避免运行库依赖)
+- **示范 DLL**: SimCam (模拟相机, 移动条纹活画面, ctypes 端到端验证: 加载→枚举→开→抓两帧差异→关 全过)
+- SDK 头文件+示例源码: `tools/camera_dll_sdk/` (sample_camera_dll.cpp, 30 行核心代码接入任意 SDK)

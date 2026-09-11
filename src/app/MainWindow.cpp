@@ -6,6 +6,7 @@
 #include "../core/DeviceTemplates.h"
 #include "../core/LicenseManager.h"
 #include "../ai/InferEngine.h"
+#include "../hal/ExtCameraDLL.h"
 #include "../ui/DisplayArea.h"
 #include "../ui/FlowEditor.h"
 #include "../ui/Toolbox.h"
@@ -105,6 +106,12 @@ MainWindow::MainWindow(QWidget* parent)
         m_logPanel->appendLog(QStringLiteral("检测记录数据库已打开: data/records.db"));
     else
         m_logPanel->appendLog(QStringLiteral("检测记录数据库打开失败, 历史记录不可用"));
+
+    // 阶段6: 扫描外接相机DLL (cameras/ 目录, 像创科那样"添加对应相机dll")
+    const QStringList extCams = scanExtCameraDLLs(
+        QCoreApplication::applicationDirPath() + QStringLiteral("/cameras"));
+    if (!extCams.isEmpty())
+        m_logPanel->appendLog(QStringLiteral("外接相机驱动: %1").arg(extCams.join(", ")));
 
     // 阶段6: 授权初始化 (试用期/授权文件)
     LicenseManager::instance().initialize();

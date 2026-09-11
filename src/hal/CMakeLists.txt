@@ -17,6 +17,10 @@ target_sources(VIHAL PRIVATE
     BaslerCamera.h
     BaslerCamera.cpp
 
+    # 外接相机DLL加载器 (阶段6: 像创科那样"添加对应相机dll", C接口约定)
+    ExtCameraDLL.h
+    ExtCameraDLL.cpp
+
     # Virtual camera driver (无硬件开发/演示)
     VirtualCamera.h
     VirtualCamera.cpp
