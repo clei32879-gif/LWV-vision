@@ -16,8 +16,10 @@
 #define LWCAM_API extern "C" __declspec(dllimport)
 #endif
 
+#pragma pack(push, 8)
 struct LWCamDriverInfo { char name[64]; char vendor[64]; };
 struct LWCamDeviceInfo { char id[128]; char model[128]; };
+#pragma pack(pop)
 
 extern "C" {
 

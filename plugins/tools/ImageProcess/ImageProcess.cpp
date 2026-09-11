@@ -8,8 +8,10 @@ namespace VisionInspector {
 
 PropertyDefList ImageProcess::propertyDefs() const {
     return {
-        PropertyDef::enumProp("operation", "处理操作", {"灰度转换", "二值化", "反色", "亮度增强", "对比度增强"}, 0),
+        PropertyDef::enumProp("operation", "处理操作",
+            {"灰度转换", "二值化", "反色", "亮度增强", "对比度增强", "反二值化", "OTSU自动二值化", "自适应二值化"}, 0),
         PropertyDef::intProp("threshold", "二值化阈值", 128, 0, 255),
+        PropertyDef::intProp("blockSize", "自适应块大小(奇数)", 11, 3, 255),
         PropertyDef::doubleProp("brightness", "亮度增益", 1.0, 0.1, 5.0),
         PropertyDef::doubleProp("contrast", "对比度增益", 1.0, 0.1, 5.0),
     };

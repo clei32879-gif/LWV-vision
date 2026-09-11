@@ -298,3 +298,21 @@ python tools/train_anomalib.py --model Patchcore --align --data <OK图目录>
 ---
 
 *LW Vision · 学习研究用途。各工具的参数级悬浮说明见软件内工具箱。*
+
+---
+
+## 第七章 外接相机 DLL（像创科那样添加相机 dll）
+
+### 7.1 原理
+
+任何厂商相机 SDK 封装成一个导出 7 个 C 函数的 DLL，放到软件 `cameras/` 目录，启动自动加载。已内置三款：**DSCam（度申）/ HIKCam（海康 MVS）/ SimCam（模拟相机）**。
+
+### 7.2 使用
+
+1. 把厂商 DLL（如 `DVPCamera64.dll`、`MvCameraControl.dll`）放 PATH 或同目录
+2. 对应封装 DLL（`DSCam.dll`/`HIKCam.dll`）放 `cameras/`
+3. 启动软件 → 相机管理 → 下拉选相机 → 连接
+
+### 7.3 接入新相机品牌
+
+按 `tools/camera_dll_sdk/lwcam_sdk.h` 约定实现 7 个 C 函数（约 30 行，参考 sample_camera_dll.cpp），编译成 DLL 放入 cameras/ 即可。
