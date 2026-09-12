@@ -107,8 +107,24 @@ bool Caliper::execute(ToolContext& context) {
             const double t = e.pos.x / steps;
             e.pos = m_scanStart + (m_scanEnd - m_scanStart) * t;
         }
+        // 平均剖面输出 (曲线页数据源)
+        QVariantList prof;
+        for (int i2 = 0; i2 <= steps; ++i2)
+            prof.append(QVariantList{ (double)i2, lineImg.at<uchar>(0, i2) });
+        setResultData("profile", prof);
     }
-    (void)0;
+    // 单线模式剖面
+    if (scanW <= 1) {
+        QVariantList prof;
+        const int steps2 = std::max(4, (int)std::lround(std::hypot(
+            m_scanEnd.x - m_scanStart.x, m_scanEnd.y - m_scanStart.y)));
+        for (int i2 = 0; i2 <= steps2; ++i2) {
+            const double t = (double)i2 / steps2;
+            const cv::Point2d p = m_scanStart + (m_scanEnd - m_scanStart) * t;
+            prof.append(QVariantList{ (double)i2, sampleBilinear(src, p.x, p.y) });
+        }
+        setResultData("profile", prof);
+    }
     m_edges.clear();
     for (const auto& e : edges) m_edges.push_back(e.pos);
 

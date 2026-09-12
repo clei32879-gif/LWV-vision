@@ -98,6 +98,16 @@ bool EdgeDetection::execute(ToolContext& context) {
         gradient[i] = (profile[i+1] - profile[i-1]) / 2.0;
     }
 
+    // 灰度剖面输出 (对标CKVision曲线页): [扫描位置, 灰度值] 全序列
+    {
+        QVariantList prof;
+        const int n = (int)gradient.size();
+        for (int i = 0; i < n; ++i)
+            prof.append(QVariantList{ (double)(rx + i), gradient[i] });
+        setResultData("profile", prof);
+        setResultData("profileMax", n > 2 ? *std::max_element(gradient.begin()+1, gradient.end()-1) : 0.0);
+    }
+
     // 查找边缘
     struct EdgePoint { double x; double y; double grad; };
     std::vector<EdgePoint> edges;
