@@ -15,6 +15,7 @@
 #include <QPushButton>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QColorDialog>
 #include <QMenu>
 #include <QTabWidget>
 #include <QTimer>
@@ -292,7 +293,34 @@ void PropertyDialog::buildUI() {
         dispLay->addWidget(showChk);
         dispLay->addWidget(new QLabel(
             QStringLiteral("关闭后该工具仍正常执行, 只是检测画面上不再叠加它的图形 (适合流程很长时只看关键工具)。"), dispPage));
-        dispLay->addStretch();
+
+        // OK/NG 叠加颜色 (对标CKVision显示图形页: 检测通过/失败时图形颜色)
+        m_okColor = m_tool->propertyValue("okColor").toString();
+        m_ngColor = m_tool->propertyValue("ngColor").toString();
+        if (m_okColor.isEmpty()) m_okColor = QStringLiteral("#00ff00");
+        if (m_ngColor.isEmpty()) m_ngColor = QStringLiteral("#ff0000");
+        auto* colorRow = new QHBoxLayout;
+        auto* okColorBtn = new QPushButton(QStringLiteral("OK 颜色..."), dispPage);
+        auto* ngColorBtn = new QPushButton(QStringLiteral("NG 颜色..."), dispPage);
+        auto setBtnColor = [this](QPushButton* b, const QString& c) {
+            b->setStyleSheet(QStringLiteral("QPushButton { background-color: %1; color: %2; }")
+                                 .arg(c, QColor(c).lightness() > 128 ? "#222" : "white"));
+        };
+        setBtnColor(okColorBtn, m_okColor);
+        setBtnColor(ngColorBtn, m_ngColor);
+        connect(okColorBtn, &QPushButton::clicked, this, [this, okColorBtn, setBtnColor]() {
+            const QColor c = QColorDialog::getColor(QColor(m_okColor), this, QStringLiteral("OK 颜色"));
+            if (c.isValid()) { m_okColor = c.name(); setBtnColor(okColorBtn, m_okColor); }
+        });
+        connect(ngColorBtn, &QPushButton::clicked, this, [this, ngColorBtn, setBtnColor]() {
+            const QColor c = QColorDialog::getColor(QColor(m_ngColor), this, QStringLiteral("NG 颜色"));
+            if (c.isValid()) { m_ngColor = c.name(); setBtnColor(ngColorBtn, m_ngColor); }
+        });
+        colorRow->addWidget(okColorBtn);
+        colorRow->addWidget(ngColorBtn);
+        colorRow->addStretch();
+        dispLay->addLayout(colorRow);
+
         connect(showChk, &QCheckBox::toggled, this, [this](bool on) {
             m_tool->setProperty("showOverlays", on);   // 确定时随 accept 生效
         });
@@ -555,9 +583,11 @@ void PropertyDialog::accept() {
     m_tool->setComment(m_commentEdit->toPlainText());
     m_tool->setActive(m_activeCheck->isChecked());
 
-    // 显示选项页: showOverlays 持久化
+    // 显示选项页: showOverlays + OK/NG 颜色持久化
     if (m_showOverlayCheck)
         m_tool->setProperty("showOverlays", m_showOverlayCheck->isChecked());
+    if (!m_okColor.isEmpty())  m_tool->setProperty("okColor", m_okColor);
+    if (!m_ngColor.isEmpty())  m_tool->setProperty("ngColor", m_ngColor);
 
     // 页签2: 参数设置
     PropertyDefList defs = m_tool->propertyDefs();

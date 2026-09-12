@@ -362,8 +362,22 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
         // 通用显示开关: 工具属性 showOverlays=false 时不叠加该工具的图形
         // (未声明的工具默认显示 — propertyValue 对未声明属性返回无效 QVariant)
         const QVariant showV = tool->propertyValue("showOverlays");
-        if (!showV.isValid() || showV.toBool())
-            context.addOverlays(tool->overlays());
+        if (!showV.isValid() || showV.toBool()) {
+            std::vector<QVariant> toolOverlays = tool->overlays();
+            // OK/NG 颜色覆盖: 工具声明了 okColor/ngColor 时按执行结果整体着色
+            const QString okC = tool->propertyValue("okColor").toString();
+            const QString ngC = tool->propertyValue("ngColor").toString();
+            if ((!okC.isEmpty() || !ngC.isEmpty()) && !toolOverlays.empty()) {
+                const QString c = success ? okC : ngC;
+                for (QVariant& v : toolOverlays) {
+                    QVariantMap shape = v.toMap();
+                    if (shape.contains("color")) shape["color"] = c;
+                    v = shape;
+                }
+            }
+            context.addOverlays(toolOverlays);
+
+        }
 
         if (!success) {
             allOk = false;
