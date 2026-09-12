@@ -2,6 +2,7 @@
 #include "IconHelper.h"
 #include "../engine/ToolRegistry.h"
 #include "widgets/ImageViewWidget.h"
+#include "widgets/ProfileChart.h"
 #include <QVBoxLayout>
 #include <QFormLayout>
 #include <QDialogButtonBox>
@@ -278,6 +279,13 @@ void PropertyDialog::buildUI() {
         connect(m_previewViewer, &ImageViewWidget::roiEdited,
                 this, &PropertyDialog::onRoiEdited);
     connect(tryBtn, &QPushButton::clicked, this, [this]() { updatePreview(); });
+
+    // 剖面曲线 (对标CKVision曲线页): 工具输出 profile 键时自动显示
+    auto* chart = new ProfileChart(tryPage);
+    chart->setMinimumHeight(110);
+    tryLayout->addWidget(chart);
+    m_profileChart = chart;
+
     m_tabs->addTab(tryPage, QStringLiteral("试执行"));
 
     // ---- 通用显示选项页: 控制该工具的叠加图形是否显示 ----
@@ -388,6 +396,14 @@ void PropertyDialog::updatePreview() {
     // ROI编辑开启时保持数值→框同步 (拖拽中由setRoiRect内部忽略, 不会打架)
     if (m_roiEditBtn && m_roiEditBtn->isChecked())
         syncRoiToViewer();
+    // 剖面曲线: 工具输出 profile 键时刷新
+    if (m_profileChart) {
+        const QVariant pv = m_tool->propertyValue("profile");
+        if (pv.isValid() && !pv.toList().isEmpty())
+            m_profileChart->setData(pv.toList());
+        else
+            m_profileChart->clear();
+    }
     // 判定表此前为空(无结果键)时, 试执行拿到结果键后立即补建, 不用先跑整条流程
     if (!m_judgeTable && !m_tool->resultData().isEmpty())
         buildJudgeSection();

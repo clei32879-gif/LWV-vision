@@ -97,6 +97,8 @@ target_sources(VIUI PRIVATE
     widgets/StatsPanel.cpp
     widgets/ImageViewWidget.h
     widgets/ImageViewWidget.cpp
+    widgets/ProfileChart.h
+    widgets/ProfileChart.cpp
 )
 
 if(VI_HAS_ONNXRT)
