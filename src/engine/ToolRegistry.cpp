@@ -35,6 +35,8 @@ QString builtinToolDescription(const QString& typeName) {
         { "EdgeDetection",      "在ROI内按灰度梯度剖面检测边缘点并按位置策略选取；用于找边定位" },
         { "EdgeSpacing",        "沿卡尺扫描线检测全部边缘并计算相邻间距；用于齿距间隙测量" },
         { "EdgeDepression",     "沿扫描线提取边缘拟合基线, 检测凹陷/凸起段(深度+宽度)；用于缺件崩边缺口" },
+        { "FitLine",            "对上游点集做鲁棒直线拟合(中心/角度/rms)；用于从扫描点集建线" },
+        { "FitCircle",          "对上游点集做鲁棒圆拟合(圆心/半径/rms)；用于从扫描点集建圆" },
         { "MessageBoxTool",     "流程执行中弹出提示框提醒操作工, 支持自动关闭超时；用于换型提醒异常告知" },
         { "LightControl",       "串口控制光源控制器通道亮度与开关, 支持自定义HEX指令；用于产线调光换型" },
         { "SelectBranch",       "按选择索引跳到对应分支执行(case 0~7), 分支末尾配分支结束工具；用于多方案切换" },

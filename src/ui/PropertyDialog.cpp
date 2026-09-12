@@ -71,7 +71,7 @@ void PropertyDialog::buildUI() {
         if (!desc.isEmpty()) {
             auto* descLabel = new QLabel(desc, basicPage);
             descLabel->setWordWrap(true);
-            descLabel->setStyleSheet("color: #9aa0a6; padding: 2px;");
+            descLabel->setStyleSheet("color: #5a7a9c; padding: 2px;");
             basicForm->addRow(descLabel);
         }
     }
@@ -83,7 +83,7 @@ void PropertyDialog::buildUI() {
     // 使用提示: 让用户一眼知道怎么操作
     auto* hint = new QLabel(
         QStringLiteral("说明：修改参数后会自动在[试执行]页预览效果；数值/下拉项带悬浮说明。"), paramPage);
-    hint->setStyleSheet("color: #4a9eff; background: #1e2a3a; padding: 6px; border-radius: 3px;");
+    hint->setStyleSheet("color: #2e7fd0; background: #e4eef8; padding: 6px; border-radius: 3px;");
     hint->setWordWrap(true);
     paramLayout->addWidget(hint);
     m_formLayout = new QFormLayout();
@@ -171,16 +171,28 @@ void PropertyDialog::buildUI() {
         }
         }
 
-        // 位置补正"匹配工具名": 自动变为上游定位类工具下拉框 (CKVision式一键跟随)
+        // 位置补正"匹配工具名": 上游全部工具下拉(不局限匹配类 — BLOB质心/轮廓等也可作补正源),
+        // 产生位置结果的工具排前, 且带"有无可用位置键"标注
         if (m_tool->typeName() == "PositionCorrection" && def.name == "matchTool") {
             auto* combo = new QComboBox(paramPage);
-            combo->addItem(QStringLiteral("(自动: 向前找匹配结果)"), QString());
-            const QStringList locateTypes = {"ShapeMatch", "GrayscaleMatch", "TemplateMatch",
-                                             "EdgeCircleFind", "CircleDetection", "ContourMatch"};
-            for (const QString& toolName : m_availableTools) {
-                // availableTools 是实例名; 需类型判断 — 通过 linkableData 键粗判或全列
-                combo->addItem(toolName, toolName);
+            combo->addItem(QStringLiteral("(自动: 跟随最近的匹配/定位结果)"), QString());
+            // linkableData = 上游工具实例名 -> 已知结果键; 有位置键的排前
+            QStringList withPos, others;
+            for (auto it = m_linkableData.begin(); it != m_linkableData.end(); ++it) {
+                const QStringList& ks = it.value();
+                bool hasPos = false;
+                for (const QString& k : ks)
+                    if (k.contains("matchX") || k.contains("centerX") || k.contains("mainCenterX")
+                        || k.contains("positionX")) { hasPos = true; break; }
+                (hasPos ? withPos : others) << it.key();
             }
+            for (const QString& toolName : m_availableTools)
+                if (!m_linkableData.contains(toolName))
+                    others << toolName;
+            for (const QString& toolName : withPos)
+                combo->addItem(QStringLiteral("%1 ✓").arg(toolName), toolName);
+            for (const QString& toolName : others)
+                combo->addItem(toolName, toolName);
             combo->setCurrentIndex(combo->findData(currentVal.toString()) < 0
                                        ? 0 : combo->findData(currentVal.toString()));
             editor = combo;
@@ -235,7 +247,7 @@ void PropertyDialog::buildUI() {
     auto* tryLayout = new QVBoxLayout(tryPage);
     auto* tryHint = new QLabel(
         QStringLiteral("修改任何参数后自动试执行 (0.3秒防抖); 也可点按钮立即重跑。"), tryPage);
-    tryHint->setStyleSheet("color: #9aa0a6; font-size: 12px;");
+    tryHint->setStyleSheet("color: #5a7a9c; font-size: 12px;");
     tryLayout->addWidget(tryHint);
     auto* tryBtn = new QPushButton(QStringLiteral("▶ 立即试执行当前参数"), tryPage);
     tryLayout->addWidget(tryBtn);

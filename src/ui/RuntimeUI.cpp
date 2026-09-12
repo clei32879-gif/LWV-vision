@@ -25,10 +25,10 @@ RuntimeUI::RuntimeUI(QWidget* parent)
     auto* scroll = new QScrollArea(this);
     scroll->setAlignment(Qt::AlignCenter);
     scroll->setWidgetResizable(false);
-    scroll->setStyleSheet("background-color: #141414; border: none;");
+    scroll->setStyleSheet("background-color: #e4eef8; border: none;");
     outer->addWidget(scroll, 1);
     m_canvas = new QWidget(scroll);
-    m_canvas->setStyleSheet("background-color: #141414;");
+    m_canvas->setStyleSheet("background-color: #e4eef8;");
     scroll->setWidget(m_canvas);
 }
 
@@ -86,7 +86,7 @@ QWidget* RuntimeUI::buildWidget(const QString& type, const QString& label,
         m_table->verticalHeader()->setVisible(false);
         m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
         m_table->setStyleSheet("QTableWidget { background:#1b1b1b; color:#ddd; gridline-color:#333; }"
-                               "QHeaderView::section { background:#2b2b2b; color:#aaa; border:none; }");
+                               "QHeaderView::section { background:#dcebf8; color:#aaa; border:none; }");
         return m_table;
     }
 
@@ -120,13 +120,13 @@ QWidget* RuntimeUI::buildWidget(const QString& type, const QString& label,
         // 标题(小,灰) + 数值(大,黄); bind = "工具名.结果键"
         auto* container = new QWidget(m_canvas);
         container->setStyleSheet(
-            "QWidget { background-color:#1e2a3a; border:1px solid #2d4a6b; border-radius:4px; }"
+            "QWidget { background-color:#e4eef8; border:1px solid #2d4a6b; border-radius:4px; }"
             "QLabel { border:none; }");
         auto* vlay = new QVBoxLayout(container);
         vlay->setContentsMargins(6, 4, 6, 4);
         vlay->setSpacing(2);
         auto* title = new QLabel(bind.isEmpty() ? label : bind, container);
-        title->setStyleSheet("color:#9aa0a6; font-size:12px;");
+        title->setStyleSheet("color:#5a7a9c; font-size:12px;");
         title->setWordWrap(true);
         vlay->addWidget(title);
         auto* value = new QLabel(QStringLiteral("--"), container);
@@ -148,7 +148,7 @@ QWidget* RuntimeUI::buildWidget(const QString& type, const QString& label,
     // 未知类型: 显示占位标签
     auto* placeholder = new QLabel(label, m_canvas);
     placeholder->setAlignment(Qt::AlignCenter);
-    placeholder->setStyleSheet("color:#555; background:#222; border:1px dashed #444;");
+    placeholder->setStyleSheet("color:#9cc2e8; background:#222; border:1px dashed #b8d2ea;");
     return placeholder;
 }
 

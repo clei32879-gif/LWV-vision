@@ -20,11 +20,11 @@ MenuBar::MenuBar(QWidget* parent)
     createHelpMenu();
 
     setStyleSheet(
-        "QMenuBar { background-color: #2d2d2d; color: #ddd; font-size: 13px; padding: 2px; }"
+        "QMenuBar { background-color: #d0e4f6; color: #ddd; font-size: 13px; padding: 2px; }"
         "QMenuBar::item:selected { background-color: #505050; }"
-        "QMenu { background-color: #3c3c3c; color: #ddd; border: 1px solid #555; }"
+        "QMenu { background-color: #f4f9ff; color: #ddd; border: 1px solid #9cc2e8; }"
         "QMenu::item:selected { background-color: #505050; }"
-        "QMenu::separator { height: 1px; background: #555; margin: 4px 8px; }"
+        "QMenu::separator { height: 1px; background: #9cc2e8; margin: 4px 8px; }"
     );
 }
 

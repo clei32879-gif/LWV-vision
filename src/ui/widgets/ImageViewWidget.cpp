@@ -16,7 +16,7 @@ ImageViewWidget::ImageViewWidget(QWidget* parent)
     : QWidget(parent)
 {
     setMouseTracking(true);
-    setStyleSheet("background-color: #141414;");
+    setStyleSheet("background-color: #e4eef8;");
     setMinimumSize(160, 120);
 }
 

@@ -36,7 +36,7 @@ void MultiViewWidget::rebuildLayout() {
     int total = m_rows * m_cols;
     for (int i = 0; i < total; ++i) {
         auto* container = new QWidget(this);
-        container->setStyleSheet("background-color: #2b2b2b; border: 1px solid #444;");
+        container->setStyleSheet("background-color: #dcebf8; border: 1px solid #b8d2ea;");
         auto* layout = new QVBoxLayout(container);
         layout->setContentsMargins(2, 2, 2, 2);
         layout->setSpacing(1);

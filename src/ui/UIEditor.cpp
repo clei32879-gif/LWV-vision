@@ -225,8 +225,8 @@ DesignCanvas::DesignCanvas(QGraphicsScene* scene, QWidget* parent)
 
     setStyleSheet(R"(
         QGraphicsView {
-            background-color: #1e1e1e;
-            border: 1px solid #3c3c3c;
+            background-color: #e6eff9;
+            border: 1px solid #f4f9ff;
         }
     )");
 
@@ -351,9 +351,9 @@ void UIEditor::setupUI() {
             spacing: 4px;
         }
         QToolButton {
-            background-color: #3c3c3c;
+            background-color: #f4f9ff;
             color: #ddd;
-            border: 1px solid #555;
+            border: 1px solid #9cc2e8;
             border-radius: 3px;
             padding: 4px 12px;
             font-size: 13px;
@@ -381,7 +381,7 @@ void UIEditor::setupUI() {
 
     // ── 主分割区域：调色板 | 画布 | 属性面板 ──
     auto* splitter = new QSplitter(Qt::Horizontal, this);
-    splitter->setStyleSheet("QSplitter::handle { background-color: #444; width: 2px; }");
+    splitter->setStyleSheet("QSplitter::handle { background-color: #b8d2ea; width: 2px; }");
 
     setupPalette();
     setupCanvas();
@@ -440,9 +440,9 @@ void UIEditor::setupPalette() {
     m_palette->setSpacing(2);
     m_palette->setStyleSheet(R"(
         QListWidget {
-            background-color: #2b2b2b;
+            background-color: #dcebf8;
             color: #ddd;
-            border: 1px solid #3c3c3c;
+            border: 1px solid #f4f9ff;
             font-size: 13px;
             outline: none;
         }
@@ -451,7 +451,7 @@ void UIEditor::setupPalette() {
             border-bottom: 1px solid #383838;
         }
         QListWidget::item:hover {
-            background-color: #3a3a3a;
+            background-color: #e8f2fc;
         }
         QListWidget::item:selected {
             background-color: #4a6a8a;
@@ -532,8 +532,8 @@ void UIEditor::setupPropertiesPanel() {
     m_propsPanel->setMinimumWidth(180);
     m_propsPanel->setStyleSheet(R"(
         QWidget#propsPanel {
-            background-color: #2b2b2b;
-            border-left: 1px solid #3c3c3c;
+            background-color: #dcebf8;
+            border-left: 1px solid #f4f9ff;
         }
     )");
     m_propsPanel->setObjectName("propsPanel");
@@ -549,7 +549,7 @@ void UIEditor::setupPropertiesPanel() {
 
     // ── 提示文本（未选中时显示） ──
     m_propsHint = new QLabel(QString::fromUtf8("从左侧拖拽控件到画布\n或点击画布上的控件查看属性"));
-    m_propsHint->setStyleSheet("color: #666; font-size: 12px; padding: 20px 8px;");
+    m_propsHint->setStyleSheet("color: #5a7a9c; font-size: 12px; padding: 20px 8px;");
     m_propsHint->setAlignment(Qt::AlignCenter);
     m_propsHint->setWordWrap(true);
     layout->addWidget(m_propsHint);
@@ -560,7 +560,7 @@ void UIEditor::setupPropertiesPanel() {
         QGroupBox {
             color: #bbb;
             font-weight: bold;
-            border: 1px solid #444;
+            border: 1px solid #b8d2ea;
             border-radius: 4px;
             margin-top: 12px;
             padding-top: 16px;
@@ -575,9 +575,9 @@ void UIEditor::setupPropertiesPanel() {
             font-size: 12px;
         }
         QLineEdit, QSpinBox, QComboBox {
-            background-color: #3c3c3c;
+            background-color: #f4f9ff;
             color: #ddd;
-            border: 1px solid #555;
+            border: 1px solid #9cc2e8;
             border-radius: 3px;
             padding: 3px 6px;
             font-size: 12px;
@@ -586,7 +586,7 @@ void UIEditor::setupPropertiesPanel() {
             border-color: #6a9fd8;
         }
         QSpinBox::up-button, QSpinBox::down-button {
-            background-color: #444;
+            background-color: #b8d2ea;
             border: none;
             width: 16px;
         }

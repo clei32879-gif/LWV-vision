@@ -466,7 +466,7 @@ void FlowEditor::setupView() {
     m_view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_view->setFrameShape(QFrame::NoFrame);
-    m_view->setStyleSheet("background-color: #2b2b2b; border: none;");
+    m_view->setStyleSheet("background-color: #dcebf8; border: none;");
     m_view->setAcceptDrops(true);
 
     // 从工具箱拖入工具
@@ -662,10 +662,10 @@ void FlowEditor::onSceneContextMenu(QPoint screenPos) {
 
     QMenu menu;
     menu.setStyleSheet(
-        "QMenu { background-color: #3c3c3c; color: #ddd; border: 1px solid #555; padding: 4px; }"
+        "QMenu { background-color: #f4f9ff; color: #ddd; border: 1px solid #9cc2e8; padding: 4px; }"
         "QMenu::item { padding: 6px 24px; }"
         "QMenu::item:selected { background-color: #505050; }"
-        "QMenu::separator { height: 1px; background: #555; margin: 4px 8px; }"
+        "QMenu::separator { height: 1px; background: #9cc2e8; margin: 4px 8px; }"
     );
 
     if (selectedNode && idx >= 0) {
@@ -768,7 +768,7 @@ FlowView::FlowView(QWidget* parent) : QGraphicsView(parent) {
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setFrameShape(QFrame::NoFrame);
-    setStyleSheet("background-color: #2b2b2b; border: none;");
+    setStyleSheet("background-color: #dcebf8; border: none;");
 }
 
 // 接收从工具箱拖来的工具

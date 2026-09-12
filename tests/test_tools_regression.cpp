@@ -1809,6 +1809,56 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // --- 测试27: 拟合直线/拟合圆 (从点集拟合, 区别于卡尺式) ---
+    {
+        ToolContext ctx27;
+        // 拟合直线: 合成共线点 (y = 2x + 50)
+        {
+            QVariantList xs, ys;
+            for (int i = 0; i < 30; ++i) {
+                double x = 50.0 + i * 5.0;
+                xs.append(x); ys.append(2.0 * x + 50.0);
+            }
+            ctx27.setData("拟合源.edgeX", xs);
+            ctx27.setData("拟合源.edgeY", ys);
+        }
+        ITool* fl = reg.createTool("FitLine");
+        CHECK(fl != nullptr, "拟合直线: 注册");
+        if (fl) {
+            const bool okFL = fl->execute(ctx27);
+            CHECK(okFL, "拟合直线: 执行OK");
+            const auto& rFL = fl->resultData();
+            const double ang = rFL.value("angle").toDouble();
+            // 方向(1,2) → 角度 atan(2)≈63.43°
+            CHECK(std::abs(std::abs(ang) - 63.435) < 0.1,
+                  QString("拟合直线: 角度≈63.4°(实际%1)").arg(ang).toUtf8().constData());
+            CHECK(rFL.value("rms").toDouble() < 0.001, "拟合直线: rms≈0(无噪声)");
+            delete fl;
+        }
+
+        // 拟合圆: 合成圆周点 (圆心300,240 半径80)
+        ITool* fc = reg.createTool("FitCircle");
+        CHECK(fc != nullptr, "拟合圆: 注册");
+        if (fc) {
+            fc->setProperty("sourceTool", "拟合源2");
+            QVariantList xs, ys;
+            for (int i = 0; i < 36; ++i) {
+                double t = i * CV_PI / 18.0;
+                xs.append(300.0 + 80.0 * std::cos(t));
+                ys.append(240.0 + 80.0 * std::sin(t));
+            }
+            ctx27.setData("拟合源2.edgeX", xs);
+            ctx27.setData("拟合源2.edgeY", ys);
+            const bool okFC = fc->execute(ctx27);
+            CHECK(okFC, "拟合圆: 执行OK");
+            const auto& rFC = fc->resultData();
+            CHECK(std::abs(rFC.value("centerX").toDouble() - 300) < 0.1, "拟合圆: 圆心X≈300");
+            CHECK(std::abs(rFC.value("centerY").toDouble() - 240) < 0.1, "拟合圆: 圆心Y≈240");
+            CHECK(std::abs(rFC.value("radius").toDouble() - 80) < 0.1, "拟合圆: 半径≈80");
+            delete fc;
+        }
+    }
+
     std::printf("\n回归结果: %d项检查, 硬失败%d | 找圆%d/%d | 亚像素%d/%d | 最差半径误差%.2fpx\n",
                 g_checks, g_failures, circleFinds, images.size(),
                 subpixOk, images.size(), worstRadiusErr);

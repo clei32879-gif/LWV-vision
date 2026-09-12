@@ -34,7 +34,7 @@ TemplateDialog::TemplateDialog(QWidget* parent)
 
     m_detail = new QLabel(this);
     m_detail->setWordWrap(true);
-    m_detail->setStyleSheet("color: #9aa0a6; padding: 6px; background: #1e2a3a; border-radius: 3px;");
+    m_detail->setStyleSheet("color: #5a7a9c; padding: 6px; background: #e4eef8; border-radius: 3px;");
     layout->addWidget(m_detail);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);

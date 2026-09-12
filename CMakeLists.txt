@@ -41,7 +41,7 @@ set(VI_ALL_PLUGINS
     GrayscaleMatch ShapeMatch ContourMatch
     BarcodeReader QRCodeReader OCR
     DistanceMeasure AngleMeasure Caliper EdgeSpacing ScanEdge EdgeDepression
-    LineIntersect LineToLine ExtendPoint RotatePoint PointToLine
+    LineIntersect LineToLine FitLine FitCircle ExtendPoint RotatePoint PointToLine
     CircleToLine CircleToCircle
     ImageFilter Threshold Morphology ColorConvert
     ConditionBranch DataJudge Loop LoopEnd StopLoop Delay SystemTime GetVariable GenerateText SplitText CompareText DataQueue PlaySound WriteText FileWatch MessageBoxTool SelectBranch BranchEnd ExecuteFlow ScriptNode

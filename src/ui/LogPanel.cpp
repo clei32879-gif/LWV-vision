@@ -9,7 +9,7 @@ LogPanel::LogPanel(QWidget* parent) : QWidget(parent) {
     m_textEdit = new QPlainTextEdit(this);
     m_textEdit->setReadOnly(true);
     m_textEdit->setMaximumBlockCount(1000); // 最多保留1000行
-    m_textEdit->setStyleSheet("background-color: #1e1e1e; color: #ccc; font-family: monospace;");
+    m_textEdit->setStyleSheet("background-color: #e6eff9; color: #ccc; font-family: monospace;");
     layout->addWidget(m_textEdit);
 }
 

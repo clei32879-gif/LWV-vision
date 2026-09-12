@@ -454,7 +454,7 @@ void MainWindow::onAbout() {
         "AI 推理引擎：ONNX Runtime 1.18.1（CPU）"
         "</p>"
         "<hr/>"
-        "<p style='color:#4a9eff;'>授权状态：%4</p>"
+        "<p style='color:#2e7fd0;'>授权状态：%4</p>"
         "<p style='color:#888;'>LW Vision · 学习研究用途</p>")
         .arg(versionString())
         .arg(QStringLiteral(QT_VERSION_STR))

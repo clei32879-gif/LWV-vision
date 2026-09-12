@@ -72,3 +72,9 @@ license_private.key
 **/license_private.key
 LWVision-keys/
 config/license.lic
+
+# ===== 第三方源码仓(体积大, 仅本机保留) =====
+thirdparty/zxing-cpp/
+datasets/
+models/**/*.onnx
+results/

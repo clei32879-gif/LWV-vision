@@ -40,13 +40,13 @@ void StatsPanel::setupUi() {
     m_trendLabel = new QLabel(this);
     m_trendLabel->setMinimumHeight(140);
     m_trendLabel->setAlignment(Qt::AlignCenter);
-    m_trendLabel->setStyleSheet("background:#141414; border:1px solid #333;");
+    m_trendLabel->setStyleSheet("background:#e4eef8; border:1px solid #333;");
     root->addWidget(m_trendLabel, 3);
 
     m_ngDistLabel = new QLabel(this);
     m_ngDistLabel->setMinimumHeight(110);
     m_ngDistLabel->setAlignment(Qt::AlignCenter);
-    m_ngDistLabel->setStyleSheet("background:#141414; border:1px solid #333;");
+    m_ngDistLabel->setStyleSheet("background:#e4eef8; border:1px solid #333;");
     root->addWidget(m_ngDistLabel, 2);
 
     connect(m_exportBtn, &QPushButton::clicked, this, &StatsPanel::onExportCsv);

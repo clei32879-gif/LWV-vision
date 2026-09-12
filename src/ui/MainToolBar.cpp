@@ -72,10 +72,10 @@ void MainToolBar::createActions()
     m_zoomCombo->addItems({"25%", "50%", "75%", "100%", "150%", "200%", "400%"});
     m_zoomCombo->setCurrentText("100%");
     m_zoomCombo->setStyleSheet(
-        "QComboBox { background-color: #3c3c3c; color: #ddd; border: 1px solid #555; "
+        "QComboBox { background-color: #f4f9ff; color: #ddd; border: 1px solid #9cc2e8; "
         "padding: 2px 4px; border-radius: 2px; }"
         "QComboBox::drop-down { border: none; }"
-        "QComboBox QAbstractItemView { background-color: #3c3c3c; color: #ddd; "
+        "QComboBox QAbstractItemView { background-color: #f4f9ff; color: #ddd; "
         "selection-background-color: #505050; }"
     );
 }
