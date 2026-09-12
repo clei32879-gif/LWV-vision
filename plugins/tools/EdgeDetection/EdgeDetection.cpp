@@ -10,7 +10,7 @@ namespace VisionInspector {
 PropertyDefList EdgeDetection::propertyDefs() const {
     return {
         // ROI参数
-        PropertyDef::enumProp("roiType", "ROI类型", {"无", "矩形", "菱形", "圆形", "环形"}, 0),
+        PropertyDef::enumProp("roiType", "ROI类型", {"无", "矩形", "菱形"}, 0),
         PropertyDef::doubleProp("roiCenterX", "ROI中心X", 70, 0, 10000),
         PropertyDef::doubleProp("roiCenterY", "ROI中心Y", 70, 0, 10000),
         PropertyDef::doubleProp("roiWidth", "ROI宽度", 100, 1, 10000),
