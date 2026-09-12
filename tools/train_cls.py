@@ -46,6 +46,12 @@ def main():
     onnx_file = best.replace(".pt", ".onnx")
     out_onnx.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(onnx_file, out_onnx)
+    # 评估图随模型部署 (训练完成对话框展示混淆矩阵/准确率曲线)
+    run_dir = Path(best).parent
+    for chart in ["confusion_matrix.png", "confusion_matrix_normalized.png", "results.png"]:
+        src = run_dir / chart
+        if src.exists():
+            shutil.copy(src, out_onnx.parent / chart)
     # 类别表随行
     src_cls = data_dir / "classes.txt"
     if src_cls.exists():

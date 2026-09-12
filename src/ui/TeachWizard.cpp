@@ -9,6 +9,8 @@
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QTabWidget>
+#include <QScrollArea>
 #include <QSplitter>
 #include <QCoreApplication>
 #include <QListWidget>
@@ -320,11 +322,49 @@ void TeachWizard::onTrainFinished(int exitCode, QProcess::ExitStatus) {
             QFile::copy(clsSrc, clsDst);
         m_statusLabel->setText(QStringLiteral("✅ 训练完成! 模型: %1  可进入检测模式")
                                    .arg(stationModelPath()));
+
+        // 评估图对话框: 混淆矩阵/归一化混淆矩阵/准确率曲线 翻页查看
+        const QString modelBase = QFileInfo(stationModelPath()).completeBaseName();
+        const QString modelDir = QFileInfo(stationModelPath()).absolutePath();
+        const QStringList chartFiles = {
+            modelDir + "/" + modelBase + "_confusion_matrix.png",
+            modelDir + "/" + modelBase + "_confusion_matrix_normalized.png",
+            modelDir + "/" + modelBase + "_results.png" };
+        const QStringList chartTitles = { QStringLiteral("混淆矩阵"),
+            QStringLiteral("归一化混淆矩阵"), QStringLiteral("训练曲线") };
+        QStringList foundCharts, foundTitles;
+        for (int i = 0; i < chartFiles.size(); ++i)
+            if (QFile::exists(chartFiles[i])) { foundCharts << chartFiles[i]; foundTitles << chartTitles[i]; }
+
+        QString chartNote;
+        if (!foundCharts.isEmpty())
+            chartNote = QStringLiteral("\n训练评估图已生成, 将在弹出的窗口中展示。");
         QMessageBox::information(this, QStringLiteral("训练完成"),
-            QStringLiteral("模型已保存到 %1\n现在点 [进入检测模式] 即可实时判定")
-                .arg(stationModelPath()));
+            QStringLiteral("模型已保存到 %1\n现在点 [进入检测模式] 即可实时判定%2")
+                .arg(stationModelPath(), chartNote));
         Logger::instance().log(LogLevel::Info,
             QStringLiteral("教导训练[%1]完成").arg(m_stationCombo->currentText()));
+
+        // 展示评估图 (Tab翻页)
+        if (!foundCharts.isEmpty()) {
+            auto* viewer = new QDialog(this);
+            viewer->setWindowTitle(QStringLiteral("训练评估 - %1").arg(m_stationCombo->currentText()));
+            viewer->setAttribute(Qt::WA_DeleteOnClose);
+            viewer->resize(900, 640);
+            auto* vlay = new QVBoxLayout(viewer);
+            auto* tabs = new QTabWidget(viewer);
+            for (int i = 0; i < foundCharts.size(); ++i) {
+                auto* lbl = new QLabel;
+                lbl->setPixmap(QPixmap(foundCharts[i]).scaled(
+                    860, 560, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                lbl->setAlignment(Qt::AlignCenter);
+                auto* scroll = new QScrollArea(viewer);
+                scroll->setWidget(lbl);
+                tabs->addTab(scroll, foundTitles[i]);
+            }
+            vlay->addWidget(tabs);
+            viewer->show();
+        }
     } else {
         m_statusLabel->setText(QStringLiteral("训练失败 (退出码%1), 详见日志").arg(exitCode));
         Logger::instance().log(LogLevel::Error,
