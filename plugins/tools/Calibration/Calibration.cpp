@@ -46,6 +46,7 @@ PropertyDefList Calibration::propertyDefs() const {
         PropertyDef::stringProp("unit", "单位", "mm"),
         // 相机标定(多图): 棋盘格图片目录
         PropertyDef::stringProp("imageDir", "棋盘格图片目录", "", "目录"),
+        PropertyDef::stringProp("calibName", "标定组名(多套切换)", "default", "高级"),
         PropertyDef::enumProp("applyTo", "应用范围", {"当前流程", "所有流程"}, 0),
     };
 }
@@ -166,6 +167,18 @@ bool Calibration::execute(ToolContext& context) {
     context.setData("calibration_mm_per_pixel", ratio);
     context.setData("calibration_pixel_per_mm", 1.0 / ratio);
 
+    // 多套标定: calibName 非 default 时额外写带名键组
+    //   切换 = 后续工具用 $(标定.calibName_xx) 引用对应套; 旧工具读通用键不受影响
+    const QString cname = propertyValue("calibName").toString().trimmed();
+    if (!cname.isEmpty() && cname != QStringLiteral("default")) {
+        context.setData(QStringLiteral("calibration_ratio.%1").arg(cname), ratio);
+        context.setData(QStringLiteral("calibration_unit.%1").arg(cname), unit);
+        context.setData(QStringLiteral("calibration_mm_per_pixel.%1").arg(cname), ratio);
+        context.setData(QStringLiteral("calibration_pixel_per_mm.%1").arg(cname), 1.0 / ratio);
+        context.setData(QStringLiteral("calibration_active_name"), cname);
+        setResultData("calibName", cname);
+    }
+
     // 应用范围: 1=所有流程 → 同时写入全局变量, 供其它流程跨流程共享
     if (propertyValue("applyTo").toInt() == 1) {
         if (auto* gv = context.globalVariables()) {
@@ -173,6 +186,8 @@ bool Calibration::execute(ToolContext& context) {
             gv->set("calibration_unit", unit);
             gv->set("calibration_mm_per_pixel", ratio);
             gv->set("calibration_pixel_per_mm", 1.0 / ratio);
+            if (!cname.isEmpty() && cname != QStringLiteral("default"))
+                gv->set(QStringLiteral("calibration_ratio.%1").arg(cname), ratio);
         }
     }
 
