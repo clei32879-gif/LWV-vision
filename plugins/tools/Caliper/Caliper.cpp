@@ -37,6 +37,7 @@ PropertyDefList Caliper::propertyDefs() const {
         PropertyDef::enumProp("edgePolarity", "边缘极性", {"任意", "亮到暗", "暗到亮"}, 0, "检测"),
         PropertyDef::intProp("gradientThreshold", "梯度阈值", 30, 1, 255, "检测"),
         PropertyDef::intProp("filterHalfWidth", "梯度平滑半宽", 2, 1, 20, "检测"),
+        PropertyDef::intProp("scanWidth", "扫描宽度", 1, 1, 100, "检测"),
     };
 }
 
@@ -70,9 +71,44 @@ bool Caliper::execute(ToolContext& context) {
     m_scanStart = cv::Point2d(cx - u.x * roiW / 2, cy - u.y * roiW / 2);
     m_scanEnd   = cv::Point2d(cx + u.x * roiW / 2, cy + u.y * roiW / 2);
 
-    // 全部边缘 (按扫描顺序)
-    const std::vector<SubpixEdgePoint> edges =
-        findEdgesSubpix(src, m_scanStart, m_scanEnd, opt, 0);
+    // 全部边缘 (按扫描顺序); scanWidth>1 时在垂直方向取多条平行线平均剖面 (降噪)
+    const int scanW = propertyValue("scanWidth").toInt();
+    std::vector<SubpixEdgePoint> edges;
+    if (scanW <= 1) {
+        edges = findEdgesSubpix(src, m_scanStart, m_scanEnd, opt, 0);
+    } else {
+        const cv::Point2d n(-u.y, u.x);
+        std::vector<std::vector<double>> profiles;
+        int steps = 0;
+        for (int k = 0; k < scanW; ++k) {
+            const double off = (k - (scanW - 1) / 2.0);
+            const cv::Point2d s0 = m_scanStart + n * off;
+            const cv::Point2d s1 = m_scanEnd + n * off;
+            if (k == 0) steps = std::max(4, (int)std::lround(std::hypot(s1.x - s0.x, s1.y - s0.y)));
+            // 采样每条线的剖面
+            std::vector<double> prof(steps + 1, 0.0);
+            for (int i2 = 0; i2 <= steps; ++i2) {
+                const double t = (double)i2 / steps;
+                const cv::Point2d p = s0 + (s1 - s0) * t;
+                prof[i2] = sampleBilinear(src, p.x, p.y);
+            }
+            profiles.push_back(std::move(prof));
+        }
+        // 平均剖面 → 合成灰度线再走标准亚像素搜索
+        cv::Mat lineImg(1, steps + 1, CV_8UC1);
+        for (int i2 = 0; i2 <= steps; ++i2) {
+            double sum = 0;
+            for (const auto& prof : profiles) sum += prof[i2];
+            lineImg.at<uchar>(0, i2) = (uchar)std::clamp(sum / profiles.size(), 0.0, 255.0);
+        }
+        edges = findEdgesSubpix(lineImg, cv::Point2d(0, 0), cv::Point2d((double)steps, 0), opt, 0);
+        // 坐标映射回原图: 沿 u 从 m_scanStart
+        for (auto& e : edges) {
+            const double t = e.pos.x / steps;
+            e.pos = m_scanStart + (m_scanEnd - m_scanStart) * t;
+        }
+    }
+    (void)0;
     m_edges.clear();
     for (const auto& e : edges) m_edges.push_back(e.pos);
 
