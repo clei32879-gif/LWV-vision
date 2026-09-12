@@ -56,9 +56,10 @@ mkdir "%DST%\sqldrivers" 2>nul
 if exist "C:\Qt\6.10.3\mingw_64\plugins\sqldrivers\qsqlite.dll" copy /y "C:\Qt\6.10.3\mingw_64\plugins\sqldrivers\qsqlite.dll" "%DST%\sqldrivers\" >nul 2>&1
 if exist "%SRC%\sqldrivers\qsqlite.dll" copy /y "%SRC%\sqldrivers\qsqlite.dll" "%DST%\sqldrivers\" >nul 2>&1
 
-REM ---- templates/ data/ dirs (template gallery and records db location) ----
+REM ---- templates/ data/ cameras/ dirs (template gallery, records db, external camera dlls) ----
 mkdir "%DST%\templates" 2>nul
 mkdir "%DST%\data" 2>nul
+mkdir "%DST%\cameras" 2>nul
 
 echo [5/5] Done.
 echo.

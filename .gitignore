@@ -78,3 +78,6 @@ thirdparty/zxing-cpp/
 datasets/
 models/**/*.onnx
 results/
+
+# ===== 发布包 (deploy.bat产物, 体积大不入库) =====
+release_pkg/
