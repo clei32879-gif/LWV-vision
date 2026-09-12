@@ -283,6 +283,26 @@ void TeachWizard::onStartTrain() {
     });
     connect(m_trainProc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &TeachWizard::onTrainFinished);
+    // 训练进度实时回显 (ultralytics 的逐轮日志 → 状态栏+日志面板)
+    connect(m_trainProc, &QProcess::readyReadStandardOutput, this, [this]() {
+        const QString out = QString::fromLocal8Bit(m_trainProc->readAllStandardOutput());
+        const QStringList lines = out.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        for (const QString& l : lines) {
+            const QString t = l.trimmed();
+            if (!t.isEmpty()) {
+                m_statusLabel->setText(QStringLiteral("训练中: %1").arg(t.left(80)));
+                Logger::instance().log(LogLevel::Info, QStringLiteral("[教导训练] %1").arg(t.left(120)));
+            }
+        }
+    });
+    connect(m_trainProc, &QProcess::readyReadStandardError, this, [this]() {
+        const QString err = QString::fromLocal8Bit(m_trainProc->readAllStandardError());
+        for (const QString& l : err.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+            const QString t = l.trimmed();
+            if (t.contains("Epoch") || t.contains('%'))
+                m_statusLabel->setText(QStringLiteral("训练中: %1").arg(t.left(80)));
+        }
+    });
     m_trainProc->start(QStringLiteral("python"),
         {QCoreApplication::applicationDirPath() + "/../../../tools/train_cls.py",
          QDir::toNativeSeparators(dataDir), QDir::toNativeSeparators(outModel),
@@ -292,6 +312,12 @@ void TeachWizard::onStartTrain() {
 void TeachWizard::onTrainFinished(int exitCode, QProcess::ExitStatus) {
     setUiBusy(false);
     if (exitCode == 0) {
+        // classes.txt 随模型部署 (AIDetection 类名显示依赖它)
+        const QString clsSrc = stationDir() + "/train_data/classes.txt";
+        const QString clsDst = QStringLiteral("models/") +
+            QFileInfo(stationModelPath()).completeBaseName() + "_classes.txt";
+        if (QFile::exists(clsSrc))
+            QFile::copy(clsSrc, clsDst);
         m_statusLabel->setText(QStringLiteral("✅ 训练完成! 模型: %1  可进入检测模式")
                                    .arg(stationModelPath()));
         QMessageBox::information(this, QStringLiteral("训练完成"),
