@@ -359,7 +359,11 @@ bool FlowEngine::doExecute(Flow* flow, ToolContext& context) {
         }
 
         // 叠加图形收集 (工具在图像坐标系下描述的检测结果)
-        context.addOverlays(tool->overlays());
+        // 通用显示开关: 工具属性 showOverlays=false 时不叠加该工具的图形
+        // (未声明的工具默认显示 — propertyValue 对未声明属性返回无效 QVariant)
+        const QVariant showV = tool->propertyValue("showOverlays");
+        if (!showV.isValid() || showV.toBool())
+            context.addOverlays(tool->overlays());
 
         if (!success) {
             allOk = false;

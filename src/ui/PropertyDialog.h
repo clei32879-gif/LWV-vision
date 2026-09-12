@@ -62,6 +62,7 @@ private:
     ImageViewWidget* m_previewViewer = nullptr;
     // ROI 图形化编辑 (中心约定 roiCenterX/Y+roiWidth/Height 或 角点约定 useROI+roiX/Y/W/H)
     class QPushButton* m_roiEditBtn = nullptr;
+    class QCheckBox* m_showOverlayCheck = nullptr;   // 显示选项页: 检测图形开关
     bool m_hasRoi = false;
     bool m_roiCornerMode = false; // true=角点约定 (条码/二维码/OCR 等老工具)
 

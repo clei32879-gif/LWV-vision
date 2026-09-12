@@ -279,6 +279,26 @@ void PropertyDialog::buildUI() {
     connect(tryBtn, &QPushButton::clicked, this, [this]() { updatePreview(); });
     m_tabs->addTab(tryPage, QStringLiteral("试执行"));
 
+    // ---- 通用显示选项页: 控制该工具的叠加图形是否显示 ----
+    {
+        auto* dispPage = new QWidget(this);
+        auto* dispLay = new QVBoxLayout(dispPage);
+        m_showOverlayCheck = new QCheckBox(QStringLiteral("在图像上显示本工具的检测图形 (ROI/边缘/目标框等)"), dispPage);
+        auto* showChk = m_showOverlayCheck;
+        showChk->setChecked([&]{
+            const QVariant v = m_tool->propertyValue("showOverlays");
+            return v.isValid() ? v.toBool() : true;
+        }());
+        dispLay->addWidget(showChk);
+        dispLay->addWidget(new QLabel(
+            QStringLiteral("关闭后该工具仍正常执行, 只是检测画面上不再叠加它的图形 (适合流程很长时只看关键工具)。"), dispPage));
+        dispLay->addStretch();
+        connect(showChk, &QCheckBox::toggled, this, [this](bool on) {
+            m_tool->setProperty("showOverlays", on);   // 确定时随 accept 生效
+        });
+        m_tabs->addTab(dispPage, QStringLiteral("显示选项"));
+    }
+
     // 默认定位到"参数设置", 让用户先看到该工具最关键的配置
     m_tabs->setCurrentIndex(1);
 }
@@ -534,6 +554,10 @@ void PropertyDialog::accept() {
         m_tool->setInstanceName(newName);
     m_tool->setComment(m_commentEdit->toPlainText());
     m_tool->setActive(m_activeCheck->isChecked());
+
+    // 显示选项页: showOverlays 持久化
+    if (m_showOverlayCheck)
+        m_tool->setProperty("showOverlays", m_showOverlayCheck->isChecked());
 
     // 页签2: 参数设置
     PropertyDefList defs = m_tool->propertyDefs();
