@@ -227,7 +227,7 @@ MainWindow::MainWindow(QWidget* parent)
     // 用户权限: 角色变化时启用/禁用编辑功能
     connect(m_userMgr, &UserManager::roleChanged, this, &MainWindow::applyUserRole);
 
-    setWindowTitle("LW Vision v1.0.0");
+    setWindowTitle(QStringLiteral("LW Vision 零维视界 v1.0.0"));
     resize(1400, 900);
     VI_LOG_INFO("MainWindow created");
 }
@@ -341,7 +341,7 @@ void MainWindow::setupUI() {
         m_projectMgr->markModified();
     });
     
-    setWindowTitle("LW Vision v1.0.0");
+    setWindowTitle(QStringLiteral("LW Vision 零维视界 v1.0.0"));
     resize(1400, 900);
 
     // 延迟设置分割器尺寸，确保布局已完成
@@ -442,20 +442,20 @@ void MainWindow::onAbout() {
 #endif
     const LicenseManager& lic = LicenseManager::instance();
     const QString html = QStringLiteral(
-        "<h3 style='margin-bottom:2px;'>LW Vision</h3>"
-        "<p style='margin-top:2px;'>通用工业机器视觉检测平台<br/>"
-        "传统视觉算法 + AI 深度学习相结合</p>"
+        "<h3 style='margin-bottom:2px;'>LW Vision 零维视界</h3>"
+        "<p style='margin-top:2px;'>零维视界（LW Vision）—— 基于深度学习与传统视觉算法融合的通用工业机器视觉检测平台，"
+        "面向工业自动化产线的质检、测量、定位与分拣场景。</p>"
         "<hr/>"
         "<p>"
         "版本号：v%1<br/>"
         "开发语言：C++17<br/>"
         "界面框架：Qt %2（MinGW）<br/>"
         "视觉算法库：OpenCV %3<br/>"
-        "AI 推理引擎：ONNX Runtime 1.18.1（CPU）"
+        "AI 推理引擎：ONNX Runtime 1.18.1（CPU / DirectML GPU 加速）"
         "</p>"
         "<hr/>"
         "<p style='color:#2e7fd0;'>授权状态：%4</p>"
-        "<p style='color:#888;'>LW Vision · 学习研究用途</p>")
+        "<p style='color:#888;'>LW Vision · 零维视界工业视觉检测平台</p>")
         .arg(versionString())
         .arg(QStringLiteral(QT_VERSION_STR))
         .arg(cvVer)

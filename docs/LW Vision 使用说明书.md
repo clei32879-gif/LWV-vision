@@ -1,7 +1,7 @@
 # LW Vision 使用说明书
 
 > 版本 1.0 ｜ 适用于 LWVision.exe 全功能版
-> 定位：通用工业机器视觉检测平台（传统视觉算法 + AI 深度学习）
+> LW Vision · 零维视界 —— 基于深度学习与传统视觉算法融合的通用工业机器视觉检测平台
 > 配套文档：《LW Vision 技术白皮书》（软件原理）、《工控机部署指南》（装机）
 
 ---
@@ -297,7 +297,7 @@ python tools/train_anomalib.py --model Patchcore --align --data <OK图目录>
 
 ---
 
-*LW Vision · 学习研究用途。各工具的参数级悬浮说明见软件内工具箱。*
+*LW Vision · 零维视界工业视觉检测平台。各工具的参数级悬浮说明见软件内工具箱。*
 
 ---
 

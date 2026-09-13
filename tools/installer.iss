@@ -9,7 +9,7 @@
 ;       (config/ templates/ data/ images/ 检测记录库不会被卸载删除)
 ; ============================================================
 
-#define MyAppName "LW Vision"
+#define MyAppName "LW Vision 零维视界"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "LW Vision"
 #define MyAppExeName "LWVision.exe"
