@@ -294,6 +294,7 @@ void MainWindow::setupUI() {
     bottomTabs->setObjectName("BottomTabs");
     bottomTabs->addTab(m_dataPanel, QString::fromUtf8("检测项目"));
     bottomTabs->addTab(m_statsPanel, QString::fromUtf8("良率统计"));
+    bottomTabs->setMinimumHeight(100);   // 解锁分割条: 允许拖到较小 (默认被内容最小高度卡死只能上不能下)
     m_vSplitter->addWidget(bottomTabs);
     m_vSplitter->setStretchFactor(0, 7);
     m_vSplitter->setStretchFactor(1, 2);
