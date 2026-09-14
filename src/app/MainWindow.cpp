@@ -455,7 +455,7 @@ void MainWindow::onAbout() {
         "</p>"
         "<hr/>"
         "<p style='color:#2e7fd0;'>授权状态：%4</p>"
-        "<p style='color:#888;'>LW Vision · 零维视界工业视觉检测平台</p>")
+        "<p style='color:#4a6a8c;'>LW Vision · 零维视界工业视觉检测平台</p>")
         .arg(versionString())
         .arg(QStringLiteral(QT_VERSION_STR))
         .arg(cvVer)

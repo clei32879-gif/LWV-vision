@@ -46,9 +46,9 @@ void MultiViewWidget::rebuildLayout() {
         auto* titleLayout = new QHBoxLayout(titleBar);
         titleLayout->setContentsMargins(4, 2, 4, 2);
         auto* titleLabel = new QLabel(QString("CCD%1").arg(i + 1));
-        titleLabel->setStyleSheet("color: #aaa; font-size: 11px; font-weight: bold;");
+        titleLabel->setStyleSheet("color: #4a6a8c; font-size: 11px; font-weight: bold;");
         auto* statusLabel = new QLabel("");
-        statusLabel->setStyleSheet("color: #888; font-size: 10px;");
+        statusLabel->setStyleSheet("color: #4a6a8c; font-size: 10px;");
         titleLayout->addWidget(titleLabel);
         titleLayout->addStretch();
         titleLayout->addWidget(statusLabel);
@@ -89,7 +89,7 @@ void MultiViewWidget::setStatus(int index, const QString& status) {
     // 状态着色
     if (status.contains("OK")) m_statusLabels[index]->setStyleSheet("color: #0f0; font-size: 10px;");
     else if (status.contains("NG")) m_statusLabels[index]->setStyleSheet("color: #f44; font-size: 10px;");
-    else m_statusLabels[index]->setStyleSheet("color: #888; font-size: 10px;");
+    else m_statusLabels[index]->setStyleSheet("color: #4a6a8c; font-size: 10px;");
 }
 
 void MultiViewWidget::clearAll() {

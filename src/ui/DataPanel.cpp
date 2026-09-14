@@ -18,6 +18,8 @@ DataPanel::DataPanel(QWidget* parent) : QWidget(parent) {
     m_table->verticalHeader()->setVisible(false);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_table->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_table->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     // 不用交替行颜色，手动统一背景
     m_table->setAlternatingRowColors(false);
@@ -28,9 +30,9 @@ DataPanel::DataPanel(QWidget* parent) : QWidget(parent) {
         for (int j = 0; j < 8; ++j) {
             auto* item = new QTableWidgetItem(j == 0 ? stations.at(i) : "--");
             item->setTextAlignment(Qt::AlignCenter);
-            // 统一深色背景 + 浅色文字，不分单双行
-            item->setBackground(QColor(30, 30, 30));
-            item->setForeground(QColor(224, 224, 224));
+            // 浅色主题: 白底深蓝字
+            item->setBackground(QColor(255, 255, 255));
+            item->setForeground(QColor(36, 66, 95));
             m_table->setItem(i, j, item);
         }
     }

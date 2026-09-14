@@ -338,7 +338,7 @@ void CameraManagerDialog::onEnableToggled(int index, bool on)
         w.ipEdit->setEnabled(false);
         w.connectBtn->setEnabled(false);
         w.statusLabel->setText("已禁用");
-        w.statusLabel->setStyleSheet("color: #888;");
+        w.statusLabel->setStyleSheet("color: #4a6a8c;");
     } else {
         w.ipEdit->setEnabled(true);
         w.connectBtn->setEnabled(true);

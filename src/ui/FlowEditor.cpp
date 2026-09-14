@@ -131,7 +131,7 @@ void ToolNode::paint(QPainter* painter, const QStyleOptionGraphicsItem* option,
 
     // ---- 主体 ----
     QColor bodyColor = m_highlighted ? QColor(60, 70, 80) :
-                       selected     ? QColor(65, 65, 70) : QColor(50, 50, 55);
+                       selected     ? QColor(200, 224, 248) : QColor(235, 244, 252);
     painter->setBrush(bodyColor);
     painter->setPen(QPen(selected ? QColor(74, 158, 255) : QColor(70, 70, 75), 1.5));
     painter->drawRoundedRect(body, CORNER_RADIUS, CORNER_RADIUS);
@@ -328,7 +328,7 @@ void ConnectionItem::setTemporaryEnd(QPointF pos) {
     m_isTemporary = true;
     m_tempEnd     = pos;
     updatePath();
-    setPen(QPen(QColor(200, 200, 200, 150), 1.5, Qt::DashLine));
+    setPen(QPen(QColor(120, 160, 200, 180), 1.5, Qt::DashLine));
 }
 
 void ConnectionItem::finalizeConnection() {
@@ -662,7 +662,7 @@ void FlowEditor::onSceneContextMenu(QPoint screenPos) {
 
     QMenu menu;
     menu.setStyleSheet(
-        "QMenu { background-color: #f4f9ff; color: #ddd; border: 1px solid #9cc2e8; padding: 4px; }"
+        "QMenu { background-color: #f4f9ff; color: #24425f; border: 1px solid #9cc2e8; padding: 4px; }"
         "QMenu::item { padding: 6px 24px; }"
         "QMenu::item:selected { background-color: #505050; }"
         "QMenu::separator { height: 1px; background: #9cc2e8; margin: 4px 8px; }"

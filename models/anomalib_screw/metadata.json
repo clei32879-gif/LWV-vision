@@ -1,0 +1,22 @@
+{
+  "model": "Padim",
+  "image_size": [
+    256,
+    256
+  ],
+  "imagenet_mean": [
+    0.485,
+    0.456,
+    0.406
+  ],
+  "imagenet_std": [
+    0.229,
+    0.224,
+    0.225
+  ],
+  "note": "\u9608\u503c\u9700\u7528 OK/NG \u5404\u82e5\u5e72\u5f20\u8dd1\u63a8\u7406\u540e\u6309 F1 \u6700\u4f18\u9009",
+  "image_threshold": 101.77997589111328,
+  "pixel_threshold": 42.15519714355469,
+  "enable_normalization": true,
+  "dataset": "MVTec screw (320 train good / 160 test)"
+}

@@ -17,7 +17,7 @@ DisplayArea::DisplayArea(QWidget* parent)
 
     m_imageLabel = new QLabel(this);
     m_imageLabel->setAlignment(Qt::AlignCenter);
-    m_imageLabel->setStyleSheet("color: #888; font-size: 18px;");
+    m_imageLabel->setStyleSheet("color: #4a6a8c; font-size: 18px;");
     m_imageLabel->setText("LW Vision\n\n等待加载图像...");
     m_imageLabel->setMinimumSize(200, 150);
 

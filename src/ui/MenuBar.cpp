@@ -20,9 +20,9 @@ MenuBar::MenuBar(QWidget* parent)
     createHelpMenu();
 
     setStyleSheet(
-        "QMenuBar { background-color: #d0e4f6; color: #ddd; font-size: 13px; padding: 2px; }"
+        "QMenuBar { background-color: #d0e4f6; color: #24425f; font-size: 13px; padding: 2px; }"
         "QMenuBar::item:selected { background-color: #505050; }"
-        "QMenu { background-color: #f4f9ff; color: #ddd; border: 1px solid #9cc2e8; }"
+        "QMenu { background-color: #f4f9ff; color: #24425f; border: 1px solid #9cc2e8; }"
         "QMenu::item:selected { background-color: #505050; }"
         "QMenu::separator { height: 1px; background: #9cc2e8; margin: 4px 8px; }"
     );

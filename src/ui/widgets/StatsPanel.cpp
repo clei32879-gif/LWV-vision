@@ -28,7 +28,7 @@ void StatsPanel::setupUi() {
     m_yieldLabel = new QLabel(QStringLiteral("良率 --"), this);
     m_yieldLabel->setStyleSheet("font-size:28px; font-weight:bold; color:#00e676;");
     m_countLabel = new QLabel(QStringLiteral("总数 0 | 良 0 | NG 0 | 重测 0"), this);
-    m_countLabel->setStyleSheet("font-size:13px; color:#ccc;");
+    m_countLabel->setStyleSheet("font-size:13px; color:#3a5a7c;");
     m_exportBtn = new QPushButton(QStringLiteral("导出CSV"), this);
     topRow->addWidget(m_yieldLabel);
     topRow->addStretch();

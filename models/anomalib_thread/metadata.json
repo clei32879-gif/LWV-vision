@@ -1,0 +1,21 @@
+{
+  "model": "Padim",
+  "image_size": [
+    256,
+    256
+  ],
+  "imagenet_mean": [
+    0.485,
+    0.456,
+    0.406
+  ],
+  "imagenet_std": [
+    0.229,
+    0.224,
+    0.225
+  ],
+  "note": "阈值需用 OK/NG 各若干张跑推理后按 F1 最优选",
+  "image_threshold": 191.13148498535156,
+  "pixel_threshold": 66.16814422607422,
+  "enable_normalization": true
+}

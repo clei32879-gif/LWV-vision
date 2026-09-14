@@ -85,8 +85,8 @@ QWidget* RuntimeUI::buildWidget(const QString& type, const QString& label,
         m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
         m_table->verticalHeader()->setVisible(false);
         m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-        m_table->setStyleSheet("QTableWidget { background:#1b1b1b; color:#ddd; gridline-color:#333; }"
-                               "QHeaderView::section { background:#dcebf8; color:#aaa; border:none; }");
+        m_table->setStyleSheet("QTableWidget { background:#f4f9ff; color:#24425f; gridline-color:#333; }"
+                               "QHeaderView::section { background:#dcebf8; color:#4a6a8c; border:none; }");
         return m_table;
     }
 
@@ -101,7 +101,7 @@ QWidget* RuntimeUI::buildWidget(const QString& type, const QString& label,
         }
         auto* btn = new QPushButton(label, m_canvas);
         btn->setStyleSheet(
-            "QPushButton { background-color:#2d5a88; color:#fff; border:none;"
+            "QPushButton { background-color:#2d5a88; color:#24425f; border:none;"
             " border-radius:6px; font-size:18px; font-weight:bold; }"
             "QPushButton:hover { background-color:#3a6da0; }"
             "QPushButton:pressed { background-color:#234668; }");

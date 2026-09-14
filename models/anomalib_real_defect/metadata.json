@@ -1,0 +1,22 @@
+{
+  "model": "Padim",
+  "image_size": [
+    512,
+    512
+  ],
+  "imagenet_mean": [
+    0.485,
+    0.456,
+    0.406
+  ],
+  "imagenet_std": [
+    0.229,
+    0.224,
+    0.225
+  ],
+  "note": "\u9608\u503c\u9700\u7528 OK/NG \u5404\u82e5\u5e72\u5f20\u8dd1\u63a8\u7406\u540e\u6309 F1 \u6700\u4f18\u9009",
+  "image_threshold": 295.2327629597985,
+  "pixel_threshold": 33.0267219543457,
+  "enable_normalization": true,
+  "dataset": "\u771f\u5b9e\u7f3a\u9677\u5206\u7c7b\u56fe (120 OK / 143 NG, F1=0.705)"
+}

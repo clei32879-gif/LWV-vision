@@ -42,7 +42,7 @@ Toolbox::Toolbox(QWidget* parent) : QWidget(parent) {
 
     m_tree = new ToolTreeWidget(this);
     m_tree->setHeaderHidden(true);
-    m_tree->setStyleSheet("background-color: #dcebf8; color: #ddd;");
+    m_tree->setStyleSheet("background-color: #dcebf8; color: #24425f;");
     layout->addWidget(m_tree, 1);
 
     auto* hint = new QLabel(QStringLiteral("提示：双击工具，或拖拽工具到右侧流程图，即可添加"), this);

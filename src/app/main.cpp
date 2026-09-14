@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
         }
         QTabBar::tab:selected {
             background-color: #8ec2ee;
-            color: white;
+            color: #24425f;
         }
         QScrollBar:vertical {
             background-color: #e6eff9;
@@ -136,7 +136,7 @@ int main(int argc, char* argv[]) {
             background-color: #8ec2ee;
         }
         QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
-            background-color: white;
+            background-color: #24425f;
             border: 1px solid #b8d2ea;
             border-radius: 3px;
             padding: 4px;
@@ -146,7 +146,7 @@ int main(int argc, char* argv[]) {
             border-color: #4a9eff;
         }
         QTableWidget {
-            background-color: white;
+            background-color: #24425f;
             gridline-color: #d5e3f0;
             color: #24425f;
         }

@@ -74,7 +74,7 @@ StatusPanel::StatusPanel(QWidget* parent) : QWidget(parent) {
     layout->addLayout(m_gridLayout);
 
     m_summaryLabel = new QLabel("OK: 0  NG: 0", this);
-    m_summaryLabel->setStyleSheet("color: #ddd; font-size: 12px; padding: 4px;");
+    m_summaryLabel->setStyleSheet("color: #24425f; font-size: 12px; padding: 4px;");
     m_summaryLabel->setAlignment(Qt::AlignCenter);
     layout->addWidget(m_summaryLabel);
 }

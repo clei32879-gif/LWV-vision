@@ -352,7 +352,7 @@ void UIEditor::setupUI() {
         }
         QToolButton {
             background-color: #f4f9ff;
-            color: #ddd;
+            color: #24425f;
             border: 1px solid #9cc2e8;
             border-radius: 3px;
             padding: 4px 12px;
@@ -441,7 +441,7 @@ void UIEditor::setupPalette() {
     m_palette->setStyleSheet(R"(
         QListWidget {
             background-color: #dcebf8;
-            color: #ddd;
+            color: #24425f;
             border: 1px solid #f4f9ff;
             font-size: 13px;
             outline: none;
@@ -544,7 +544,7 @@ void UIEditor::setupPropertiesPanel() {
 
     // ── 属性标题 ──
     auto* titleLabel = new QLabel(QString::fromUtf8("📐 属性面板"));
-    titleLabel->setStyleSheet("color: #aaa; font-size: 14px; font-weight: bold; padding: 4px 0;");
+    titleLabel->setStyleSheet("color: #4a6a8c; font-size: 14px; font-weight: bold; padding: 4px 0;");
     layout->addWidget(titleLabel);
 
     // ── 提示文本（未选中时显示） ──
@@ -571,12 +571,12 @@ void UIEditor::setupPropertiesPanel() {
             padding: 0 6px;
         }
         QLabel {
-            color: #aaa;
+            color: #4a6a8c;
             font-size: 12px;
         }
         QLineEdit, QSpinBox, QComboBox {
             background-color: #f4f9ff;
-            color: #ddd;
+            color: #24425f;
             border: 1px solid #9cc2e8;
             border-radius: 3px;
             padding: 3px 6px;
@@ -654,7 +654,7 @@ void UIEditor::setupPropertiesPanel() {
     btnDeleteWidget->setStyleSheet(R"(
         QPushButton {
             background-color: #8b3a3a;
-            color: #ddd;
+            color: #24425f;
             border: none;
             border-radius: 4px;
             padding: 8px;
