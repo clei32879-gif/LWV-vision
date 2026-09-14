@@ -203,7 +203,7 @@ int main(int argc, char* argv[]) {
 
     // 创建主窗口
     VisionInspector::MainWindow window;
-    window.setWindowTitle("LW Vision v1.0.0");
+    window.setWindowTitle(QStringLiteral("LW Vision 零维视界 v1.0.0"));
     window.show();
 
     VI_LOG_INFO("主窗口已显示");
